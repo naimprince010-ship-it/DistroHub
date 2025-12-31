@@ -8,6 +8,8 @@ import {
   AlertCircle,
   CheckCircle,
   Clock,
+  Filter,
+  X,
 } from 'lucide-react';
 
 interface Receivable {
@@ -78,24 +80,45 @@ const receivablesData: Receivable[] = [
 export function Receivables() {
   const [receivables] = useState<Receivable[]>(receivablesData);
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [amountFilter, setAmountFilter] = useState<string>('all');
   const [selectedReceivable, setSelectedReceivable] = useState<Receivable | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
-  const filteredReceivables = receivables.filter(
-    (r) =>
+  const getOverdueStatus = (days: number) => {
+    if (days <= 7) return { color: 'text-green-600', bg: 'bg-green-100', label: 'Current', key: 'current' };
+    if (days <= 15) return { color: 'text-yellow-600', bg: 'bg-yellow-100', label: 'Overdue', key: 'overdue' };
+    if (days <= 30) return { color: 'text-orange-600', bg: 'bg-orange-100', label: 'Past Due', key: 'past_due' };
+    return { color: 'text-red-600', bg: 'bg-red-100', label: 'Critical', key: 'critical' };
+  };
+
+  const filteredReceivables = receivables.filter((r) => {
+    const matchesSearch =
       r.retailer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      r.shop_name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+      r.shop_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.phone.includes(searchTerm);
+    
+    const status = getOverdueStatus(r.days_overdue);
+    const matchesStatus = statusFilter === 'all' || status.key === statusFilter;
+    
+    const matchesAmount = amountFilter === 'all' ||
+      (amountFilter === 'small' && r.total_due < 10000) ||
+      (amountFilter === 'medium' && r.total_due >= 10000 && r.total_due < 30000) ||
+      (amountFilter === 'large' && r.total_due >= 30000);
+    
+    return matchesSearch && matchesStatus && matchesAmount;
+  });
+
+  const activeFiltersCount = [statusFilter, amountFilter].filter(f => f !== 'all').length;
+
+  const clearFilters = () => {
+    setStatusFilter('all');
+    setAmountFilter('all');
+    setSearchTerm('');
+  };
 
   const totalDue = receivables.reduce((sum, r) => sum + r.total_due, 0);
   const overdueCount = receivables.filter((r) => r.days_overdue > 7).length;
-
-  const getOverdueStatus = (days: number) => {
-    if (days <= 7) return { color: 'text-green-600', bg: 'bg-green-100', label: 'Current' };
-    if (days <= 15) return { color: 'text-yellow-600', bg: 'bg-yellow-100', label: 'Overdue' };
-    if (days <= 30) return { color: 'text-orange-600', bg: 'bg-orange-100', label: 'Past Due' };
-    return { color: 'text-red-600', bg: 'bg-red-100', label: 'Critical' };
-  };
 
   return (
     <div className="min-h-screen">
@@ -139,19 +162,55 @@ export function Receivables() {
           </div>
         </div>
 
-        {/* Search Bar */}
-        <div className="bg-white rounded-xl p-2 shadow-sm mb-2">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search by retailer name or shop..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="input-field pl-10"
-            />
-          </div>
-        </div>
+                {/* Search & Filter Bar */}
+                <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex flex-wrap items-center gap-2">
+                  <div className="relative flex-1 min-w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search by retailer name or shop..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="input-field pl-10"
+                    />
+                  </div>
+
+                  <div className="relative">
+                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <select
+                      value={statusFilter}
+                      onChange={(e) => setStatusFilter(e.target.value)}
+                      className="input-field pl-10 w-40"
+                    >
+                      <option value="all">All Status</option>
+                      <option value="current">Current</option>
+                      <option value="overdue">Overdue</option>
+                      <option value="past_due">Past Due</option>
+                      <option value="critical">Critical</option>
+                    </select>
+                  </div>
+
+                  <select
+                    value={amountFilter}
+                    onChange={(e) => setAmountFilter(e.target.value)}
+                    className="input-field w-44"
+                  >
+                    <option value="all">All Amounts</option>
+                    <option value="small">&lt; ৳10,000</option>
+                    <option value="medium">৳10,000 - ৳30,000</option>
+                    <option value="large">&gt; ৳30,000</option>
+                  </select>
+
+                  {activeFiltersCount > 0 && (
+                    <button
+                      onClick={clearFilters}
+                      className="flex items-center gap-1 px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                      Clear ({activeFiltersCount})
+                    </button>
+                  )}
+                </div>
 
         {/* Receivables List */}
         <div className="space-y-2">

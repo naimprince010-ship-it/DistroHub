@@ -7,6 +7,8 @@ import {
   Package,
   Calendar,
   Truck,
+  Filter,
+  X,
 } from 'lucide-react';
 
 interface Purchase {
@@ -49,14 +51,40 @@ const initialPurchases: Purchase[] = [
 export function Purchase() {
   const [purchases, setPurchases] = useState<Purchase[]>(initialPurchases);
   const [searchTerm, setSearchTerm] = useState('');
+  const [paymentFilter, setPaymentFilter] = useState<string>('all');
+  const [dateFilter, setDateFilter] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null);
 
-  const filteredPurchases = purchases.filter(
-    (p) =>
+  const filteredPurchases = purchases.filter((p) => {
+    const matchesSearch =
       p.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.supplier_name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+      p.supplier_name.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const due = p.total_amount - p.paid_amount;
+    const matchesPayment = paymentFilter === 'all' ||
+      (paymentFilter === 'paid' && due === 0) ||
+      (paymentFilter === 'partial' && due > 0 && p.paid_amount > 0) ||
+      (paymentFilter === 'unpaid' && p.paid_amount === 0);
+    
+    const purchaseDate = new Date(p.purchase_date);
+    const today = new Date();
+    const daysDiff = Math.ceil((today.getTime() - purchaseDate.getTime()) / (1000 * 60 * 60 * 24));
+    const matchesDate = dateFilter === 'all' ||
+      (dateFilter === 'today' && daysDiff <= 1) ||
+      (dateFilter === 'week' && daysDiff <= 7) ||
+      (dateFilter === 'month' && daysDiff <= 30);
+    
+    return matchesSearch && matchesPayment && matchesDate;
+  });
+
+  const activeFiltersCount = [paymentFilter, dateFilter].filter(f => f !== 'all').length;
+
+  const clearFilters = () => {
+    setPaymentFilter('all');
+    setDateFilter('all');
+    setSearchTerm('');
+  };
 
   const totalPurchases = purchases.reduce((sum, p) => sum + p.total_amount, 0);
   const totalDue = purchases.reduce((sum, p) => sum + (p.total_amount - p.paid_amount), 0);
@@ -103,27 +131,64 @@ export function Purchase() {
           </div>
         </div>
 
-        {/* Actions Bar */}
-        <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex flex-wrap items-center justify-between gap-2">
-          <div className="relative flex-1 min-w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search purchases..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="input-field pl-10"
-            />
-          </div>
+                {/* Actions Bar */}
+                <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-1 flex-wrap">
+                    <div className="relative min-w-64">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search purchases..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="input-field pl-10"
+                      />
+                    </div>
 
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            New Purchase
-          </button>
-        </div>
+                    <div className="relative">
+                      <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <select
+                        value={paymentFilter}
+                        onChange={(e) => setPaymentFilter(e.target.value)}
+                        className="input-field pl-10 w-40"
+                      >
+                        <option value="all">All Payment</option>
+                        <option value="paid">Paid</option>
+                        <option value="partial">Partial</option>
+                        <option value="unpaid">Unpaid</option>
+                      </select>
+                    </div>
+
+                    <select
+                      value={dateFilter}
+                      onChange={(e) => setDateFilter(e.target.value)}
+                      className="input-field w-36"
+                    >
+                      <option value="all">All Time</option>
+                      <option value="today">Today</option>
+                      <option value="week">This Week</option>
+                      <option value="month">This Month</option>
+                    </select>
+
+                    {activeFiltersCount > 0 && (
+                      <button
+                        onClick={clearFilters}
+                        className="flex items-center gap-1 px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                        Clear ({activeFiltersCount})
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => setShowAddModal(true)}
+                    className="btn-primary flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    New Purchase
+                  </button>
+                </div>
 
         {/* Purchases Table */}
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">

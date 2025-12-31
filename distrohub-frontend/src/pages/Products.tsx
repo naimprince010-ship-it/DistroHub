@@ -9,6 +9,8 @@ import {
   Trash2,
   Package,
   AlertTriangle,
+  Filter,
+  X,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -84,15 +86,49 @@ const initialProducts: Product[] = [
 export function Products() {
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [searchTerm, setSearchTerm] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('all');
+  const [stockFilter, setStockFilter] = useState<string>('all');
+  const [expiryFilter, setExpiryFilter] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
-  const filteredProducts = products.filter(
-    (product) =>
+  const categories = [...new Set(products.map(p => p.category))];
+
+  const isExpiringSoon = (expiryDate: string) => {
+    const expiry = new Date(expiryDate);
+    const today = new Date();
+    const diffDays = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    return diffDays <= 30;
+  };
+
+  const isExpired = (expiryDate: string) => {
+    const expiry = new Date(expiryDate);
+    const today = new Date();
+    return expiry < today;
+  };
+
+  const filteredProducts = products.filter((product) => {
+    const matchesSearch =
       product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      product.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+      product.category.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
+    
+    const matchesStock = stockFilter === 'all' ||
+      (stockFilter === 'low' && product.stock_quantity < 50) ||
+      (stockFilter === 'out' && product.stock_quantity === 0) ||
+      (stockFilter === 'in_stock' && product.stock_quantity >= 50);
+    
+    const matchesExpiry = expiryFilter === 'all' ||
+      (expiryFilter === 'expired' && isExpired(product.expiry_date)) ||
+      (expiryFilter === 'expiring' && isExpiringSoon(product.expiry_date) && !isExpired(product.expiry_date)) ||
+      (expiryFilter === 'safe' && !isExpiringSoon(product.expiry_date));
+    
+    return matchesSearch && matchesCategory && matchesStock && matchesExpiry;
+  });
+
+  const activeFiltersCount = [categoryFilter, stockFilter, expiryFilter].filter(f => f !== 'all').length;
 
   const handleExcelImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -124,63 +160,111 @@ export function Products() {
     XLSX.writeFile(workbook, 'products.xlsx');
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm('Are you sure you want to delete this product?')) {
-      setProducts(products.filter((p) => p.id !== id));
-    }
-  };
+    const handleDelete = (id: string) => {
+      if (confirm('Are you sure you want to delete this product?')) {
+        setProducts(products.filter((p) => p.id !== id));
+      }
+    };
 
-  const isExpiringSoon = (expiryDate: string) => {
-    const expiry = new Date(expiryDate);
-    const today = new Date();
-    const diffDays = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    return diffDays <= 30;
-  };
+    const clearFilters = () => {
+      setCategoryFilter('all');
+      setStockFilter('all');
+      setExpiryFilter('all');
+      setSearchTerm('');
+    };
 
   return (
     <div className="min-h-screen">
       <Header title="Products" />
 
       <div className="p-3">
-        {/* Actions Bar */}
-        <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex flex-wrap items-center justify-between gap-2">
-          <div className="relative flex-1 min-w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search products..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="input-field pl-10"
-            />
-          </div>
+                {/* Actions Bar */}
+                <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-1 flex-wrap">
+                    <div className="relative min-w-64">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search products..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="input-field pl-10"
+                      />
+                    </div>
 
-          <div className="flex items-center gap-2">
-            <label className="btn-secondary flex items-center gap-2 cursor-pointer">
-              <Upload className="w-4 h-4" />
-              Import Excel
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={handleExcelImport}
-                className="hidden"
-              />
-            </label>
+                    <div className="relative">
+                      <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <select
+                        value={categoryFilter}
+                        onChange={(e) => setCategoryFilter(e.target.value)}
+                        className="input-field pl-10 w-40"
+                      >
+                        <option value="all">All Categories</option>
+                        {categories.map(cat => (
+                          <option key={cat} value={cat}>{cat}</option>
+                        ))}
+                      </select>
+                    </div>
 
-            <button onClick={handleExcelExport} className="btn-secondary flex items-center gap-2">
-              <Download className="w-4 h-4" />
-              Export
-            </button>
+                    <select
+                      value={stockFilter}
+                      onChange={(e) => setStockFilter(e.target.value)}
+                      className="input-field w-36"
+                    >
+                      <option value="all">All Stock</option>
+                      <option value="in_stock">In Stock</option>
+                      <option value="low">Low Stock</option>
+                      <option value="out">Out of Stock</option>
+                    </select>
 
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="btn-primary flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Add Product
-            </button>
-          </div>
-        </div>
+                    <select
+                      value={expiryFilter}
+                      onChange={(e) => setExpiryFilter(e.target.value)}
+                      className="input-field w-40"
+                    >
+                      <option value="all">All Expiry</option>
+                      <option value="expired">Expired</option>
+                      <option value="expiring">Expiring Soon</option>
+                      <option value="safe">Safe</option>
+                    </select>
+
+                    {activeFiltersCount > 0 && (
+                      <button
+                        onClick={clearFilters}
+                        className="flex items-center gap-1 px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                        Clear ({activeFiltersCount})
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <label className="btn-secondary flex items-center gap-2 cursor-pointer">
+                      <Upload className="w-4 h-4" />
+                      Import Excel
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls"
+                        onChange={handleExcelImport}
+                        className="hidden"
+                      />
+                    </label>
+
+                    <button onClick={handleExcelExport} className="btn-secondary flex items-center gap-2">
+                      <Download className="w-4 h-4" />
+                      Export
+                    </button>
+
+                    <button
+                      onClick={() => setShowAddModal(true)}
+                      className="btn-primary flex items-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add Product
+                    </button>
+                  </div>
+                </div>
 
         {/* Products Table */}
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
