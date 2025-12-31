@@ -9,7 +9,10 @@ import {
   CheckCircle,
   Clock,
   XCircle,
+  FileText,
 } from 'lucide-react';
+import { InvoicePrint } from '@/components/print/InvoicePrint';
+import { ChallanPrint } from '@/components/print/ChallanPrint';
 
 interface SalesOrder {
   id: string;
@@ -91,6 +94,8 @@ export function Sales() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
+  const [printInvoiceOrder, setPrintInvoiceOrder] = useState<SalesOrder | null>(null);
+  const [printChallanOrder, setPrintChallanOrder] = useState<SalesOrder | null>(null);
 
   const filteredOrders = orders.filter((order) => {
     const matchesSearch =
@@ -213,21 +218,29 @@ export function Sales() {
                         ৳ {(order.total_amount - order.paid_amount).toLocaleString()}
                       </td>
                       <td className="p-2">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => setSelectedOrder(order)}
-                            className="p-1 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
-                            title="View Details"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
-                          <button
-                            className="p-1 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
-                            title="Print Challan"
-                          >
-                            <Printer className="w-4 h-4" />
-                          </button>
-                        </div>
+                                                <div className="flex items-center justify-center gap-1">
+                                                  <button
+                                                    onClick={() => setSelectedOrder(order)}
+                                                    className="p-1 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                                                    title="View Details"
+                                                  >
+                                                    <Eye className="w-4 h-4" />
+                                                  </button>
+                                                  <button
+                                                    onClick={() => setPrintInvoiceOrder(order)}
+                                                    className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                                    title="Print Invoice"
+                                                  >
+                                                    <FileText className="w-4 h-4" />
+                                                  </button>
+                                                  <button
+                                                    onClick={() => setPrintChallanOrder(order)}
+                                                    className="p-1 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
+                                                    title="Print Challan"
+                                                  >
+                                                    <Printer className="w-4 h-4" />
+                                                  </button>
+                                                </div>
                       </td>
                     </tr>
                   );
@@ -257,6 +270,44 @@ export function Sales() {
             setOrders([...orders, { ...order, id: `new-${Date.now()}` }]);
             setShowAddModal(false);
           }}
+        />
+      )}
+
+      {/* Print Invoice Modal */}
+      {printInvoiceOrder && (
+        <InvoicePrint
+          data={{
+            invoice_number: printInvoiceOrder.order_number,
+            order_date: printInvoiceOrder.order_date,
+            retailer_name: printInvoiceOrder.retailer_name,
+            items: printInvoiceOrder.items,
+            subtotal: printInvoiceOrder.total_amount,
+            discount: 0,
+            total_amount: printInvoiceOrder.total_amount,
+            paid_amount: printInvoiceOrder.paid_amount,
+            due_amount: printInvoiceOrder.total_amount - printInvoiceOrder.paid_amount,
+          }}
+          onClose={() => setPrintInvoiceOrder(null)}
+        />
+      )}
+
+      {/* Print Challan Modal */}
+      {printChallanOrder && (
+        <ChallanPrint
+          data={{
+            challan_number: `CH-${printChallanOrder.order_number.replace('ORD-', '')}`,
+            order_number: printChallanOrder.order_number,
+            date: printChallanOrder.order_date,
+            delivery_date: printChallanOrder.delivery_date,
+            retailer_name: printChallanOrder.retailer_name,
+            items: printChallanOrder.items.map(item => ({
+              product: item.product,
+              qty: item.qty,
+              unit: 'Pcs'
+            })),
+            total_items: printChallanOrder.items.length,
+          }}
+          onClose={() => setPrintChallanOrder(null)}
         />
       )}
     </div>
