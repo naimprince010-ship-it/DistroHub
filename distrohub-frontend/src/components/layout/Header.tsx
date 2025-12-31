@@ -1,4 +1,5 @@
 import { Bell, Search, User } from 'lucide-react';
+import { OnlineStatusBadge } from '@/components/OfflineIndicator';
 
 interface HeaderProps {
   title: string;
@@ -7,7 +8,10 @@ interface HeaderProps {
 export function Header({ title }: HeaderProps) {
   return (
     <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-3">
-      <h2 className="text-2xl font-semibold text-slate-900">{title}</h2>
+      <div className="flex items-center gap-3">
+        <h2 className="text-2xl font-semibold text-slate-900">{title}</h2>
+        <OnlineStatusBadge />
+      </div>
 
       <div className="flex items-center gap-2">
         <div className="relative">

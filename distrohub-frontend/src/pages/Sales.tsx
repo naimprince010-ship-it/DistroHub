@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { InvoicePrint } from '@/components/print/InvoicePrint';
 import { ChallanPrint } from '@/components/print/ChallanPrint';
+import { BarcodeScanButton } from '@/components/BarcodeScanner';
 
 interface SalesOrder {
   id: string;
@@ -410,6 +411,15 @@ function OrderDetailsModal({ order, onClose }: { order: SalesOrder; onClose: () 
   );
 }
 
+const productCatalog: Record<string, { name: string; price: number }> = {
+  '8901234567890': { name: 'Akij Flour 1kg', price: 62 },
+  '8901234567891': { name: 'Power Milk 400g', price: 350 },
+  '8901234567892': { name: 'Pampers Medium', price: 920 },
+  '8901234567893': { name: 'Premium Rice 5kg', price: 480 },
+  '8901234567894': { name: 'Sugar 1kg', price: 55 },
+  '8901234567895': { name: 'Biscuit Pack', price: 45 },
+};
+
 function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (order: SalesOrder) => void }) {
   const [formData, setFormData] = useState({
     retailer_name: '',
@@ -439,6 +449,32 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
       ...formData,
       items: [...formData.items, { product: '', qty: 0, price: 0 }],
     });
+  };
+
+  const handleBarcodeScan = (barcode: string) => {
+    const product = productCatalog[barcode];
+    if (product) {
+      const existingIndex = formData.items.findIndex(item => item.product === product.name);
+      if (existingIndex >= 0) {
+        const newItems = [...formData.items];
+        newItems[existingIndex].qty += 1;
+        setFormData({ ...formData, items: newItems });
+      } else {
+        const emptyIndex = formData.items.findIndex(item => !item.product);
+        if (emptyIndex >= 0) {
+          const newItems = [...formData.items];
+          newItems[emptyIndex] = { product: product.name, qty: 1, price: product.price };
+          setFormData({ ...formData, items: newItems });
+        } else {
+          setFormData({
+            ...formData,
+            items: [...formData.items, { product: product.name, qty: 1, price: product.price }],
+          });
+        }
+      }
+    } else {
+      alert(`Product not found for barcode: ${barcode}`);
+    }
   };
 
   return (
@@ -477,13 +513,16 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
             </div>
           </div>
 
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-medium text-slate-700">Order Items</label>
-              <button type="button" onClick={addItem} className="text-primary-600 text-sm font-medium">
-                + Add Item
-              </button>
-            </div>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-sm font-medium text-slate-700">Order Items</label>
+                        <div className="flex items-center gap-2">
+                          <BarcodeScanButton onScan={handleBarcodeScan} />
+                          <button type="button" onClick={addItem} className="text-primary-600 text-sm font-medium">
+                            + Add Item
+                          </button>
+                        </div>
+                      </div>
             {formData.items.map((item, index) => (
               <div key={index} className="grid grid-cols-4 gap-2 mb-1">
                 <div className="col-span-2">
