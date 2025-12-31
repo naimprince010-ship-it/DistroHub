@@ -1,4 +1,5 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import {
   Plus,
@@ -126,6 +127,7 @@ const initialProducts: Product[] = [
 ];
 
 export function Products() {
+  const [searchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>(initialProducts);
   const [searchTerm, setSearchTerm] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
@@ -133,6 +135,11 @@ export function Products() {
   const [expiryFilter, setExpiryFilter] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+
+  useEffect(() => {
+    const globalSearch = searchParams.get('q') || '';
+    setSearchTerm(globalSearch);
+  }, [searchParams]);
 
   const allCategories = [...new Set([...categories, ...products.map(p => p.category)])];
 

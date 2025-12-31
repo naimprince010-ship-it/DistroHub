@@ -1,4 +1,6 @@
-import { Bell, Search, User } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Bell, Search, User, X } from 'lucide-react';
 import { OnlineStatusBadge } from '@/components/OfflineIndicator';
 
 interface HeaderProps {
@@ -6,6 +8,31 @@ interface HeaderProps {
 }
 
 export function Header({ title }: HeaderProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [localSearch, setLocalSearch] = useState(searchParams.get('q') || '');
+
+  useEffect(() => {
+    setLocalSearch(searchParams.get('q') || '');
+  }, [searchParams]);
+
+  const handleSearchChange = (value: string) => {
+    setLocalSearch(value);
+    const newParams = new URLSearchParams(searchParams);
+    if (value) {
+      newParams.set('q', value);
+    } else {
+      newParams.delete('q');
+    }
+    setSearchParams(newParams);
+  };
+
+  const clearSearch = () => {
+    setLocalSearch('');
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('q');
+    setSearchParams(newParams);
+  };
+
   return (
     <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-3">
       <div className="flex items-center gap-3">
@@ -19,8 +46,18 @@ export function Header({ title }: HeaderProps) {
           <input
             type="text"
             placeholder="Search..."
-            className="pl-10 pr-4 py-2 bg-slate-100 border-0 rounded-lg w-64 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all duration-200"
+            value={localSearch}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            className="pl-10 pr-8 py-2 bg-slate-100 border-0 rounded-lg w-64 focus:outline-none focus:ring-2 focus:ring-primary-500 transition-all duration-200"
           />
+          {localSearch && (
+            <button
+              onClick={clearSearch}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
 
         <button className="relative p-2 text-slate-600 hover:bg-slate-100 rounded-lg transition-all duration-200">

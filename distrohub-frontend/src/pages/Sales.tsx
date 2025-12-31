@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import {
   Plus,
@@ -90,6 +91,7 @@ const paymentConfig = {
 };
 
 export function Sales() {
+  const [searchParams] = useSearchParams();
   const [orders, setOrders] = useState<SalesOrder[]>(initialOrders);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -97,6 +99,11 @@ export function Sales() {
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
   const [printInvoiceOrder, setPrintInvoiceOrder] = useState<SalesOrder | null>(null);
   const [printChallanOrder, setPrintChallanOrder] = useState<SalesOrder | null>(null);
+
+  useEffect(() => {
+    const globalSearch = searchParams.get('q') || '';
+    setSearchTerm(globalSearch);
+  }, [searchParams]);
 
   const filteredOrders = orders.filter((order) => {
     const matchesSearch =

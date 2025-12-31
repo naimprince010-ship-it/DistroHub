@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import {
   Plus,
@@ -110,12 +111,18 @@ const initialPurchases: Purchase[] = [
 ];
 
 export function Purchase() {
+  const [searchParams] = useSearchParams();
   const [purchases, setPurchases] = useState<Purchase[]>(initialPurchases);
   const [searchTerm, setSearchTerm] = useState('');
   const [paymentFilter, setPaymentFilter] = useState<string>('all');
   const [dateFilter, setDateFilter] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null);
+
+  useEffect(() => {
+    const globalSearch = searchParams.get('q') || '';
+    setSearchTerm(globalSearch);
+  }, [searchParams]);
 
   const filteredPurchases = purchases.filter((p) => {
     const matchesSearch =

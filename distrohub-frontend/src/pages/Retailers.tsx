@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import {
   Plus,
@@ -73,12 +74,18 @@ const initialRetailers: Retailer[] = [
 ];
 
 export function Retailers() {
+  const [searchParams] = useSearchParams();
   const [retailers, setRetailers] = useState<Retailer[]>(initialRetailers);
   const [searchTerm, setSearchTerm] = useState('');
   const [areaFilter, setAreaFilter] = useState<string>('all');
   const [dueFilter, setDueFilter] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingRetailer, setEditingRetailer] = useState<Retailer | null>(null);
+
+  useEffect(() => {
+    const globalSearch = searchParams.get('q') || '';
+    setSearchTerm(globalSearch);
+  }, [searchParams]);
 
   const areas = [...new Set(retailers.map(r => r.area))];
 
