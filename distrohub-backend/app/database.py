@@ -463,4 +463,20 @@ class InMemoryDatabase:
         
         return sorted(receivables, key=lambda x: x["total_due"], reverse=True)
 
-db = InMemoryDatabase()
+import os
+
+def get_database():
+    use_supabase = os.environ.get("USE_SUPABASE", "").lower() == "true"
+    supabase_url = os.environ.get("SUPABASE_URL")
+    supabase_key = os.environ.get("SUPABASE_KEY")
+    
+    if use_supabase and supabase_url and supabase_key:
+        try:
+            from app.supabase_db import SupabaseDatabase
+            return SupabaseDatabase()
+        except Exception as e:
+            print(f"Failed to connect to Supabase: {e}, falling back to in-memory database")
+    
+    return InMemoryDatabase()
+
+db = get_database()
