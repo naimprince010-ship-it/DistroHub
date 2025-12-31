@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Package, Eye, EyeOff } from 'lucide-react';
+import api from '@/lib/api';
 
 export function Login() {
   const navigate = useNavigate();
@@ -16,21 +17,14 @@ export function Login() {
     setError('');
 
     try {
-      // For MVP, we'll use a simple demo login
-      if (email === 'admin@distrohub.com' && password === 'admin123') {
-        localStorage.setItem('token', 'demo-token');
-        localStorage.setItem('user', JSON.stringify({
-          id: '1',
-          email: 'admin@distrohub.com',
-          name: 'Admin User',
-          role: 'admin'
-        }));
-        navigate('/');
-      } else {
-        setError('Invalid email or password');
-      }
-    } catch {
-      setError('Login failed. Please try again.');
+      const response = await api.post('/api/auth/login', { email, password });
+      const { access_token, user } = response.data;
+      localStorage.setItem('token', access_token);
+      localStorage.setItem('user', JSON.stringify(user));
+      navigate('/');
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { detail?: string } } };
+      setError(error.response?.data?.detail || 'Login failed. Please try again.');
     } finally {
       setIsLoading(false);
     }

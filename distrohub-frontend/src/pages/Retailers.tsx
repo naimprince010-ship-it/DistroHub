@@ -9,6 +9,8 @@ import {
   MapPin,
   CreditCard,
   User,
+  Filter,
+  X,
 } from 'lucide-react';
 
 interface Retailer {
@@ -73,15 +75,38 @@ const initialRetailers: Retailer[] = [
 export function Retailers() {
   const [retailers, setRetailers] = useState<Retailer[]>(initialRetailers);
   const [searchTerm, setSearchTerm] = useState('');
+  const [areaFilter, setAreaFilter] = useState<string>('all');
+  const [dueFilter, setDueFilter] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingRetailer, setEditingRetailer] = useState<Retailer | null>(null);
 
-  const filteredRetailers = retailers.filter(
-    (retailer) =>
+  const areas = [...new Set(retailers.map(r => r.area))];
+
+  const filteredRetailers = retailers.filter((retailer) => {
+    const matchesSearch =
       retailer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       retailer.shop_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      retailer.area.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+      retailer.area.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      retailer.phone.includes(searchTerm);
+    
+    const matchesArea = areaFilter === 'all' || retailer.area === areaFilter;
+    
+    const matchesDue = dueFilter === 'all' ||
+      (dueFilter === 'no_due' && retailer.current_due === 0) ||
+      (dueFilter === 'has_due' && retailer.current_due > 0) ||
+      (dueFilter === 'near_limit' && retailer.current_due > retailer.credit_limit * 0.8) ||
+      (dueFilter === 'over_limit' && retailer.current_due > retailer.credit_limit);
+    
+    return matchesSearch && matchesArea && matchesDue;
+  });
+
+  const activeFiltersCount = [areaFilter, dueFilter].filter(f => f !== 'all').length;
+
+  const clearFilters = () => {
+    setAreaFilter('all');
+    setDueFilter('all');
+    setSearchTerm('');
+  };
 
   const handleDelete = (id: string) => {
     if (confirm('Are you sure you want to delete this retailer?')) {
@@ -135,27 +160,65 @@ export function Retailers() {
           </div>
         </div>
 
-        {/* Actions Bar */}
-        <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex flex-wrap items-center justify-between gap-2">
-          <div className="relative flex-1 min-w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search retailers..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="input-field pl-10"
-            />
-          </div>
+                {/* Actions Bar */}
+                <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 flex-1 flex-wrap">
+                    <div className="relative min-w-64">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Search retailers..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="input-field pl-10"
+                      />
+                    </div>
 
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Add Retailer
-          </button>
-        </div>
+                    <div className="relative">
+                      <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                      <select
+                        value={areaFilter}
+                        onChange={(e) => setAreaFilter(e.target.value)}
+                        className="input-field pl-10 w-40"
+                      >
+                        <option value="all">All Areas</option>
+                        {areas.map(area => (
+                          <option key={area} value={area}>{area}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <select
+                      value={dueFilter}
+                      onChange={(e) => setDueFilter(e.target.value)}
+                      className="input-field w-40"
+                    >
+                      <option value="all">All Due Status</option>
+                      <option value="no_due">No Due</option>
+                      <option value="has_due">Has Due</option>
+                      <option value="near_limit">Near Limit</option>
+                      <option value="over_limit">Over Limit</option>
+                    </select>
+
+                    {activeFiltersCount > 0 && (
+                      <button
+                        onClick={clearFilters}
+                        className="flex items-center gap-1 px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                        Clear ({activeFiltersCount})
+                      </button>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => setShowAddModal(true)}
+                    className="btn-primary flex items-center gap-2"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Retailer
+                  </button>
+                </div>
 
         {/* Retailers Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">

@@ -6,6 +6,8 @@ import {
   Calendar,
   Filter,
   Trash2,
+  Search,
+  X,
 } from 'lucide-react';
 
 interface ExpiryItem {
@@ -75,12 +77,25 @@ const statusConfig = {
 
 export function Expiry() {
   const [items] = useState<ExpiryItem[]>(expiryData);
+  const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<string>('all');
 
   const filteredItems = items.filter((item) => {
-    if (filter === 'all') return true;
-    return item.status === filter;
+    const matchesSearch =
+      item.product_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.batch_number.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesFilter = filter === 'all' || item.status === filter;
+    
+    return matchesSearch && matchesFilter;
   });
+
+  const activeFiltersCount = (filter !== 'all' ? 1 : 0) + (searchTerm ? 1 : 0);
+
+  const clearFilters = () => {
+    setFilter('all');
+    setSearchTerm('');
+  };
 
   const expiredCount = items.filter((i) => i.status === 'expired').length;
   const criticalCount = items.filter((i) => i.status === 'critical').length;
@@ -139,21 +154,44 @@ export function Expiry() {
           </div>
         </div>
 
-        {/* Filter */}
-        <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex items-center gap-2">
-          <Filter className="w-5 h-5 text-slate-400" />
-          <select
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
-            className="input-field w-48"
-          >
-            <option value="all">All Items</option>
-            <option value="expired">Expired Only</option>
-            <option value="critical">Critical (&lt;30 days)</option>
-            <option value="warning">Warning (&lt;60 days)</option>
-            <option value="safe">Safe</option>
-          </select>
-        </div>
+                {/* Search & Filter */}
+                <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex flex-wrap items-center gap-2">
+                  <div className="relative flex-1 min-w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search by product name or batch..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="input-field pl-10"
+                    />
+                  </div>
+
+                  <div className="relative">
+                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <select
+                      value={filter}
+                      onChange={(e) => setFilter(e.target.value)}
+                      className="input-field pl-10 w-48"
+                    >
+                      <option value="all">All Items</option>
+                      <option value="expired">Expired Only</option>
+                      <option value="critical">Critical (&lt;30 days)</option>
+                      <option value="warning">Warning (&lt;60 days)</option>
+                      <option value="safe">Safe</option>
+                    </select>
+                  </div>
+
+                  {activeFiltersCount > 0 && (
+                    <button
+                      onClick={clearFilters}
+                      className="flex items-center gap-1 px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                      Clear ({activeFiltersCount})
+                    </button>
+                  )}
+                </div>
 
         {/* Expiry List */}
         <div className="space-y-2">

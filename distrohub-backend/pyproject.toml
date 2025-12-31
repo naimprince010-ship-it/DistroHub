@@ -9,6 +9,14 @@ readme = "README.md"
 python = "^3.12"
 fastapi = {extras = ["standard"], version = "^0.128.0"}
 psycopg = {extras = ["binary"], version = "^3.3.2"}
+pydantic = "^2.12.5"
+python-jose = {extras = ["cryptography"], version = "^3.5.0"}
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+python-multipart = "^0.0.21"
+asyncpg = "^0.31.0"
+sqlalchemy = "^2.0.45"
+psycopg2-binary = "^2.9.11"
+supabase = "^2.27.0"
 
 
 [build-system]

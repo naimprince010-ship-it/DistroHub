@@ -12,6 +12,8 @@ import { Receivables } from '@/pages/Receivables';
 import { Expiry } from '@/pages/Expiry';
 import { Reports } from '@/pages/Reports';
 import { Settings } from '@/pages/Settings';
+import { OfflineProvider } from '@/contexts/OfflineContext';
+import { OfflineIndicator } from '@/components/OfflineIndicator';
 
 const queryClient = new QueryClient();
 
@@ -26,30 +28,33 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <MainLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route index element={<Dashboard />} />
-            <Route path="products" element={<Products />} />
-            <Route path="retailers" element={<Retailers />} />
-            <Route path="purchase" element={<Purchase />} />
-            <Route path="inventory" element={<Inventory />} />
-            <Route path="sales" element={<Sales />} />
-            <Route path="receivables" element={<Receivables />} />
-            <Route path="expiry" element={<Expiry />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="settings" element={<Settings />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
+      <OfflineProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <MainLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route index element={<Dashboard />} />
+              <Route path="products" element={<Products />} />
+              <Route path="retailers" element={<Retailers />} />
+              <Route path="purchase" element={<Purchase />} />
+              <Route path="inventory" element={<Inventory />} />
+              <Route path="sales" element={<Sales />} />
+              <Route path="receivables" element={<Receivables />} />
+              <Route path="expiry" element={<Expiry />} />
+              <Route path="reports" element={<Reports />} />
+              <Route path="settings" element={<Settings />} />
+            </Route>
+          </Routes>
+          <OfflineIndicator />
+        </BrowserRouter>
+      </OfflineProvider>
     </QueryClientProvider>
   );
 }
