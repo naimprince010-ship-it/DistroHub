@@ -20,11 +20,19 @@ CREATE TABLE IF NOT EXISTS products (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(255) NOT NULL,
     sku VARCHAR(100) UNIQUE NOT NULL,
+    barcode VARCHAR(100),
     category VARCHAR(100) NOT NULL,
     unit VARCHAR(50) NOT NULL,
     pack_size INTEGER DEFAULT 1,
+    pieces_per_carton INTEGER DEFAULT 12,
     purchase_price DECIMAL(10,2) NOT NULL,
     selling_price DECIMAL(10,2) NOT NULL,
+    stock_quantity INTEGER DEFAULT 0,
+    reorder_level INTEGER DEFAULT 10,
+    supplier VARCHAR(255),
+    vat_inclusive BOOLEAN DEFAULT FALSE,
+    vat_rate DECIMAL(5,2) DEFAULT 0,
+    image_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -52,12 +60,33 @@ CREATE TABLE IF NOT EXISTS retailers (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Warehouses table
+CREATE TABLE IF NOT EXISTS warehouses (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    address TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Purchases table (stock-in from suppliers)
 CREATE TABLE IF NOT EXISTS purchases (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    supplier_name VARCHAR(255) NOT NULL,
     invoice_number VARCHAR(100) NOT NULL,
+    supplier_invoice VARCHAR(100),
+    supplier_name VARCHAR(255) NOT NULL,
+    warehouse_id UUID REFERENCES warehouses(id),
+    warehouse_name VARCHAR(255) DEFAULT 'Main Warehouse',
+    purchase_date DATE DEFAULT CURRENT_DATE,
+    sub_total DECIMAL(10,2) NOT NULL,
+    discount_type VARCHAR(20) DEFAULT 'percent',
+    discount_value DECIMAL(10,2) DEFAULT 0,
+    discount_amount DECIMAL(10,2) DEFAULT 0,
+    tax_percent DECIMAL(5,2) DEFAULT 0,
+    tax_amount DECIMAL(10,2) DEFAULT 0,
     total_amount DECIMAL(10,2) NOT NULL,
+    paid_amount DECIMAL(10,2) DEFAULT 0,
+    due_amount DECIMAL(10,2) DEFAULT 0,
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -68,11 +97,14 @@ CREATE TABLE IF NOT EXISTS purchase_items (
     purchase_id UUID REFERENCES purchases(id) ON DELETE CASCADE,
     product_id UUID REFERENCES products(id),
     product_name VARCHAR(255) NOT NULL,
+    sku VARCHAR(100),
     batch_number VARCHAR(100) NOT NULL,
     expiry_date DATE NOT NULL,
     quantity INTEGER NOT NULL,
     unit_price DECIMAL(10,2) NOT NULL,
-    total DECIMAL(10,2) NOT NULL
+    sub_total DECIMAL(10,2) NOT NULL,
+    current_stock INTEGER DEFAULT 0,
+    last_purchase_price DECIMAL(10,2) DEFAULT 0
 );
 
 -- Sales table
@@ -149,6 +181,14 @@ INSERT INTO retailers (name, shop_name, phone, address, area, credit_limit, tota
 ('Abdul Haque', 'Haque Grocery', '01812345678', 'Shop 5, Dhanmondi-27', 'Dhanmondi', 75000.00, 22000.00),
 ('Rahim Mia', 'Rahim Bhandar', '01912345678', 'Shop 8, Uttara Sector-7', 'Uttara', 60000.00, 8500.00),
 ('Jamal Ahmed', 'Ahmed Store', '01612345678', 'Shop 3, Gulshan-2', 'Gulshan', 100000.00, 45000.00)
+ON CONFLICT DO NOTHING;
+
+-- Insert demo warehouses
+INSERT INTO warehouses (name, address, is_active) VALUES
+('Main Warehouse', 'Plot 12, BSCIC Industrial Area, Tongi, Gazipur', TRUE),
+('Godown 1', 'House 45, Mirpur DOHS, Dhaka', TRUE),
+('Godown 2', 'Shop 8, Uttara Sector-10, Dhaka', TRUE),
+('Shop Floor', 'Ground Floor, Main Office Building', TRUE)
 ON CONFLICT DO NOTHING;
 
 -- Enable Row Level Security (RLS) - optional for now
