@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import {
   Plus,
-  Search,
   Eye,
   Printer,
   Truck,
@@ -146,16 +145,6 @@ export function Sales() {
         {/* Actions Bar */}
         <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 flex-1">
-            <div className="relative min-w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search orders..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="input-field pl-10"
-              />
-            </div>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}

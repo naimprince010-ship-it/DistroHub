@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import {
   Plus,
-  Search,
   Edit,
   Trash2,
   Phone,
@@ -170,17 +169,6 @@ export function Retailers() {
                 {/* Actions Bar */}
                 <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2 flex-1 flex-wrap">
-                    <div className="relative min-w-64">
-                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <input
-                        type="text"
-                        placeholder="Search retailers..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="input-field pl-10"
-                      />
-                    </div>
-
                     <div className="relative">
                       <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                       <select
