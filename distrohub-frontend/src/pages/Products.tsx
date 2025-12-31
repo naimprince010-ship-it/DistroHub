@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Header } from '@/components/layout/Header';
 import {
   Plus,
@@ -11,75 +11,117 @@ import {
   AlertTriangle,
   Filter,
   X,
+  Wand2,
+  ImagePlus,
+  TrendingUp,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import { BarcodeScanButton } from '@/components/BarcodeScanner';
 
 interface Product {
   id: string;
   name: string;
   sku: string;
+  barcode: string;
   category: string;
   unit: string;
   pack_size: number;
+  pieces_per_carton: number;
   purchase_price: number;
   selling_price: number;
   stock_quantity: number;
+  reorder_level: number;
   batch_number: string;
   expiry_date: string;
+  supplier: string;
+  vat_inclusive: boolean;
+  vat_rate: number;
+  image_url: string;
 }
+
+const categories = ['Flour', 'Dairy', 'Baby Care', 'Rice', 'Beverages', 'Snacks', 'Oil', 'Spices'];
+const suppliers = ['Akij Food & Beverage', 'Pran Foods', 'Square Food', 'ACI Foods', 'Nestle Bangladesh'];
 
 const initialProducts: Product[] = [
   {
     id: '1',
     name: 'Akij Flour 1kg',
     sku: 'AKJ-FLR-001',
+    barcode: '8901234567890',
     category: 'Flour',
     unit: 'Pack',
     pack_size: 12,
+    pieces_per_carton: 12,
     purchase_price: 55,
     selling_price: 62,
     stock_quantity: 500,
+    reorder_level: 100,
     batch_number: 'BT-2024-001',
     expiry_date: '2025-06-15',
+    supplier: 'Akij Food & Beverage',
+    vat_inclusive: true,
+    vat_rate: 5,
+    image_url: '',
   },
   {
     id: '2',
     name: 'Power Milk 400g',
     sku: 'PWR-MLK-001',
+    barcode: '8901234567891',
     category: 'Dairy',
     unit: 'Pack',
     pack_size: 24,
+    pieces_per_carton: 24,
     purchase_price: 320,
     selling_price: 350,
     stock_quantity: 200,
+    reorder_level: 50,
     batch_number: 'BT-2024-002',
     expiry_date: '2025-01-20',
+    supplier: 'Pran Foods',
+    vat_inclusive: true,
+    vat_rate: 5,
+    image_url: '',
   },
   {
     id: '3',
     name: 'Pampers Medium',
     sku: 'PMP-MED-001',
+    barcode: '8901234567892',
     category: 'Baby Care',
     unit: 'Pack',
     pack_size: 6,
+    pieces_per_carton: 6,
     purchase_price: 850,
     selling_price: 920,
     stock_quantity: 150,
+    reorder_level: 30,
     batch_number: 'BT-2024-003',
     expiry_date: '2026-12-31',
+    supplier: 'Square Food',
+    vat_inclusive: false,
+    vat_rate: 0,
+    image_url: '',
   },
   {
     id: '4',
     name: 'Premium Rice 5kg',
     sku: 'RIC-PRM-001',
+    barcode: '8901234567893',
     category: 'Rice',
     unit: 'Bag',
     pack_size: 10,
+    pieces_per_carton: 10,
     purchase_price: 420,
     selling_price: 480,
     stock_quantity: 300,
+    reorder_level: 50,
     batch_number: 'BT-2024-004',
     expiry_date: '2025-12-31',
+    supplier: 'Akij Food & Beverage',
+    vat_inclusive: true,
+    vat_rate: 5,
+    image_url: '',
   },
 ];
 
@@ -92,7 +134,7 @@ export function Products() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
-  const categories = [...new Set(products.map(p => p.category))];
+  const allCategories = [...new Set([...categories, ...products.map(p => p.category)])];
 
   const isExpiringSoon = (expiryDate: string) => {
     const expiry = new Date(expiryDate);
@@ -200,7 +242,7 @@ export function Products() {
                         className="input-field pl-10 w-40"
                       >
                         <option value="all">All Categories</option>
-                        {categories.map(cat => (
+                        {allCategories.map(cat => (
                           <option key={cat} value={cat}>{cat}</option>
                         ))}
                       </select>
@@ -368,15 +410,17 @@ export function Products() {
             setShowAddModal(false);
             setEditingProduct(null);
           }}
-          onSave={(product) => {
-            if (editingProduct) {
-              setProducts(products.map((p) => (p.id === product.id ? product : p)));
-            } else {
-              setProducts([...products, { ...product, id: `new-${Date.now()}` }]);
-            }
-            setShowAddModal(false);
-            setEditingProduct(null);
-          }}
+                    onSave={(product, addAnother) => {
+                      if (editingProduct) {
+                        setProducts(products.map((p) => (p.id === product.id ? product : p)));
+                      } else {
+                        setProducts([...products, { ...product, id: `new-${Date.now()}` }]);
+                      }
+                      if (!addAnother) {
+                        setShowAddModal(false);
+                        setEditingProduct(null);
+                      }
+                    }}
         />
       )}
     </div>
@@ -386,7 +430,11 @@ export function Products() {
 interface ProductModalProps {
   product: Product | null;
   onClose: () => void;
-  onSave: (product: Product) => void;
+  onSave: (product: Product, addAnother?: boolean) => void;
+}
+
+interface ValidationErrors {
+  [key: string]: string;
 }
 
 function ProductModal({ product, onClose, onSave }: ProductModalProps) {
@@ -394,149 +442,451 @@ function ProductModal({ product, onClose, onSave }: ProductModalProps) {
     product || {
       name: '',
       sku: '',
+      barcode: '',
       category: '',
       unit: 'Pack',
       pack_size: 12,
+      pieces_per_carton: 12,
       purchase_price: 0,
       selling_price: 0,
       stock_quantity: 0,
+      reorder_level: 10,
       batch_number: '',
       expiry_date: '',
+      supplier: '',
+      vat_inclusive: false,
+      vat_rate: 0,
+      image_url: '',
     }
   );
+  const [errors, setErrors] = useState<ValidationErrors>({});
+  const [imagePreview, setImagePreview] = useState<string>(product?.image_url || '');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    onSave(formData as Product);
+  const generateSKU = () => {
+    if (!formData.name || !formData.category) return;
+    const nameCode = formData.name.substring(0, 3).toUpperCase().replace(/\s/g, '');
+    const catCode = formData.category.substring(0, 3).toUpperCase().replace(/\s/g, '');
+    const randomNum = Math.floor(Math.random() * 900) + 100;
+    const sku = `${nameCode}-${catCode}-${randomNum}`;
+    setFormData({ ...formData, sku });
   };
+
+  const handleBarcodeScan = (barcode: string) => {
+    setFormData({ ...formData, barcode });
+  };
+
+  const validateField = (name: string, value: string | number) => {
+    const newErrors = { ...errors };
+    
+    if (name === 'name' && !value) {
+      newErrors.name = 'Product name is required';
+    } else if (name === 'name') {
+      delete newErrors.name;
+    }
+    
+    if (name === 'purchase_price' && (typeof value === 'number' && value < 0)) {
+      newErrors.purchase_price = 'Price cannot be negative';
+    } else if (name === 'purchase_price') {
+      delete newErrors.purchase_price;
+    }
+    
+    if (name === 'selling_price' && (typeof value === 'number' && value < 0)) {
+      newErrors.selling_price = 'Price cannot be negative';
+    } else if (name === 'selling_price') {
+      delete newErrors.selling_price;
+    }
+    
+    if (name === 'stock_quantity' && (typeof value === 'number' && value < 0)) {
+      newErrors.stock_quantity = 'Stock cannot be negative';
+    } else if (name === 'stock_quantity') {
+      delete newErrors.stock_quantity;
+    }
+    
+    setErrors(newErrors);
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64 = reader.result as string;
+        setImagePreview(base64);
+        setFormData({ ...formData, image_url: base64 });
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const profitAmount = (formData.selling_price || 0) - (formData.purchase_price || 0);
+  const profitPercent = formData.purchase_price && formData.purchase_price > 0 
+    ? ((profitAmount / formData.purchase_price) * 100).toFixed(1) 
+    : '0';
+
+    const batchHasValue = !!(formData.batch_number && formData.batch_number.trim() !== '');
+    const expiryRequired = batchHasValue;
+
+  const handleSubmit = (e: React.FormEvent, addAnother = false) => {
+    e.preventDefault();
+    
+    if (batchHasValue && !formData.expiry_date) {
+      setErrors({ ...errors, expiry_date: 'Expiry date is required when batch number is provided' });
+      return;
+    }
+    
+    onSave(formData as Product, addAnother);
+    
+    if (addAnother) {
+      setFormData({
+        name: '',
+        sku: '',
+        barcode: '',
+        category: formData.category,
+        unit: formData.unit,
+        pack_size: 12,
+        pieces_per_carton: 12,
+        purchase_price: 0,
+        selling_price: 0,
+        stock_quantity: 0,
+        reorder_level: 10,
+        batch_number: '',
+        expiry_date: '',
+        supplier: formData.supplier,
+        vat_inclusive: formData.vat_inclusive,
+        vat_rate: formData.vat_rate,
+        image_url: '',
+      });
+      setImagePreview('');
+      setErrors({});
+    }
+  };
+
+  const RequiredMark = () => <span className="text-red-500 ml-0.5">*</span>;
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
-        <div className="p-3 border-b border-slate-200">
+      <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
+        <div className="p-4 border-b border-slate-200">
           <h2 className="text-xl font-semibold text-slate-900">
             {product ? 'Edit Product' : 'Add New Product'}
           </h2>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-3 space-y-2">
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Product Name</label>
+        <form onSubmit={(e) => handleSubmit(e, false)} className="p-4 space-y-4">
+          {/* Product Image */}
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0">
+              <div 
+                className="w-24 h-24 border-2 border-dashed border-slate-300 rounded-xl flex items-center justify-center cursor-pointer hover:border-primary-500 hover:bg-primary-50 transition-colors overflow-hidden"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {imagePreview ? (
+                  <img src={imagePreview} alt="Product" className="w-full h-full object-cover" />
+                ) : (
+                  <div className="text-center">
+                    <ImagePlus className="w-8 h-8 text-slate-400 mx-auto" />
+                    <span className="text-xs text-slate-500">Add Image</span>
+                  </div>
+                )}
+              </div>
               <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="input-field"
-                required
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageUpload}
+                className="hidden"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">SKU</label>
-              <input
-                type="text"
-                value={formData.sku}
-                onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                className="input-field"
-                required
-              />
+            
+            <div className="flex-1 grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Product Name<RequiredMark />
+                </label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => {
+                    setFormData({ ...formData, name: e.target.value });
+                    validateField('name', e.target.value);
+                  }}
+                  className={`input-field w-full ${errors.name ? 'border-red-500 focus:ring-red-500' : ''}`}
+                  required
+                />
+                {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  SKU<RequiredMark />
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={formData.sku}
+                    onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                    className="input-field flex-1"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={generateSKU}
+                    className="btn-secondary px-3 flex items-center gap-1"
+                    title="Auto-generate SKU"
+                  >
+                    <Wand2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          {/* Barcode */}
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Category</label>
-              <input
-                type="text"
+              <label className="block text-sm font-medium text-slate-700 mb-1">Barcode</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={formData.barcode}
+                  onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                  className="input-field flex-1"
+                  placeholder="Scan or enter barcode"
+                />
+                <BarcodeScanButton onScan={handleBarcodeScan} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Category<RequiredMark />
+              </label>
+              <select
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="input-field"
+                className="input-field w-full"
                 required
-              />
+              >
+                <option value="">Select Category</option>
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
             </div>
+          </div>
+
+          {/* Unit & Pack Size */}
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Unit</label>
               <select
                 value={formData.unit}
                 onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                className="input-field"
+                className="input-field w-full"
               >
                 <option value="Pack">Pack</option>
                 <option value="Bag">Bag</option>
                 <option value="Box">Box</option>
                 <option value="Piece">Piece</option>
+                <option value="Carton">Carton</option>
               </select>
             </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Pack Size</label>
               <input
                 type="number"
                 value={formData.pack_size}
                 onChange={(e) => setFormData({ ...formData, pack_size: Number(e.target.value) })}
-                className="input-field"
-                required
+                className="input-field w-full"
+                min="1"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Purchase Price (৳)</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Pieces/Carton</label>
               <input
                 type="number"
-                value={formData.purchase_price}
-                onChange={(e) => setFormData({ ...formData, purchase_price: Number(e.target.value) })}
-                className="input-field"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Selling Price (৳)</label>
-              <input
-                type="number"
-                value={formData.selling_price}
-                onChange={(e) => setFormData({ ...formData, selling_price: Number(e.target.value) })}
-                className="input-field"
-                required
+                value={formData.pieces_per_carton}
+                onChange={(e) => setFormData({ ...formData, pieces_per_carton: Number(e.target.value) })}
+                className="input-field w-full"
+                min="1"
+                placeholder="e.g., 12"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2">
+          {/* Pricing with Profit Display */}
+          <div className="bg-slate-50 rounded-xl p-3">
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Purchase Price (৳)<RequiredMark />
+                </label>
+                <input
+                  type="number"
+                  value={formData.purchase_price}
+                  onChange={(e) => {
+                    setFormData({ ...formData, purchase_price: Number(e.target.value) });
+                    validateField('purchase_price', Number(e.target.value));
+                  }}
+                  className={`input-field w-full ${errors.purchase_price ? 'border-red-500' : ''}`}
+                  min="0"
+                  required
+                />
+                {errors.purchase_price && <p className="text-red-500 text-xs mt-1">{errors.purchase_price}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  Selling Price (৳)<RequiredMark />
+                </label>
+                <input
+                  type="number"
+                  value={formData.selling_price}
+                  onChange={(e) => {
+                    setFormData({ ...formData, selling_price: Number(e.target.value) });
+                    validateField('selling_price', Number(e.target.value));
+                  }}
+                  className={`input-field w-full ${errors.selling_price ? 'border-red-500' : ''}`}
+                  min="0"
+                  required
+                />
+                {errors.selling_price && <p className="text-red-500 text-xs mt-1">{errors.selling_price}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Profit Margin</label>
+                <div className={`input-field w-full flex items-center gap-2 ${profitAmount >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
+                  <TrendingUp className={`w-4 h-4 ${profitAmount >= 0 ? 'text-green-600' : 'text-red-600'}`} />
+                  <span className={`font-medium ${profitAmount >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                    ৳{profitAmount} ({profitPercent}%)
+                  </span>
+                </div>
+              </div>
+            </div>
+            
+            {/* VAT Toggle */}
+            <div className="flex items-center gap-4 mt-3 pt-3 border-t border-slate-200">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.vat_inclusive}
+                  onChange={(e) => setFormData({ ...formData, vat_inclusive: e.target.checked })}
+                  className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                />
+                <span className="text-sm text-slate-700">VAT Inclusive</span>
+              </label>
+              {formData.vat_inclusive && (
+                <div className="flex items-center gap-2">
+                  <label className="text-sm text-slate-700">VAT Rate:</label>
+                  <input
+                    type="number"
+                    value={formData.vat_rate}
+                    onChange={(e) => setFormData({ ...formData, vat_rate: Number(e.target.value) })}
+                    className="input-field w-20"
+                    min="0"
+                    max="100"
+                  />
+                  <span className="text-sm text-slate-500">%</span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Stock & Reorder Level */}
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Stock Quantity</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Stock Quantity<RequiredMark />
+              </label>
               <input
                 type="number"
                 value={formData.stock_quantity}
-                onChange={(e) => setFormData({ ...formData, stock_quantity: Number(e.target.value) })}
-                className="input-field"
+                onChange={(e) => {
+                  setFormData({ ...formData, stock_quantity: Number(e.target.value) });
+                  validateField('stock_quantity', Number(e.target.value));
+                }}
+                className={`input-field w-full ${errors.stock_quantity ? 'border-red-500' : ''}`}
+                min="0"
                 required
               />
+              {errors.stock_quantity && <p className="text-red-500 text-xs mt-1">{errors.stock_quantity}</p>}
             </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Reorder Level (Low Stock Alert)
+              </label>
+              <input
+                type="number"
+                value={formData.reorder_level}
+                onChange={(e) => setFormData({ ...formData, reorder_level: Number(e.target.value) })}
+                className="input-field w-full"
+                min="0"
+                placeholder="Alert when stock falls below"
+              />
+            </div>
+          </div>
+
+          {/* Batch & Expiry */}
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Batch Number</label>
               <input
                 type="text"
                 value={formData.batch_number}
                 onChange={(e) => setFormData({ ...formData, batch_number: e.target.value })}
-                className="input-field"
+                className="input-field w-full"
+                placeholder="e.g., BT-2024-001"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Expiry Date</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Expiry Date{expiryRequired && <RequiredMark />}
+              </label>
               <input
                 type="date"
                 value={formData.expiry_date}
-                onChange={(e) => setFormData({ ...formData, expiry_date: e.target.value })}
-                className="input-field"
+                onChange={(e) => {
+                  setFormData({ ...formData, expiry_date: e.target.value });
+                  if (e.target.value) {
+                    const newErrors = { ...errors };
+                    delete newErrors.expiry_date;
+                    setErrors(newErrors);
+                  }
+                }}
+                className={`input-field w-full ${errors.expiry_date ? 'border-red-500' : ''}`}
+                required={expiryRequired}
               />
+              {errors.expiry_date && <p className="text-red-500 text-xs mt-1">{errors.expiry_date}</p>}
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
+          {/* Supplier */}
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Supplier</label>
+            <select
+              value={formData.supplier}
+              onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
+              className="input-field w-full"
+            >
+              <option value="">Select Supplier</option>
+              {suppliers.map(sup => (
+                <option key={sup} value={sup}>{sup}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex justify-end gap-2 pt-4 border-t border-slate-200">
             <button type="button" onClick={onClose} className="btn-secondary">
               Cancel
             </button>
+            {!product && (
+              <button
+                type="button"
+                onClick={(e) => handleSubmit(e as unknown as React.FormEvent, true)}
+                className="btn-secondary flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" />
+                Add & Add Another
+              </button>
+            )}
             <button type="submit" className="btn-primary">
               {product ? 'Update Product' : 'Add Product'}
             </button>
