@@ -9,7 +9,10 @@ from app.models import (
     PurchaseCreate, Purchase,
     SaleCreate, Sale,
     PaymentCreate, Payment,
-    InventoryItem, ExpiryAlert, DashboardStats
+    InventoryItem, ExpiryAlert, DashboardStats,
+    CategoryCreate, Category,
+    SupplierCreate, Supplier,
+    UnitCreate, Unit
 )
 from app.database import db
 from app.auth import create_access_token, get_current_user
@@ -254,3 +257,96 @@ async def import_products(products: List[ProductCreate], current_user: dict = De
         product = db.create_product(product_data.model_dump())
         imported.append(Product(**product))
     return {"imported": len(imported), "products": imported}
+
+# Category endpoints
+@app.get("/api/categories", response_model=List[Category])
+async def get_categories(current_user: dict = Depends(get_current_user)):
+    categories = db.get_categories()
+    return [Category(**c) for c in categories]
+
+@app.get("/api/categories/{category_id}", response_model=Category)
+async def get_category(category_id: str, current_user: dict = Depends(get_current_user)):
+    category = db.get_category(category_id)
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return Category(**category)
+
+@app.post("/api/categories", response_model=Category)
+async def create_category(category_data: CategoryCreate, current_user: dict = Depends(get_current_user)):
+    category = db.create_category(category_data.model_dump())
+    return Category(**category)
+
+@app.put("/api/categories/{category_id}", response_model=Category)
+async def update_category(category_id: str, category_data: CategoryCreate, current_user: dict = Depends(get_current_user)):
+    category = db.update_category(category_id, category_data.model_dump())
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    return Category(**category)
+
+@app.delete("/api/categories/{category_id}")
+async def delete_category(category_id: str, current_user: dict = Depends(get_current_user)):
+    if not db.delete_category(category_id):
+        raise HTTPException(status_code=404, detail="Category not found")
+    return {"message": "Category deleted"}
+
+# Supplier endpoints
+@app.get("/api/suppliers", response_model=List[Supplier])
+async def get_suppliers(current_user: dict = Depends(get_current_user)):
+    suppliers = db.get_suppliers()
+    return [Supplier(**s) for s in suppliers]
+
+@app.get("/api/suppliers/{supplier_id}", response_model=Supplier)
+async def get_supplier(supplier_id: str, current_user: dict = Depends(get_current_user)):
+    supplier = db.get_supplier(supplier_id)
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    return Supplier(**supplier)
+
+@app.post("/api/suppliers", response_model=Supplier)
+async def create_supplier(supplier_data: SupplierCreate, current_user: dict = Depends(get_current_user)):
+    supplier = db.create_supplier(supplier_data.model_dump())
+    return Supplier(**supplier)
+
+@app.put("/api/suppliers/{supplier_id}", response_model=Supplier)
+async def update_supplier(supplier_id: str, supplier_data: SupplierCreate, current_user: dict = Depends(get_current_user)):
+    supplier = db.update_supplier(supplier_id, supplier_data.model_dump())
+    if not supplier:
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    return Supplier(**supplier)
+
+@app.delete("/api/suppliers/{supplier_id}")
+async def delete_supplier(supplier_id: str, current_user: dict = Depends(get_current_user)):
+    if not db.delete_supplier(supplier_id):
+        raise HTTPException(status_code=404, detail="Supplier not found")
+    return {"message": "Supplier deleted"}
+
+# Unit endpoints
+@app.get("/api/units", response_model=List[Unit])
+async def get_units(current_user: dict = Depends(get_current_user)):
+    units = db.get_units()
+    return [Unit(**u) for u in units]
+
+@app.get("/api/units/{unit_id}", response_model=Unit)
+async def get_unit(unit_id: str, current_user: dict = Depends(get_current_user)):
+    unit = db.get_unit(unit_id)
+    if not unit:
+        raise HTTPException(status_code=404, detail="Unit not found")
+    return Unit(**unit)
+
+@app.post("/api/units", response_model=Unit)
+async def create_unit(unit_data: UnitCreate, current_user: dict = Depends(get_current_user)):
+    unit = db.create_unit(unit_data.model_dump())
+    return Unit(**unit)
+
+@app.put("/api/units/{unit_id}", response_model=Unit)
+async def update_unit(unit_id: str, unit_data: UnitCreate, current_user: dict = Depends(get_current_user)):
+    unit = db.update_unit(unit_id, unit_data.model_dump())
+    if not unit:
+        raise HTTPException(status_code=404, detail="Unit not found")
+    return Unit(**unit)
+
+@app.delete("/api/units/{unit_id}")
+async def delete_unit(unit_id: str, current_user: dict = Depends(get_current_user)):
+    if not db.delete_unit(unit_id):
+        raise HTTPException(status_code=404, detail="Unit not found")
+    return {"message": "Unit deleted"}

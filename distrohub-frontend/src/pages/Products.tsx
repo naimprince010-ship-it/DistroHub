@@ -17,6 +17,9 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { BarcodeScanButton } from '@/components/BarcodeScanner';
+import axios from 'axios';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 interface Product {
   id: string;
@@ -39,8 +42,22 @@ interface Product {
   image_url: string;
 }
 
-const categories = ['Flour', 'Dairy', 'Baby Care', 'Rice', 'Beverages', 'Snacks', 'Oil', 'Spices'];
-const suppliers = ['Akij Food & Beverage', 'Pran Foods', 'Square Food', 'ACI Foods', 'Nestle Bangladesh'];
+const defaultCategories = ['Flour', 'Dairy', 'Baby Care', 'Rice', 'Beverages', 'Snacks', 'Oil', 'Spices'];
+const defaultSuppliers = ['Akij Food & Beverage', 'Pran Foods', 'Square Food', 'ACI Foods', 'Nestle Bangladesh'];
+
+interface Category {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string;
+}
+
+interface Supplier {
+  id: string;
+  name: string;
+  contact_person?: string;
+  phone?: string;
+}
 
 const initialProducts: Product[] = [
   {
@@ -134,6 +151,33 @@ export function Products() {
   const [expiryFilter, setExpiryFilter] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [categories, setCategories] = useState<string[]>(defaultCategories);
+  const [suppliers, setSuppliers] = useState<string[]>(defaultSuppliers);
+
+  // Fetch categories and suppliers from API
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [categoriesRes, suppliersRes] = await Promise.all([
+          axios.get(`${API_URL}/api/categories`),
+          axios.get(`${API_URL}/api/suppliers`)
+        ]);
+        
+        if (categoriesRes.data && categoriesRes.data.length > 0) {
+          setCategories(categoriesRes.data.map((c: Category) => c.name));
+        }
+        
+        if (suppliersRes.data && suppliersRes.data.length > 0) {
+          setSuppliers(suppliersRes.data.map((s: Supplier) => s.name));
+        }
+      } catch (error) {
+        console.error('Error fetching categories/suppliers:', error);
+        // Keep default values on error
+      }
+    };
+    
+    fetchData();
+  }, []);
 
   useEffect(() => {
     const globalSearch = searchParams.get('q') || '';

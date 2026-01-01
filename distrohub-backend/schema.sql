@@ -149,6 +149,35 @@ CREATE TABLE IF NOT EXISTS payments (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Categories table
+CREATE TABLE IF NOT EXISTS categories (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    color VARCHAR(20) DEFAULT '#4F46E5',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Suppliers table (for purchase management)
+CREATE TABLE IF NOT EXISTS suppliers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    contact_person VARCHAR(255),
+    phone VARCHAR(50) NOT NULL,
+    email VARCHAR(255),
+    address TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Units table (measurement units)
+CREATE TABLE IF NOT EXISTS units (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL UNIQUE,
+    abbreviation VARCHAR(20) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_product_batches_product_id ON product_batches(product_id);
 CREATE INDEX IF NOT EXISTS idx_product_batches_expiry_date ON product_batches(expiry_date);
@@ -156,6 +185,11 @@ CREATE INDEX IF NOT EXISTS idx_sales_retailer_id ON sales(retailer_id);
 CREATE INDEX IF NOT EXISTS idx_sales_created_at ON sales(created_at);
 CREATE INDEX IF NOT EXISTS idx_payments_retailer_id ON payments(retailer_id);
 CREATE INDEX IF NOT EXISTS idx_retailers_area ON retailers(area);
+CREATE INDEX IF NOT EXISTS idx_categories_name ON categories(name);
+CREATE INDEX IF NOT EXISTS idx_suppliers_name ON suppliers(name);
+CREATE INDEX IF NOT EXISTS idx_suppliers_phone ON suppliers(phone);
+CREATE INDEX IF NOT EXISTS idx_units_name ON units(name);
+CREATE INDEX IF NOT EXISTS idx_units_abbreviation ON units(abbreviation);
 
 -- Insert demo users (password: admin123 and sales123 - SHA256 hashed)
 INSERT INTO users (email, name, role, phone, password_hash) VALUES
