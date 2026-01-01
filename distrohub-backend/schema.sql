@@ -117,6 +117,35 @@ CREATE TABLE IF NOT EXISTS payments (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Categories table
+CREATE TABLE IF NOT EXISTS categories (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL UNIQUE,
+    description TEXT,
+    color VARCHAR(20) DEFAULT '#4F46E5',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Suppliers table (for purchase management)
+CREATE TABLE IF NOT EXISTS suppliers (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(255) NOT NULL,
+    contact_person VARCHAR(255),
+    phone VARCHAR(50) NOT NULL,
+    email VARCHAR(255),
+    address TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Units table (measurement units)
+CREATE TABLE IF NOT EXISTS units (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(100) NOT NULL UNIQUE,
+    abbreviation VARCHAR(20) NOT NULL,
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_product_batches_product_id ON product_batches(product_id);
 CREATE INDEX IF NOT EXISTS idx_product_batches_expiry_date ON product_batches(expiry_date);
@@ -124,6 +153,11 @@ CREATE INDEX IF NOT EXISTS idx_sales_retailer_id ON sales(retailer_id);
 CREATE INDEX IF NOT EXISTS idx_sales_created_at ON sales(created_at);
 CREATE INDEX IF NOT EXISTS idx_payments_retailer_id ON payments(retailer_id);
 CREATE INDEX IF NOT EXISTS idx_retailers_area ON retailers(area);
+CREATE INDEX IF NOT EXISTS idx_categories_name ON categories(name);
+CREATE INDEX IF NOT EXISTS idx_suppliers_name ON suppliers(name);
+CREATE INDEX IF NOT EXISTS idx_suppliers_phone ON suppliers(phone);
+CREATE INDEX IF NOT EXISTS idx_units_name ON units(name);
+CREATE INDEX IF NOT EXISTS idx_units_abbreviation ON units(abbreviation);
 
 -- Insert demo users (password: admin123 and sales123 - SHA256 hashed)
 INSERT INTO users (email, name, role, phone, password_hash) VALUES
@@ -150,6 +184,41 @@ INSERT INTO retailers (name, shop_name, phone, address, area, credit_limit, tota
 ('Rahim Mia', 'Rahim Bhandar', '01912345678', 'Shop 8, Uttara Sector-7', 'Uttara', 60000.00, 8500.00),
 ('Jamal Ahmed', 'Ahmed Store', '01612345678', 'Shop 3, Gulshan-2', 'Gulshan', 100000.00, 45000.00)
 ON CONFLICT DO NOTHING;
+
+-- Insert default categories
+INSERT INTO categories (name, description, color) VALUES
+('Flour', 'All types of flour products', '#EF4444'),
+('Dairy', 'Milk, butter, cheese products', '#F59E0B'),
+('Beverages', 'Soft drinks, juices, water', '#10B981'),
+('Snacks', 'Chips, biscuits, cookies', '#6366F1'),
+('Oil', 'Cooking oils and ghee', '#8B5CF6'),
+('Rice', 'All varieties of rice', '#EC4899'),
+('Spices', 'Spices and seasonings', '#F97316'),
+('Grocery', 'General grocery items', '#14B8A6')
+ON CONFLICT (name) DO NOTHING;
+
+-- Insert default suppliers
+INSERT INTO suppliers (name, contact_person, phone, email, address) VALUES
+('Akij Food & Beverage Ltd', 'Mr. Rahman', '01711111111', 'sales@akijfood.com', 'Akij House, Tejgaon, Dhaka'),
+('Farm Fresh Ltd', 'Mr. Karim', '01722222222', 'order@farmfresh.com.bd', 'Uttara, Dhaka'),
+('Bengal Traders', 'Mr. Hasan', '01733333333', 'bengaltraders@gmail.com', 'Motijheel, Dhaka')
+ON CONFLICT DO NOTHING;
+
+-- Insert default units
+INSERT INTO units (name, abbreviation, description) VALUES
+('Piece', 'pcs', 'Individual items'),
+('Pack', 'pack', 'Packaged items'),
+('Kilogram', 'kg', 'Weight in kilograms'),
+('Gram', 'g', 'Weight in grams'),
+('Liter', 'L', 'Volume in liters'),
+('Milliliter', 'ml', 'Volume in milliliters'),
+('Box', 'box', 'Boxed items'),
+('Carton', 'ctn', 'Carton packaging'),
+('Bag', 'bag', 'Bagged items'),
+('Can', 'can', 'Canned items'),
+('Bottle', 'btl', 'Bottled items'),
+('Dozen', 'dz', '12 pieces')
+ON CONFLICT (name) DO NOTHING;
 
 -- Enable Row Level Security (RLS) - optional for now
 -- ALTER TABLE users ENABLE ROW LEVEL SECURITY;

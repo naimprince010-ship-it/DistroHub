@@ -223,3 +223,42 @@ class DueReport(BaseModel):
     shop_name: str
     total_due: float
     last_payment_date: Optional[datetime] = None
+
+class CategoryBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    color: str = "#4F46E5"
+
+class CategoryCreate(CategoryBase):
+    pass
+
+class Category(CategoryBase):
+    id: str
+    product_count: int = 0
+    created_at: datetime
+
+class SupplierBase(BaseModel):
+    name: str
+    contact_person: Optional[str] = None
+    phone: str
+    email: Optional[str] = None
+    address: Optional[str] = None
+
+class SupplierCreate(SupplierBase):
+    pass
+
+class Supplier(SupplierBase):
+    id: str
+    created_at: datetime
+
+class UnitBase(BaseModel):
+    name: str
+    abbreviation: str
+    description: Optional[str] = None
+
+class UnitCreate(UnitBase):
+    pass
+
+class Unit(UnitBase):
+    id: str
+    created_at: datetime

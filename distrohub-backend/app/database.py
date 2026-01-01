@@ -5,7 +5,7 @@ import hashlib
 from app.models import (
     User, UserRole, Product, ProductBatch, Retailer, Purchase, PurchaseItem,
     Sale, SaleItem, Payment, PaymentStatus, OrderStatus, ExpiryStatus,
-    InventoryItem, ExpiryAlert, DashboardStats
+    InventoryItem, ExpiryAlert, DashboardStats, Category, Supplier, Unit
 )
 
 def generate_id() -> str:
@@ -23,6 +23,9 @@ class InMemoryDatabase:
         self.purchases: Dict[str, dict] = {}
         self.sales: Dict[str, dict] = {}
         self.payments: Dict[str, dict] = {}
+        self.categories: Dict[str, dict] = {}
+        self.suppliers: Dict[str, dict] = {}
+        self.units: Dict[str, dict] = {}
         self._seed_data()
     
     def _seed_data(self):
@@ -91,6 +94,60 @@ class InMemoryDatabase:
                 "id": rid,
                 **r,
                 "total_due": 0,
+                "created_at": datetime.now()
+            }
+        
+        # Seed categories
+        categories_data = [
+            {"name": "Flour", "description": "All types of flour products", "color": "#EF4444"},
+            {"name": "Dairy", "description": "Milk, butter, cheese products", "color": "#F59E0B"},
+            {"name": "Beverages", "description": "Soft drinks, juices, water", "color": "#10B981"},
+            {"name": "Snacks", "description": "Chips, biscuits, cookies", "color": "#6366F1"},
+            {"name": "Oil", "description": "Cooking oils and ghee", "color": "#8B5CF6"},
+            {"name": "Rice", "description": "All varieties of rice", "color": "#EC4899"},
+            {"name": "Spices", "description": "Spices and seasonings", "color": "#F97316"},
+        ]
+        
+        for c in categories_data:
+            cid = generate_id()
+            self.categories[cid] = {
+                "id": cid,
+                **c,
+                "created_at": datetime.now()
+            }
+        
+        # Seed suppliers
+        suppliers_data = [
+            {"name": "Akij Food & Beverage Ltd", "contact_person": "Mr. Rahman", "phone": "01711111111", "email": "sales@akij.com", "address": "Dhaka, Bangladesh"},
+            {"name": "Fresh Dairy Products", "contact_person": "Mr. Karim", "phone": "01722222222", "email": "info@freshdairy.com", "address": "Chittagong, Bangladesh"},
+            {"name": "Bengal Spices Co.", "contact_person": "Ms. Fatima", "phone": "01733333333", "email": "orders@bengalspices.com", "address": "Sylhet, Bangladesh"},
+        ]
+        
+        for s in suppliers_data:
+            sid = generate_id()
+            self.suppliers[sid] = {
+                "id": sid,
+                **s,
+                "created_at": datetime.now()
+            }
+        
+        # Seed units
+        units_data = [
+            {"name": "Kilogram", "abbreviation": "kg", "description": "Weight measurement"},
+            {"name": "Gram", "abbreviation": "g", "description": "Weight measurement"},
+            {"name": "Liter", "abbreviation": "L", "description": "Volume measurement"},
+            {"name": "Milliliter", "abbreviation": "ml", "description": "Volume measurement"},
+            {"name": "Piece", "abbreviation": "pcs", "description": "Count measurement"},
+            {"name": "Pack", "abbreviation": "pack", "description": "Package unit"},
+            {"name": "Box", "abbreviation": "box", "description": "Box container"},
+            {"name": "Dozen", "abbreviation": "dz", "description": "12 pieces"},
+        ]
+        
+        for u in units_data:
+            uid = generate_id()
+            self.units[uid] = {
+                "id": uid,
+                **u,
                 "created_at": datetime.now()
             }
     
@@ -462,6 +519,110 @@ class InMemoryDatabase:
                 })
         
         return sorted(receivables, key=lambda x: x["total_due"], reverse=True)
+    
+    # Category methods
+    def get_categories(self) -> List[dict]:
+        categories = []
+        for cat in self.categories.values():
+            product_count = sum(1 for p in self.products.values() if p.get("category") == cat["name"])
+            categories.append({
+                **cat,
+                "product_count": product_count
+            })
+        return categories
+    
+    def get_category(self, category_id: str) -> Optional[dict]:
+        cat = self.categories.get(category_id)
+        if cat:
+            product_count = sum(1 for p in self.products.values() if p.get("category") == cat["name"])
+            return {**cat, "product_count": product_count}
+        return None
+    
+    def create_category(self, data: dict) -> dict:
+        category_id = generate_id()
+        category = {
+            "id": category_id,
+            **data,
+            "created_at": datetime.now()
+        }
+        self.categories[category_id] = category
+        return {**category, "product_count": 0}
+    
+    def update_category(self, category_id: str, data: dict) -> Optional[dict]:
+        if category_id in self.categories:
+            old_name = self.categories[category_id]["name"]
+            self.categories[category_id].update(data)
+            # Update products with old category name to new name
+            if data.get("name") and data["name"] != old_name:
+                for product in self.products.values():
+                    if product.get("category") == old_name:
+                        product["category"] = data["name"]
+            return self.get_category(category_id)
+        return None
+    
+    def delete_category(self, category_id: str) -> bool:
+        if category_id in self.categories:
+            del self.categories[category_id]
+            return True
+        return False
+    
+    # Supplier methods
+    def get_suppliers(self) -> List[dict]:
+        return list(self.suppliers.values())
+    
+    def get_supplier(self, supplier_id: str) -> Optional[dict]:
+        return self.suppliers.get(supplier_id)
+    
+    def create_supplier(self, data: dict) -> dict:
+        supplier_id = generate_id()
+        supplier = {
+            "id": supplier_id,
+            **data,
+            "created_at": datetime.now()
+        }
+        self.suppliers[supplier_id] = supplier
+        return supplier
+    
+    def update_supplier(self, supplier_id: str, data: dict) -> Optional[dict]:
+        if supplier_id in self.suppliers:
+            self.suppliers[supplier_id].update(data)
+            return self.suppliers[supplier_id]
+        return None
+    
+    def delete_supplier(self, supplier_id: str) -> bool:
+        if supplier_id in self.suppliers:
+            del self.suppliers[supplier_id]
+            return True
+        return False
+    
+    # Unit methods
+    def get_units(self) -> List[dict]:
+        return list(self.units.values())
+    
+    def get_unit(self, unit_id: str) -> Optional[dict]:
+        return self.units.get(unit_id)
+    
+    def create_unit(self, data: dict) -> dict:
+        unit_id = generate_id()
+        unit = {
+            "id": unit_id,
+            **data,
+            "created_at": datetime.now()
+        }
+        self.units[unit_id] = unit
+        return unit
+    
+    def update_unit(self, unit_id: str, data: dict) -> Optional[dict]:
+        if unit_id in self.units:
+            self.units[unit_id].update(data)
+            return self.units[unit_id]
+        return None
+    
+    def delete_unit(self, unit_id: str) -> bool:
+        if unit_id in self.units:
+            del self.units[unit_id]
+            return True
+        return False
 
 import os
 
