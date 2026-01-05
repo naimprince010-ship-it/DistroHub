@@ -27,7 +27,6 @@ import * as smsApi from '@/lib/smsApi';
 import type {
   SmsSettings,
   SmsSettingsCreate,
-  SmsTemplate,
   SmsEventType,
   SmsDeliveryMode,
 } from '@/types';
@@ -100,8 +99,8 @@ export function Settings() {
             {activeTab === 'profile' && <ProfileSettings />}
             {activeTab === 'business' && <BusinessSettings />}
             {activeTab === 'notifications' && <NotificationSettings />}
-            {activeTab === 'sms-templates' && <SmsTemplateManagement />}
-            {activeTab === 'sms-logs' && <SmsLogsView />}
+            {activeTab === 'sms-templates' && <div className="p-4 text-center text-slate-500">SMS Template Management - Coming Soon</div>}
+            {activeTab === 'sms-logs' && <div className="p-4 text-center text-slate-500">SMS Logs View - Coming Soon</div>}
             {activeTab === 'security' && <SecuritySettings />}
             {activeTab === 'appearance' && <AppearanceSettings />}
           </div>
@@ -1432,7 +1431,6 @@ function NotificationSettings() {
     new_order: null,
   });
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
 
   const eventTypes: { type: SmsEventType; label: string; description: string }[] = [
     { type: 'low_stock', label: 'Low Stock Alerts', description: 'Get SMS when stock is running low' },

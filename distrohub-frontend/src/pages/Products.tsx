@@ -259,13 +259,25 @@ export function Products() {
   const activeFiltersCount = [categoryFilter, stockFilter, expiryFilter].filter(f => f !== 'all').length;
 
   const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Products.tsx:261',message:'Excel import function called',data:{hasFile:!!e.target.files?.[0]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Products.tsx:266',message:'Excel import started',data:{hasWorkbook:typeof Workbook !== 'undefined'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
       const workbook = new Workbook();
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Products.tsx:268',message:'Workbook created',data:{workbookType:typeof workbook},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
       const buffer = await file.arrayBuffer();
       await workbook.xlsx.load(buffer);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Products.tsx:271',message:'Workbook loaded',data:{worksheetsCount:workbook.worksheets?.length || 0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
       
       const worksheet = workbook.worksheets[0];
       const jsonData: Product[] = [];
@@ -277,21 +289,21 @@ export function Products() {
         if (values.length > 1) {
           jsonData.push({
             id: `imported-${Date.now()}-${rowNumber}`,
-            name: values[1] || '',
-            sku: values[2] || '',
-            barcode: values[3] || '',
-            category: values[4] || '',
-            unit: values[5] || '',
-            pack_size: values[6] || 1,
-            pieces_per_carton: values[7] || 12,
-            purchase_price: values[8] || 0,
-            selling_price: values[9] || 0,
-            stock_quantity: values[10] || 0,
-            reorder_level: values[11] || 10,
-            supplier: values[12] || '',
-            vat_inclusive: values[13] || false,
-            vat_rate: values[14] || 0,
-            image_url: values[15] || '',
+            name: String(values[1] || ''),
+            sku: String(values[2] || ''),
+            barcode: String(values[3] || ''),
+            category: String(values[4] || ''),
+            unit: String(values[5] || ''),
+            pack_size: typeof values[6] === 'number' ? values[6] : (typeof values[6] === 'string' ? parseFloat(values[6]) || 1 : 1),
+            pieces_per_carton: typeof values[7] === 'number' ? values[7] : (typeof values[7] === 'string' ? parseFloat(values[7]) || 12 : 12),
+            purchase_price: typeof values[8] === 'number' ? values[8] : (typeof values[8] === 'string' ? parseFloat(values[8]) || 0 : 0),
+            selling_price: typeof values[9] === 'number' ? values[9] : (typeof values[9] === 'string' ? parseFloat(values[9]) || 0 : 0),
+            stock_quantity: typeof values[10] === 'number' ? values[10] : (typeof values[10] === 'string' ? parseFloat(values[10]) || 0 : 0),
+            reorder_level: typeof values[11] === 'number' ? values[11] : (typeof values[11] === 'string' ? parseFloat(values[11]) || 10 : 10),
+            supplier: String(values[12] || ''),
+            vat_inclusive: typeof values[13] === 'boolean' ? values[13] : (values[13] === 'true' || values[13] === true),
+            vat_rate: typeof values[14] === 'number' ? values[14] : (typeof values[14] === 'string' ? parseFloat(values[14]) || 0 : 0),
+            image_url: String(values[15] || ''),
             batch_number: '',
             expiry_date: '',
           });
