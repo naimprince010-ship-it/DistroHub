@@ -1444,9 +1444,18 @@ function NotificationSettings() {
   }, []);
 
   const fetchSmsSettings = async () => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1446',message:'fetchSmsSettings called',data:{hasToken:!!localStorage.getItem('token')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     try {
       setLoading(true);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1449',message:'Calling getSmsSettings API',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       const settings = await smsApi.getSmsSettings();
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1451',message:'getSmsSettings API call succeeded',data:{settingsCount:settings.length,settings:settings},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
       const settingsMap: Record<SmsEventType, SmsSettings | null> = {
         low_stock: null,
         expiry_alert: null,
@@ -1457,7 +1466,13 @@ function NotificationSettings() {
         settingsMap[setting.event_type] = setting;
       });
       setSmsSettings(settingsMap);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1460',message:'fetchSmsSettings completed successfully',data:{settingsMap},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
     } catch (error) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1462',message:'fetchSmsSettings error caught',data:{errorMessage:error instanceof Error?error.message:String(error),errorStatus:(error as any)?.response?.status,errorData:(error as any)?.response?.data},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
       logger.error('Failed to fetch SMS settings:', error);
     } finally {
       setLoading(false);
@@ -1465,18 +1480,36 @@ function NotificationSettings() {
   };
 
   const handleToggle = async (eventType: SmsEventType, enabled: boolean) => {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1467',message:'handleToggle called',data:{eventType,enabled,hasToken:!!localStorage.getItem('token')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     try {
       const currentSetting = smsSettings[eventType];
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1470',message:'Preparing updateData',data:{eventType,enabled,hasCurrentSetting:!!currentSetting,deliveryMode:currentSetting?.delivery_mode,recipients:currentSetting?.recipients},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
       const updateData: SmsSettingsCreate = {
         event_type: eventType,
         enabled,
         delivery_mode: currentSetting?.delivery_mode || 'immediate',
         recipients: currentSetting?.recipients || ['admins'],
       };
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1477',message:'Calling updateSmsSettings API',data:{updateData},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
 
       await smsApi.updateSmsSettings(updateData);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1479',message:'updateSmsSettings API call succeeded',data:{eventType},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       await fetchSmsSettings();
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1481',message:'handleToggle completed successfully',data:{eventType,enabled},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
     } catch (error) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1483',message:'handleToggle error caught',data:{eventType,enabled,errorMessage:error instanceof Error?error.message:String(error),errorStatus:(error as any)?.response?.status,errorData:(error as any)?.response?.data},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
       logger.error(`Failed to update SMS setting for ${eventType}:`, error);
       alert('Failed to update setting. Please try again.');
     }

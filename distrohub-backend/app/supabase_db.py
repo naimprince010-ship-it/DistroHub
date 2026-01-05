@@ -931,13 +931,51 @@ class SupabaseDatabase:
     # SMS Settings methods
     def get_sms_settings(self, user_id: Optional[str] = None, role: Optional[str] = None) -> List[dict]:
         """Get SMS settings for a user or role"""
-        query = self.client.table("sms_settings").select("*")
-        if user_id:
-            query = query.eq("user_id", user_id)
-        if role:
-            query = query.eq("role", role)
-        result = query.execute()
-        return result.data or []
+        # #region agent log
+        try:
+            import json
+            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"supabase_db.py:932","message":"get_sms_settings called","data":{"user_id":user_id,"role":role},"timestamp":int(datetime.now().timestamp() * 1000)}
+                f.write(json.dumps(log_data) + '\n')
+        except: pass
+        # #endregion
+        try:
+            query = self.client.table("sms_settings").select("*")
+            if user_id:
+                query = query.eq("user_id", user_id)
+            if role:
+                query = query.eq("role", role)
+            result = query.execute()
+            # #region agent log
+            try:
+                import json
+                with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                    log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"supabase_db.py:940","message":"get_sms_settings query executed","data":{"has_data":result.data is not None,"data_count":len(result.data) if result.data else 0,"has_error":hasattr(result, 'error') and result.error is not None},"timestamp":int(datetime.now().timestamp() * 1000)}
+                    f.write(json.dumps(log_data) + '\n')
+            except: pass
+            # #endregion
+            if hasattr(result, 'error') and result.error:
+                # #region agent log
+                try:
+                    import json
+                    with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                        log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"supabase_db.py:943","message":"get_sms_settings Supabase error","data":{"error":str(result.error),"error_code":getattr(result.error, 'code', None),"error_message":getattr(result.error, 'message', None)},"timestamp":int(datetime.now().timestamp() * 1000)}
+                        f.write(json.dumps(log_data) + '\n')
+                except: pass
+                # #endregion
+                raise Exception(f"Supabase error: {result.error}")
+            return result.data or []
+        except Exception as e:
+            # #region agent log
+            try:
+                import json
+                import traceback
+                with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                    log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"supabase_db.py:950","message":"get_sms_settings exception","data":{"error":str(e),"error_type":type(e).__name__,"traceback":traceback.format_exc()},"timestamp":int(datetime.now().timestamp() * 1000)}
+                    f.write(json.dumps(log_data) + '\n')
+            except: pass
+            # #endregion
+            raise
     
     def create_sms_settings(self, data: dict) -> dict:
         """Create SMS settings"""

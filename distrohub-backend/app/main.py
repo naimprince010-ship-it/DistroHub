@@ -1091,12 +1091,51 @@ async def get_sms_settings(
     current_user: dict = Depends(get_current_user)
 ):
     """Get SMS settings for current user or role"""
-    user_role = current_user.get("role", "sales_rep")
-    user_id_param = current_user.get("id") if not user_id else user_id
-    role_param = user_role if not role else role
-    
-    settings = db.get_sms_settings(user_id=user_id_param, role=role_param)
-    return [SmsSettings(**s) for s in settings]
+    # #region agent log
+    try:
+        import json
+        with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
+            log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"main.py:1087","message":"get_sms_settings endpoint called","data":{"user_id_param":user_id,"role_param":role,"current_user_id":current_user.get("id"),"current_user_role":current_user.get("role")},"timestamp":int(datetime.now().timestamp() * 1000)}
+            f.write(json.dumps(log_data) + '\n')
+    except: pass
+    # #endregion
+    try:
+        user_role = current_user.get("role", "sales_rep")
+        user_id_param = current_user.get("id") if not user_id else user_id
+        role_param = user_role if not role else role
+        # #region agent log
+        try:
+            import json
+            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"main.py:1096","message":"Calling db.get_sms_settings","data":{"user_id_param":user_id_param,"role_param":role_param},"timestamp":int(datetime.now().timestamp() * 1000)}
+                f.write(json.dumps(log_data) + '\n')
+        except: pass
+        # #endregion
+        
+        settings = db.get_sms_settings(user_id=user_id_param, role=role_param)
+        # #region agent log
+        try:
+            import json
+            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"main.py:1099","message":"db.get_sms_settings returned","data":{"settings_count":len(settings) if settings else 0,"settings":settings},"timestamp":int(datetime.now().timestamp() * 1000)}
+                f.write(json.dumps(log_data) + '\n')
+        except: pass
+        # #endregion
+        return [SmsSettings(**s) for s in settings]
+    except Exception as e:
+        # #region agent log
+        try:
+            import json
+            import traceback
+            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"main.py:1102","message":"Exception in get_sms_settings","data":{"error":str(e),"error_type":type(e).__name__,"traceback":traceback.format_exc()},"timestamp":int(datetime.now().timestamp() * 1000)}
+                f.write(json.dumps(log_data) + '\n')
+        except: pass
+        # #endregion
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get SMS settings: {str(e)}"
+        )
 
 @app.put("/api/sms/settings", response_model=SmsSettings)
 async def update_sms_settings(
