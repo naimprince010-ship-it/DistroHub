@@ -301,7 +301,7 @@ export function Products() {
             stock_quantity: typeof values[10] === 'number' ? values[10] : (typeof values[10] === 'string' ? parseFloat(values[10]) || 0 : 0),
             reorder_level: typeof values[11] === 'number' ? values[11] : (typeof values[11] === 'string' ? parseFloat(values[11]) || 10 : 10),
             supplier: String(values[12] || ''),
-            vat_inclusive: typeof values[13] === 'boolean' ? values[13] : (values[13] === 'true' || values[13] === true),
+            vat_inclusive: typeof values[13] === 'boolean' ? values[13] : (typeof values[13] === 'string' ? values[13] === 'true' : false),
             vat_rate: typeof values[14] === 'number' ? values[14] : (typeof values[14] === 'string' ? parseFloat(values[14]) || 0 : 0),
             image_url: String(values[15] || ''),
             batch_number: '',
