@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, status, Request
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional, Dict, Any
+from enum import Enum
 import asyncio
 import logging
 import os
@@ -1103,27 +1104,45 @@ async def update_sms_settings(
     current_user: dict = Depends(get_current_user)
 ):
     """Create or update SMS settings"""
-    user_id = current_user.get("id")
-    user_role = current_user.get("role", "sales_rep")
-    
-    # Check if settings already exist
-    existing = db.get_sms_settings_by_user_and_event(user_id, settings_data.event_type.value)
-    
-    settings_dict = settings_data.model_dump()
-    settings_dict["user_id"] = user_id
-    settings_dict["role"] = user_role
-    settings_dict["event_type"] = settings_data.event_type.value
-    settings_dict["delivery_mode"] = settings_data.delivery_mode.value
-    settings_dict["recipients"] = settings_data.recipients
-    
-    if existing:
-        updated = db.update_sms_settings(existing["id"], settings_dict)
-        if not updated:
-            raise HTTPException(status_code=404, detail="SMS settings not found")
-        return SmsSettings(**updated)
-    else:
-        created = db.create_sms_settings(settings_dict)
-        return SmsSettings(**created)
+    try:
+        user_id = current_user.get("id")
+        user_role = current_user.get("role", "sales_rep")
+        
+        # Pydantic converts string to Enum, so we can safely access .value
+        event_type_str = settings_data.event_type.value
+        delivery_mode_str = settings_data.delivery_mode.value if settings_data.delivery_mode else SmsDeliveryMode.IMMEDIATE.value
+        
+        # Check if settings already exist
+        existing = db.get_sms_settings_by_user_and_event(user_id, event_type_str)
+        
+        # Prepare settings dict for database
+        settings_dict = {
+            "user_id": user_id,
+            "role": user_role,
+            "event_type": event_type_str,
+            "enabled": settings_data.enabled,
+            "delivery_mode": delivery_mode_str,
+            "recipients": settings_data.recipients or []
+        }
+        
+        if existing:
+            updated = db.update_sms_settings(existing["id"], settings_dict)
+            if not updated:
+                raise HTTPException(status_code=404, detail="SMS settings not found")
+            return SmsSettings(**updated)
+        else:
+            created = db.create_sms_settings(settings_dict)
+            return SmsSettings(**created)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating SMS settings: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update SMS settings: {str(e)}"
+        )
 
 @app.get("/api/sms/templates", response_model=List[SmsTemplate])
 async def get_sms_templates(current_user: dict = Depends(get_current_user)):
