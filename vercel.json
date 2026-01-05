@@ -1,0 +1,13 @@
+{
+  "buildCommand": "cd distrohub-frontend && npm run build",
+  "outputDirectory": "distrohub-frontend/dist",
+  "installCommand": "cd distrohub-frontend && npm install",
+  "framework": "vite",
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
+
