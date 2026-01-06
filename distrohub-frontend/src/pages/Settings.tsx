@@ -1628,7 +1628,8 @@ function NotificationSettings() {
     setSavingStates((prev) => ({ ...prev, [eventType]: true }));
 
     try {
-      const currentSetting = smsSettings[eventType];
+      // Get current state from ref (always up-to-date, includes optimistic update)
+      const currentSetting = settingsRef.current[eventType];
       const updateData: SmsSettingsCreate = {
         event_type: eventType,
         enabled: currentSetting?.enabled ?? true,
