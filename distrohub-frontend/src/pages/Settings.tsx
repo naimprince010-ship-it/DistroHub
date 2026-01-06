@@ -1590,6 +1590,43 @@ function NotificationSettings() {
   };
 
   const handleDeliveryModeChange = async (eventType: SmsEventType, mode: SmsDeliveryMode) => {
+    console.log('[Notifications] delivery_mode click:', eventType, mode);
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1592',message:'handleDeliveryModeChange called',data:{eventType,mode,hasToken:!!localStorage.getItem('token')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
+    
+    // Store previous state for potential rollback
+    const previousSetting = smsSettings[eventType];
+    
+    // Optimistic UI update - update state immediately
+    setSmsSettings((prev) => {
+      const currentSetting = prev[eventType];
+      if (!currentSetting) {
+        // If no setting exists, create a temporary one
+        return {
+          ...prev,
+          [eventType]: {
+            id: `temp-${Date.now()}`,
+            user_id: '',
+            role: 'sales_rep',
+            event_type: eventType,
+            enabled: true,
+            delivery_mode: mode,
+            recipients: ['admins'],
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        };
+      }
+      return {
+        ...prev,
+        [eventType]: { ...currentSetting, delivery_mode: mode },
+      };
+    });
+
+    // Set saving state
+    setSavingStates((prev) => ({ ...prev, [eventType]: true }));
+
     try {
       const currentSetting = smsSettings[eventType];
       const updateData: SmsSettingsCreate = {
@@ -1598,12 +1635,38 @@ function NotificationSettings() {
         delivery_mode: mode,
         recipients: currentSetting?.recipients || ['admins'],
       };
+      
+      console.log('[Notifications] PUT payload:', updateData);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1615',message:'Calling updateSmsSettings for delivery_mode',data:{updateData},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
 
-      await smsApi.updateSmsSettings(updateData);
-      await fetchSmsSettings();
+      const updated = await smsApi.updateSmsSettings(updateData);
+      console.log('[Notifications] PUT success:', updated);
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1620',message:'updateSmsSettings for delivery_mode succeeded',data:{eventType,mode,updated},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      // #endregion
+      
+      // Update with server response
+      setSmsSettings((prev) => ({
+        ...prev,
+        [eventType]: updated,
+      }));
     } catch (error) {
+      // #region agent log
+      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1628',message:'handleDeliveryModeChange error caught',data:{eventType,mode,errorMessage:error instanceof Error?error.message:String(error),errorStatus:(error as any)?.response?.status,errorData:(error as any)?.response?.data},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
+      
+      // Revert optimistic update on error
+      setSmsSettings((prev) => ({
+        ...prev,
+        [eventType]: previousSetting,
+      }));
+      
       logger.error(`Failed to update delivery mode for ${eventType}:`, error);
-      alert('Failed to update delivery mode. Please try again.');
+      alert(`Failed to update delivery mode. Please try again.`);
+    } finally {
+      setSavingStates((prev) => ({ ...prev, [eventType]: false }));
     }
   };
 
@@ -1664,21 +1727,23 @@ function NotificationSettings() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleDeliveryModeChange(event.type, 'immediate')}
+                      disabled={isSaving}
                       className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                         setting?.delivery_mode === 'immediate'
                           ? 'bg-primary-600 text-white'
                           : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
-                      }`}
+                      } ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       Immediate
                     </button>
                     <button
                       onClick={() => handleDeliveryModeChange(event.type, 'queued')}
+                      disabled={isSaving}
                       className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
                         setting?.delivery_mode === 'queued'
                           ? 'bg-primary-600 text-white'
                           : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
-                      }`}
+                      } ${isSaving ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
                       Queued
                     </button>
