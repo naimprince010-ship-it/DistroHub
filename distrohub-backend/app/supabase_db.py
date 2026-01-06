@@ -5,7 +5,8 @@ from typing import Dict, List, Optional
 from supabase import create_client, Client
 from app.models import (
     UserRole, PaymentStatus, OrderStatus, ExpiryStatus,
-    ProductBatch, InventoryItem, ExpiryAlert, DashboardStats
+    ProductBatch, InventoryItem, ExpiryAlert, DashboardStats,
+    RefundType
 )
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
@@ -417,6 +418,214 @@ class SupabaseDatabase:
             sale["items"] = items_result.data or []
             return sale
         return None
+    
+    def get_sale_returns(self, sale_id: str) -> List[dict]:
+        """Get all returns for a specific sale"""
+        result = self.client.table("sales_returns").select("*").eq("sale_id", sale_id).order("created_at", desc=True).execute()
+        returns = result.data or []
+        for return_record in returns:
+            items_result = self.client.table("sales_return_items").select("*").eq("return_id", return_record["id"]).execute()
+            return_record["items"] = items_result.data or []
+        return returns
+    
+    def create_sale_return(self, sale_id: str, data: dict, items: List[dict], user_id: Optional[str] = None) -> dict:
+        """
+        Create a sales return transaction.
+        
+        Business Rules:
+        1. Validates return quantity <= (original - already returned)
+        2. Increments inventory batch quantities
+        3. Reduces retailer due amount (if adjust_due)
+        4. Creates immutable return records (audit trail)
+        
+        Args:
+            sale_id: Original sale ID
+            data: Return metadata (reason, refund_type)
+            items: List of items being returned
+            user_id: Optional user ID creating the return
+        
+        Returns:
+            Created return record with items
+        """
+        from datetime import datetime
+        import uuid
+        
+        # Fetch original sale
+        sale = self.get_sale(sale_id)
+        if not sale:
+            raise ValueError(f"Sale not found: {sale_id}")
+        
+        # Fetch all sale items for validation
+        sale_items_map = {item["id"]: item for item in sale.get("items", [])}
+        if not sale_items_map:
+            raise ValueError(f"Sale has no items: {sale_id}")
+        
+        # Calculate already returned quantities per sale_item
+        existing_returns = self.get_sale_returns(sale_id)
+        already_returned = {}
+        for ret in existing_returns:
+            for ret_item in ret.get("items", []):
+                sale_item_id = ret_item.get("sale_item_id")
+                if sale_item_id:
+                    already_returned[sale_item_id] = already_returned.get(sale_item_id, 0) + ret_item.get("quantity_returned", 0)
+        
+        # Validation and preparation phase
+        validated_items = []
+        total_return_amount = 0
+        
+        for item in items:
+            sale_item_id = item.get("sale_item_id")
+            quantity_returned = item.get("quantity_returned", 0)
+            
+            if not sale_item_id:
+                raise ValueError("sale_item_id is required for each return item")
+            
+            if quantity_returned <= 0:
+                raise ValueError(f"quantity_returned must be > 0 for sale_item_id: {sale_item_id}")
+            
+            # Get original sale item
+            original_item = sale_items_map.get(sale_item_id)
+            if not original_item:
+                raise ValueError(f"Sale item not found: {sale_item_id}")
+            
+            # Calculate already returned for this item
+            already_returned_qty = already_returned.get(sale_item_id, 0)
+            original_qty = original_item.get("quantity", 0)
+            
+            # Validate return quantity
+            if quantity_returned > (original_qty - already_returned_qty):
+                raise ValueError(
+                    f"Cannot return {quantity_returned} items. "
+                    f"Original: {original_qty}, Already returned: {already_returned_qty}, "
+                    f"Max allowed: {original_qty - already_returned_qty}"
+                )
+            
+            # Get product and batch information
+            product = self.get_product(original_item.get("product_id"))
+            if not product:
+                raise ValueError(f"Product not found: {original_item.get('product_id')}")
+            
+            # Find or use batch_id
+            batch_id = item.get("batch_id")
+            if not batch_id:
+                # Try to find batch by batch_number
+                batch_number = original_item.get("batch_number")
+                if batch_number:
+                    batches = self.get_batches_by_product(original_item.get("product_id"))
+                    matching_batch = next((b for b in batches if b.get("batch_number") == batch_number), None)
+                    if matching_batch:
+                        batch_id = matching_batch.get("id")
+            
+            if not batch_id:
+                raise ValueError(f"Batch not found for product {product.get('name')}. Please specify batch_id.")
+            
+            batch = self.get_batch(batch_id)
+            if not batch:
+                raise ValueError(f"Batch not found: {batch_id}")
+            
+            # Calculate return amount (proportional to original)
+            unit_price = original_item.get("unit_price", 0)
+            discount = original_item.get("discount", 0)
+            original_total = original_item.get("total", 0)
+            
+            # Calculate proportional return amount
+            if original_qty > 0:
+                unit_return_value = original_total / original_qty
+                item_return_amount = quantity_returned * unit_return_value
+            else:
+                item_return_amount = 0
+            
+            total_return_amount += item_return_amount
+            
+            validated_items.append({
+                "sale_item_id": sale_item_id,
+                "product": product,
+                "batch": batch,
+                "batch_id": batch_id,
+                "quantity_returned": quantity_returned,
+                "unit_price": unit_price,
+                "discount": discount,
+                "item_return_amount": item_return_amount,
+                "original_item": original_item
+            })
+        
+        if not validated_items:
+            raise ValueError("No valid items to return")
+        
+        # Generate return number
+        return_number = f"RET-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:4].upper()}"
+        
+        # Create return record
+        refund_type = data.get("refund_type", "adjust_due")
+        return_data = {
+            "id": str(uuid.uuid4()),
+            "return_number": return_number,
+            "sale_id": sale_id,
+            "retailer_id": sale.get("retailer_id"),
+            "retailer_name": sale.get("retailer_name"),
+            "total_return_amount": total_return_amount,
+            "reason": data.get("reason"),
+            "refund_type": refund_type,
+            "status": "completed",
+            "created_by": user_id,
+            "created_at": datetime.now().isoformat()
+        }
+        
+        # CRITICAL: Transaction-like behavior (all-or-nothing)
+        try:
+            # Insert return record
+            return_result = self.client.table("sales_returns").insert(return_data).execute()
+            if not return_result.data or len(return_result.data) == 0:
+                raise ValueError(f"Failed to create return record. return_number={return_number}")
+            
+            return_record = return_result.data[0]
+            return_id = return_record.get("id")
+            
+            # Insert return items and update inventory
+            return_items = []
+            for validated in validated_items:
+                # Increment batch quantity (restore inventory)
+                self.update_batch_quantity(validated["batch_id"], validated["quantity_returned"])
+                
+                # Create return item record
+                return_item_data = {
+                    "id": str(uuid.uuid4()),
+                    "return_id": return_id,
+                    "sale_item_id": validated["sale_item_id"],
+                    "product_id": validated["product"].get("id"),
+                    "product_name": validated["product"].get("name"),
+                    "batch_number": validated["batch"].get("batch_number"),
+                    "batch_id": validated["batch_id"],
+                    "quantity_returned": validated["quantity_returned"],
+                    "unit_price": validated["unit_price"],
+                    "discount": validated["discount"],
+                    "total_returned": validated["item_return_amount"],
+                    "created_at": datetime.now().isoformat()
+                }
+                
+                item_result = self.client.table("sales_return_items").insert(return_item_data).execute()
+                if not item_result.data or len(item_result.data) == 0:
+                    raise ValueError(f"Failed to create return item. return_id={return_id}")
+                
+                return_items.append(item_result.data[0])
+            
+            # Reduce retailer due (if adjust_due)
+            if refund_type == "adjust_due":
+                retailer_id = sale.get("retailer_id")
+                self.update_retailer_due(retailer_id, -total_return_amount)
+            
+            return_record["items"] = return_items
+            
+            print(f"[Supabase] Sale return created: return_id={return_id}, return_number={return_number}, amount={total_return_amount}")
+            return return_record
+            
+        except Exception as e:
+            error_msg = str(e)
+            error_type = type(e).__name__
+            print(f"[Supabase] ERROR creating sale return ({error_type}): {error_msg}, sale_id={sale_id}")
+            import traceback
+            traceback.print_exc()
+            raise ValueError(f"Failed to create sale return: {error_type}: {error_msg}")
     
     def get_payments(self) -> List[dict]:
         result = self.client.table("payments").select("*").order("created_at", desc=True).execute()

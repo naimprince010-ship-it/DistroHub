@@ -185,6 +185,49 @@ class Payment(BaseModel):
     notes: Optional[str] = None
     created_at: datetime
 
+class RefundType(str, Enum):
+    ADJUST_DUE = "adjust_due"
+    REFUND_CASH = "refund_cash"
+    CREDIT_NOTE = "credit_note"
+
+class SaleReturnItemCreate(BaseModel):
+    sale_item_id: str
+    quantity_returned: int = Field(gt=0, description="Quantity being returned, must be > 0")
+    batch_id: Optional[str] = None  # Optional: for specific batch tracking
+
+class SaleReturnCreate(BaseModel):
+    items: List[SaleReturnItemCreate]
+    reason: Optional[str] = None
+    refund_type: RefundType = RefundType.ADJUST_DUE
+
+class SaleReturnItem(BaseModel):
+    id: str
+    return_id: str
+    sale_item_id: str
+    product_id: str
+    product_name: str
+    batch_number: str
+    batch_id: Optional[str] = None
+    quantity_returned: int
+    unit_price: float
+    discount: float
+    total_returned: float
+    created_at: datetime
+
+class SaleReturn(BaseModel):
+    id: str
+    return_number: str
+    sale_id: str
+    retailer_id: str
+    retailer_name: str
+    total_return_amount: float
+    reason: Optional[str] = None
+    refund_type: RefundType
+    status: str
+    created_by: Optional[str] = None
+    items: List[SaleReturnItem]
+    created_at: datetime
+
 class InventoryItem(BaseModel):
     product_id: str
     product_name: str

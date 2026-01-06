@@ -25,7 +25,8 @@ from app.models import (
     SmsSettings, SmsSettingsCreate, SmsSettingsUpdate,
     SmsTemplate, SmsTemplateCreate, SmsTemplateUpdate,
     SmsLog, SmsSendRequest, SmsBulkSendRequest,
-    SmsEventType, SmsDeliveryMode, SmsStatus
+    SmsEventType, SmsDeliveryMode, SmsStatus,
+    SaleReturnCreate, SaleReturn, RefundType
 )
 from app.database import db
 from app.auth import create_access_token, get_current_user
@@ -677,6 +678,107 @@ async def create_sale(sale_data: SaleCreate, current_user: dict = Depends(get_cu
             detail=f"Failed to create sale: {error_type}: {error_msg}"
         )
 
+@app.post("/api/sales/{sale_id}/return", response_model=SaleReturn, status_code=status.HTTP_201_CREATED)
+async def create_sale_return(
+    sale_id: str,
+    return_data: SaleReturnCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Create a sales return/credit note for a specific sale.
+    
+    This endpoint handles partial or full returns:
+    - Validates return quantities
+    - Increases inventory for returned items
+    - Reduces retailer due amount (if adjust_due)
+    - Creates immutable return records for audit
+    
+    Returns:
+        SaleReturn: The created return record with items
+        
+    Raises:
+        400: Validation error (invalid quantities, sale not found)
+        404: Sale not found
+        500: Unexpected server error
+    """
+    try:
+        print(f"[API] create_sale_return start: sale_id={sale_id}, items={len(return_data.items)}")
+        print(f"[API] User: {current_user.get('email', 'unknown')}")
+        
+        items = [item.model_dump() for item in return_data.items]
+        return_record = db.create_sale_return(
+            sale_id=sale_id,
+            data=return_data.model_dump(),
+            items=items,
+            user_id=current_user.get("id")
+        )
+        
+        print(f"[API] Sale return created: return_id={return_record.get('id')}, return_number={return_record.get('return_number')}")
+        
+        # Validate response matches SaleReturn model
+        try:
+            return_model = SaleReturn(**return_record)
+            print(f"[API] Sale return model validated successfully, returning response")
+            return return_model
+        except Exception as validation_error:
+            print(f"[API] Sale return model validation failed: {validation_error}")
+            print(f"[API] Return data: {return_record}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Return created but validation failed: {str(validation_error)}"
+            )
+    except HTTPException:
+        raise
+    except ValueError as e:
+        error_msg = str(e)
+        print(f"[API] Validation error: {error_msg}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=error_msg
+        )
+    except Exception as e:
+        error_msg = str(e)
+        error_type = type(e).__name__
+        print(f"[API] Unexpected error creating sale return: {error_type}: {error_msg}")
+        print(f"[API] Return data: {return_data.model_dump()}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create sale return: {error_type}: {error_msg}"
+        )
+
+@app.get("/api/sales/{sale_id}/returns", response_model=List[SaleReturn])
+async def get_sale_returns(sale_id: str, current_user: dict = Depends(get_current_user)):
+    """
+    Get all returns for a specific sale.
+    
+    Returns:
+        List[SaleReturn]: List of all return records for the sale
+        
+    Raises:
+        401: Authentication error
+        404: Sale not found
+    """
+    try:
+        # Verify sale exists
+        sale = db.get_sale(sale_id)
+        if not sale:
+            raise HTTPException(status_code=404, detail="Sale not found")
+        
+        returns = db.get_sale_returns(sale_id)
+        return [SaleReturn(**ret) for ret in returns]
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = str(e)
+        error_type = type(e).__name__
+        print(f"[API] Error getting sale returns: {error_type}: {error_msg}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get sale returns: {error_type}: {error_msg}"
+        )
+
 @app.get("/api/payments", response_model=List[Payment])
 async def get_payments(current_user: dict = Depends(get_current_user)):
     payments = db.get_payments()
@@ -1091,56 +1193,15 @@ async def get_sms_settings(
     current_user: dict = Depends(get_current_user)
 ):
     """Get SMS settings for current user or role"""
-    # #region agent log
-    try:
-        import json
-        with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"main.py:1087","message":"get_sms_settings endpoint called","data":{"user_id_param":user_id,"role_param":role,"current_user_id":current_user.get("id"),"current_user_role":current_user.get("role")},"timestamp":int(datetime.now().timestamp() * 1000)}
-            f.write(json.dumps(log_data) + '\n')
-    except: pass
-    # #endregion
     try:
         user_role = current_user.get("role", "sales_rep")
         user_id_param = current_user.get("id") if not user_id else user_id
         role_param = user_role if not role else role
-        # #region agent log
-        try:
-            import json
-            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"main.py:1096","message":"Calling db.get_sms_settings","data":{"user_id_param":user_id_param,"role_param":role_param},"timestamp":int(datetime.now().timestamp() * 1000)}
-                f.write(json.dumps(log_data) + '\n')
-        except: pass
-        # #endregion
         
         settings = db.get_sms_settings(user_id=user_id_param, role=role_param)
-        # #region agent log
-        try:
-            import json
-            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"main.py:1099","message":"db.get_sms_settings returned","data":{"settings_count":len(settings) if settings else 0,"settings":settings},"timestamp":int(datetime.now().timestamp() * 1000)}
-                f.write(json.dumps(log_data) + '\n')
-        except: pass
-        # #endregion
         result = [SmsSettings(**s) for s in settings]
-        # #region agent log
-        try:
-            import json
-            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"main.py:1124","message":"GET /api/sms/settings response","data":{"status":200,"response_count":len(result),"response_json":[s.model_dump() if hasattr(s, 'model_dump') else s.dict() for s in result]},"timestamp":int(datetime.now().timestamp() * 1000)}
-                f.write(json.dumps(log_data) + '\n')
-        except: pass
-        # #endregion
         return result
     except Exception as e:
-        # #region agent log
-        try:
-            import json
-            import traceback
-            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"main.py:1102","message":"Exception in get_sms_settings","data":{"error":str(e),"error_type":type(e).__name__,"traceback":traceback.format_exc()},"timestamp":int(datetime.now().timestamp() * 1000)}
-                f.write(json.dumps(log_data) + '\n')
-        except: pass
-        # #endregion
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get SMS settings: {str(e)}"
@@ -1152,37 +1213,13 @@ async def update_sms_settings(
     current_user: dict = Depends(get_current_user)
 ):
     """Create or update SMS settings"""
-    # #region agent log
-    try:
-        import json
-        with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"main.py:1101","message":"update_sms_settings endpoint called","data":{"user_id":current_user.get("id"),"user_role":current_user.get("role"),"event_type":str(settings_data.event_type) if hasattr(settings_data, 'event_type') else None,"enabled":settings_data.enabled if hasattr(settings_data, 'enabled') else None},"timestamp":int(datetime.now().timestamp() * 1000)}
-            f.write(json.dumps(log_data) + '\n')
-    except: pass
-    # #endregion
     try:
         user_id = current_user.get("id")
         user_role = current_user.get("role", "sales_rep")
-        # #region agent log
-        try:
-            import json
-            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:1110","message":"Extracted user info","data":{"user_id":user_id,"user_role":user_role,"event_type_type":type(settings_data.event_type).__name__,"delivery_mode_type":type(settings_data.delivery_mode).__name__ if settings_data.delivery_mode else None},"timestamp":int(datetime.now().timestamp() * 1000)}
-                f.write(json.dumps(log_data) + '\n')
-        except: pass
-        # #endregion
         
         # Pydantic converts string to Enum, so we can safely access .value
         event_type_str = settings_data.event_type.value
         delivery_mode_str = settings_data.delivery_mode.value if settings_data.delivery_mode else SmsDeliveryMode.IMMEDIATE.value
-        # #region agent log
-        try:
-            import json
-            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:1115","message":"Converted enums to strings","data":{"event_type_str":event_type_str,"delivery_mode_str":delivery_mode_str},"timestamp":int(datetime.now().timestamp() * 1000)}
-                f.write(json.dumps(log_data) + '\n')
-        except: pass
-        # #endregion
         
         # Check if settings already exist (check both user_id and role)
         existing = db.get_sms_settings_by_user_and_event(user_id, event_type_str)
@@ -1190,14 +1227,6 @@ async def update_sms_settings(
         if not existing:
             # Also check by role (due to UNIQUE(role, event_type) constraint)
             existing_by_role = db.get_sms_settings_by_role_and_event(user_role, event_type_str)
-        # #region agent log
-        try:
-            import json
-            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"C","location":"main.py:1140","message":"Checked for existing settings","data":{"has_existing_by_user":existing is not None,"existing_id":existing.get("id") if existing else None,"has_existing_by_role":existing_by_role is not None,"existing_by_role_id":existing_by_role.get("id") if existing_by_role else None},"timestamp":int(datetime.now().timestamp() * 1000)}
-                f.write(json.dumps(log_data) + '\n')
-        except: pass
-        # #endregion
         
         # Use existing_by_role if found (due to UNIQUE constraint)
         if existing_by_role and not existing:
@@ -1212,68 +1241,19 @@ async def update_sms_settings(
             "delivery_mode": delivery_mode_str,
             "recipients": settings_data.recipients or []
         }
-        # #region agent log
-        try:
-            import json
-            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:1128","message":"Prepared settings_dict for database","data":{"settings_dict":settings_dict},"timestamp":int(datetime.now().timestamp() * 1000)}
-                f.write(json.dumps(log_data) + '\n')
-        except: pass
-        # #endregion
         
         if existing:
             updated = db.update_sms_settings(existing["id"], settings_dict)
-            # #region agent log
-            try:
-                import json
-                with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                    log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:1225","message":"Updated existing settings","data":{"updated":updated is not None,"updated_id":updated.get("id") if updated else None},"timestamp":int(datetime.now().timestamp() * 1000)}
-                    f.write(json.dumps(log_data) + '\n')
-            except: pass
-            # #endregion
             if not updated:
                 raise HTTPException(status_code=404, detail="SMS settings not found")
             result = SmsSettings(**updated)
-            # #region agent log
-            try:
-                import json
-                with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                    log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:1236","message":"PUT /api/sms/settings response (update)","data":{"status":200,"response_json":result.model_dump() if hasattr(result, 'model_dump') else result.dict()},"timestamp":int(datetime.now().timestamp() * 1000)}
-                    f.write(json.dumps(log_data) + '\n')
-            except: pass
-            # #endregion
             return result
         else:
             try:
                 created = db.create_sms_settings(settings_dict)
-                # #region agent log
-                try:
-                    import json
-                    with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                        log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:1242","message":"Created new settings","data":{"created":created is not None,"created_id":created.get("id") if created else None},"timestamp":int(datetime.now().timestamp() * 1000)}
-                        f.write(json.dumps(log_data) + '\n')
-                except: pass
-                # #endregion
                 result = SmsSettings(**created)
-                # #region agent log
-                try:
-                    import json
-                    with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                        log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:1248","message":"PUT /api/sms/settings response (create)","data":{"status":200,"response_json":result.model_dump() if hasattr(result, 'model_dump') else result.dict()},"timestamp":int(datetime.now().timestamp() * 1000)}
-                        f.write(json.dumps(log_data) + '\n')
-                except: pass
-                # #endregion
                 return result
             except Exception as db_error:
-                # #region agent log
-                try:
-                    import json
-                    import traceback
-                    with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                        log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"main.py:1190","message":"Database create error","data":{"error":str(db_error),"error_type":type(db_error).__name__,"traceback":traceback.format_exc(),"settings_dict":settings_dict},"timestamp":int(datetime.now().timestamp() * 1000)}
-                        f.write(json.dumps(log_data) + '\n')
-                except: pass
-                # #endregion
                 # Check if it's a unique constraint violation (user_id + event_type or role + event_type)
                 error_str = str(db_error).lower()
                 if "unique" in error_str or "duplicate" in error_str:
@@ -1283,28 +1263,11 @@ async def update_sms_settings(
                         updated = db.update_sms_settings(existing_by_role["id"], settings_dict)
                         if updated:
                             result = SmsSettings(**updated)
-                            # #region agent log
-                            try:
-                                import json
-                                with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                                    log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:1287","message":"PUT /api/sms/settings response (update after unique constraint)","data":{"status":200,"response_json":result.model_dump() if hasattr(result, 'model_dump') else result.dict()},"timestamp":int(datetime.now().timestamp() * 1000)}
-                                    f.write(json.dumps(log_data) + '\n')
-                            except: pass
-                            # #endregion
                             return result
                 raise
     except HTTPException:
         raise
     except Exception as e:
-        # #region agent log
-        try:
-            import json
-            import traceback
-            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"main.py:1141","message":"Exception caught in update_sms_settings","data":{"error":str(e),"error_type":type(e).__name__,"traceback":traceback.format_exc()},"timestamp":int(datetime.now().timestamp() * 1000)}
-                f.write(json.dumps(log_data) + '\n')
-        except: pass
-        # #endregion
         logger.error(f"Error updating SMS settings: {str(e)}")
         import traceback
         traceback.print_exc()
