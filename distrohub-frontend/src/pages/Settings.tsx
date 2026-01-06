@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import {
@@ -1431,6 +1431,24 @@ function NotificationSettings() {
     new_order: null,
   });
   const [loading, setLoading] = useState(true);
+  const [savingStates, setSavingStates] = useState<Record<SmsEventType, boolean>>({
+    low_stock: false,
+    expiry_alert: false,
+    payment_due: false,
+    new_order: false,
+  });
+  const debounceTimers = useRef<Record<SmsEventType, NodeJS.Timeout | null>>({
+    low_stock: null,
+    expiry_alert: null,
+    payment_due: null,
+    new_order: null,
+  });
+  const settingsRef = useRef(smsSettings);
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    settingsRef.current = smsSettings;
+  }, [smsSettings]);
 
   const eventTypes: { type: SmsEventType; label: string; description: string }[] = [
     { type: 'low_stock', label: 'Low Stock Alerts', description: 'Get SMS when stock is running low' },
@@ -1441,6 +1459,12 @@ function NotificationSettings() {
 
   useEffect(() => {
     fetchSmsSettings();
+    // Cleanup debounce timers on unmount
+    return () => {
+      Object.values(debounceTimers.current).forEach((timer) => {
+        if (timer) clearTimeout(timer);
+      });
+    };
   }, []);
 
   const fetchSmsSettings = async () => {
@@ -1453,6 +1477,7 @@ function NotificationSettings() {
       fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1449',message:'Calling getSmsSettings API',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
       const settings = await smsApi.getSmsSettings();
+      console.log('[Notifications] Loaded settings:', settings);
       // #region agent log
       fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1451',message:'getSmsSettings API call succeeded',data:{settingsCount:settings.length,settings:settings},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
@@ -1479,40 +1504,90 @@ function NotificationSettings() {
     }
   };
 
-  const handleToggle = async (eventType: SmsEventType, enabled: boolean) => {
+  const handleToggle = (eventType: SmsEventType, enabled: boolean) => {
     // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1467',message:'handleToggle called',data:{eventType,enabled,hasToken:!!localStorage.getItem('token')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1482',message:'handleToggle called',data:{eventType,enabled,hasToken:!!localStorage.getItem('token')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
     // #endregion
-    try {
-      const currentSetting = smsSettings[eventType];
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1470',message:'Preparing updateData',data:{eventType,enabled,hasCurrentSetting:!!currentSetting,deliveryMode:currentSetting?.delivery_mode,recipients:currentSetting?.recipients},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-      // #endregion
-      const updateData: SmsSettingsCreate = {
-        event_type: eventType,
-        enabled,
-        delivery_mode: currentSetting?.delivery_mode || 'immediate',
-        recipients: currentSetting?.recipients || ['admins'],
-      };
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1477',message:'Calling updateSmsSettings API',data:{updateData},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-      // #endregion
+    
+    // Store previous state for potential rollback
+    const previousSetting = smsSettings[eventType];
+    const previousEnabled = previousSetting?.enabled ?? false;
 
-      await smsApi.updateSmsSettings(updateData);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1479',message:'updateSmsSettings API call succeeded',data:{eventType},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-      // #endregion
-      await fetchSmsSettings();
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1481',message:'handleToggle completed successfully',data:{eventType,enabled},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-      // #endregion
-    } catch (error) {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1483',message:'handleToggle error caught',data:{eventType,enabled,errorMessage:error instanceof Error?error.message:String(error),errorStatus:(error as any)?.response?.status,errorData:(error as any)?.response?.data},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
-      // #endregion
-      logger.error(`Failed to update SMS setting for ${eventType}:`, error);
-      alert('Failed to update setting. Please try again.');
+    // Optimistic UI update - update state immediately
+    setSmsSettings((prev) => {
+      const currentSetting = prev[eventType];
+      return {
+        ...prev,
+        [eventType]: currentSetting
+          ? { ...currentSetting, enabled }
+          : {
+              id: `temp-${Date.now()}`,
+              user_id: '',
+              role: 'sales_rep',
+              event_type: eventType,
+              enabled,
+              delivery_mode: 'immediate',
+              recipients: ['admins'],
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+      };
+    });
+
+    // Clear existing debounce timer for this event type
+    if (debounceTimers.current[eventType]) {
+      clearTimeout(debounceTimers.current[eventType]!);
     }
+
+    // Set saving state
+    setSavingStates((prev) => ({ ...prev, [eventType]: true }));
+
+    // Debounce API call (300ms)
+    debounceTimers.current[eventType] = setTimeout(async () => {
+      try {
+        // Get current state from ref (always up-to-date)
+        const currentSetting = settingsRef.current[eventType];
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1505',message:'Debounced API call starting',data:{eventType,enabled,hasCurrentSetting:!!currentSetting,deliveryMode:currentSetting?.delivery_mode,recipients:currentSetting?.recipients},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        const updateData: SmsSettingsCreate = {
+          event_type: eventType,
+          enabled,
+          delivery_mode: currentSetting?.delivery_mode || 'immediate',
+          recipients: currentSetting?.recipients || ['admins'],
+        };
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1512',message:'Calling updateSmsSettings API',data:{updateData},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+
+        const updated = await smsApi.updateSmsSettings(updateData);
+        console.log('[Notifications] Updated setting:', eventType, updated);
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1517',message:'updateSmsSettings API call succeeded',data:{eventType,updated},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+        // #endregion
+        
+        // Update with server response
+        setSmsSettings((prev) => ({
+          ...prev,
+          [eventType]: updated,
+        }));
+      } catch (error) {
+        // #region agent log
+        fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Settings.tsx:1524',message:'handleToggle error caught',data:{eventType,enabled,errorMessage:error instanceof Error?error.message:String(error),errorStatus:(error as any)?.response?.status,errorData:(error as any)?.response?.data},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
+        
+        // Revert optimistic update on error
+        setSmsSettings((prev) => ({
+          ...prev,
+          [eventType]: previousSetting,
+        }));
+        
+        logger.error(`Failed to update SMS setting for ${eventType}:`, error);
+        alert(`Failed to update ${eventTypes.find((e) => e.type === eventType)?.label || eventType}. Please try again.`);
+      } finally {
+        setSavingStates((prev) => ({ ...prev, [eventType]: false }));
+      }
+    }, 300);
   };
 
   const handleDeliveryModeChange = async (eventType: SmsEventType, mode: SmsDeliveryMode) => {
@@ -1553,12 +1628,21 @@ function NotificationSettings() {
         {eventTypes.map((event) => {
           const setting = smsSettings[event.type];
           const enabled = setting?.enabled ?? false;
+          const isSaving = savingStates[event.type];
 
           return (
             <div key={event.type} className="p-3 bg-slate-50 rounded-lg border border-slate-200">
               <div className="flex items-start justify-between mb-2">
                 <div className="flex-1">
-                  <p className="font-medium text-slate-900">{event.label}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-slate-900">{event.label}</p>
+                    {isSaving && (
+                      <span className="text-xs text-slate-500 flex items-center gap-1">
+                        <span className="inline-block w-2 h-2 bg-primary-600 rounded-full animate-pulse"></span>
+                        Saving...
+                      </span>
+                    )}
+                  </div>
                   <p className="text-sm text-slate-500">{event.description}</p>
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer ml-4">
@@ -1566,9 +1650,10 @@ function NotificationSettings() {
                     type="checkbox"
                     className="sr-only peer"
                     checked={enabled}
+                    disabled={isSaving}
                     onChange={(e) => handleToggle(event.type, e.target.checked)}
                   />
-                  <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
+                  <div className={`w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600 ${isSaving ? 'opacity-50' : ''}`}></div>
                 </label>
               </div>
 
