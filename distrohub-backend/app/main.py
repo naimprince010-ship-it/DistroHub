@@ -1121,7 +1121,16 @@ async def get_sms_settings(
                 f.write(json.dumps(log_data) + '\n')
         except: pass
         # #endregion
-        return [SmsSettings(**s) for s in settings]
+        result = [SmsSettings(**s) for s in settings]
+        # #region agent log
+        try:
+            import json
+            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"main.py:1124","message":"GET /api/sms/settings response","data":{"status":200,"response_count":len(result),"response_json":[s.model_dump() if hasattr(s, 'model_dump') else s.dict() for s in result]},"timestamp":int(datetime.now().timestamp() * 1000)}
+                f.write(json.dumps(log_data) + '\n')
+        except: pass
+        # #endregion
+        return result
     except Exception as e:
         # #region agent log
         try:
@@ -1218,13 +1227,22 @@ async def update_sms_settings(
             try:
                 import json
                 with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                    log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:1132","message":"Updated existing settings","data":{"updated":updated is not None,"updated_id":updated.get("id") if updated else None},"timestamp":int(datetime.now().timestamp() * 1000)}
+                    log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:1225","message":"Updated existing settings","data":{"updated":updated is not None,"updated_id":updated.get("id") if updated else None},"timestamp":int(datetime.now().timestamp() * 1000)}
                     f.write(json.dumps(log_data) + '\n')
             except: pass
             # #endregion
             if not updated:
                 raise HTTPException(status_code=404, detail="SMS settings not found")
-            return SmsSettings(**updated)
+            result = SmsSettings(**updated)
+            # #region agent log
+            try:
+                import json
+                with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                    log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:1236","message":"PUT /api/sms/settings response (update)","data":{"status":200,"response_json":result.model_dump() if hasattr(result, 'model_dump') else result.dict()},"timestamp":int(datetime.now().timestamp() * 1000)}
+                    f.write(json.dumps(log_data) + '\n')
+            except: pass
+            # #endregion
+            return result
         else:
             try:
                 created = db.create_sms_settings(settings_dict)
@@ -1232,11 +1250,20 @@ async def update_sms_settings(
                 try:
                     import json
                     with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                        log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:1182","message":"Created new settings","data":{"created":created is not None,"created_id":created.get("id") if created else None},"timestamp":int(datetime.now().timestamp() * 1000)}
+                        log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:1242","message":"Created new settings","data":{"created":created is not None,"created_id":created.get("id") if created else None},"timestamp":int(datetime.now().timestamp() * 1000)}
                         f.write(json.dumps(log_data) + '\n')
                 except: pass
                 # #endregion
-                return SmsSettings(**created)
+                result = SmsSettings(**created)
+                # #region agent log
+                try:
+                    import json
+                    with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                        log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:1248","message":"PUT /api/sms/settings response (create)","data":{"status":200,"response_json":result.model_dump() if hasattr(result, 'model_dump') else result.dict()},"timestamp":int(datetime.now().timestamp() * 1000)}
+                        f.write(json.dumps(log_data) + '\n')
+                except: pass
+                # #endregion
+                return result
             except Exception as db_error:
                 # #region agent log
                 try:
@@ -1255,7 +1282,16 @@ async def update_sms_settings(
                     if existing_by_role:
                         updated = db.update_sms_settings(existing_by_role["id"], settings_dict)
                         if updated:
-                            return SmsSettings(**updated)
+                            result = SmsSettings(**updated)
+                            # #region agent log
+                            try:
+                                import json
+                                with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
+                                    log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:1287","message":"PUT /api/sms/settings response (update after unique constraint)","data":{"status":200,"response_json":result.model_dump() if hasattr(result, 'model_dump') else result.dict()},"timestamp":int(datetime.now().timestamp() * 1000)}
+                                    f.write(json.dumps(log_data) + '\n')
+                            except: pass
+                            # #endregion
+                            return result
                 raise
     except HTTPException:
         raise
