@@ -1599,37 +1599,48 @@ function NotificationSettings() {
     const previousSetting = smsSettings[eventType];
     
     // Optimistic UI update - update state immediately
+    let updatedSetting: SmsSettings | null = null;
     setSmsSettings((prev) => {
       const currentSetting = prev[eventType];
       if (!currentSetting) {
         // If no setting exists, create a temporary one
+        updatedSetting = {
+          id: `temp-${Date.now()}`,
+          user_id: '',
+          role: 'sales_rep',
+          event_type: eventType,
+          enabled: true,
+          delivery_mode: mode,
+          recipients: ['admins'],
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
         return {
           ...prev,
-          [eventType]: {
-            id: `temp-${Date.now()}`,
-            user_id: '',
-            role: 'sales_rep',
-            event_type: eventType,
-            enabled: true,
-            delivery_mode: mode,
-            recipients: ['admins'],
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          },
+          [eventType]: updatedSetting,
         };
       }
+      updatedSetting = { ...currentSetting, delivery_mode: mode };
       return {
         ...prev,
-        [eventType]: { ...currentSetting, delivery_mode: mode },
+        [eventType]: updatedSetting,
       };
     });
+    
+    // Update ref immediately to avoid stale closure
+    if (updatedSetting) {
+      settingsRef.current = {
+        ...settingsRef.current,
+        [eventType]: updatedSetting,
+      };
+    }
 
     // Set saving state
     setSavingStates((prev) => ({ ...prev, [eventType]: true }));
 
     try {
       // Get current state from ref (always up-to-date, includes optimistic update)
-      const currentSetting = settingsRef.current[eventType];
+      const currentSetting = updatedSetting || settingsRef.current[eventType];
       const updateData: SmsSettingsCreate = {
         event_type: eventType,
         enabled: currentSetting?.enabled ?? true,
