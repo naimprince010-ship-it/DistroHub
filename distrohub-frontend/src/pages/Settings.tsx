@@ -1511,7 +1511,6 @@ function NotificationSettings() {
     
     // Store previous state for potential rollback
     const previousSetting = smsSettings[eventType];
-    const previousEnabled = previousSetting?.enabled ?? false;
 
     // Optimistic UI update - update state immediately
     setSmsSettings((prev) => {
