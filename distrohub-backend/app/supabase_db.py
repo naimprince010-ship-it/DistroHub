@@ -256,9 +256,10 @@ class SupabaseDatabase:
         if not retailer:
             raise ValueError("Retailer not found")
         
+        # First pass: calculate totals and validate items (without inserting)
         subtotal = 0
         total_discount = 0
-        sale_items = []
+        validated_items = []  # Store validated item data for later insertion
         
         for item in items:
             product = self.get_product(item["product_id"])
@@ -273,23 +274,19 @@ class SupabaseDatabase:
             subtotal += item_subtotal
             total_discount += item_discount
             
-            # Update batch quantity
-            self.update_batch_quantity(item["batch_id"], -item["quantity"])
-            
-            # Create sale item
-            sale_item_data = {
-                "id": str(uuid.uuid4()),
-                "sale_id": sale_id,
-                "product_id": item["product_id"],
-                "product_name": product["name"],
-                "batch_number": batch["batch_number"],
-                "quantity": item["quantity"],
-                "unit_price": item["unit_price"],
-                "discount": item_discount,
-                "total": item_total
-            }
-            item_result = self.client.table("sale_items").insert(sale_item_data).execute()
-            sale_items.append(item_result.data[0] if item_result.data else sale_item_data)
+            # Store validated item data for later insertion (after sale is created)
+            validated_items.append({
+                "item": item,
+                "product": product,
+                "batch": batch,
+                "item_subtotal": item_subtotal,
+                "item_discount": item_discount,
+                "item_total": item_total
+            })
+        
+        # Validate that we have at least one valid item
+        if not validated_items:
+            raise ValueError("No valid items found. All items must have valid product_id and batch_id.")
         
         total_amount = subtotal - total_discount
         paid_amount = data.get("paid_amount", 0)
@@ -323,8 +320,90 @@ class SupabaseDatabase:
             "notes": data.get("notes"),
             "created_at": datetime.now().isoformat()
         }
-        sale_result = self.client.table("sales").insert(sale_data).execute()
-        sale = sale_result.data[0] if sale_result.data else sale_data
+        
+        # Initialize variables before try block to ensure they're in scope
+        actual_sale_id = None
+        sale = None
+        
+        # CRITICAL: Insert sale record FIRST before inserting sale_items
+        try:
+            sale_result = self.client.table("sales").insert(sale_data).execute()
+            
+            # CRITICAL: Verify the sale was actually created in the database
+            if not sale_result.data or len(sale_result.data) == 0:
+                error_detail = f"Sale insert returned no data. sale_id={sale_id}, invoice={invoice_number}"
+                print(f"[Supabase] ERROR: {error_detail}")
+                raise ValueError(f"Failed to create sale: {error_detail}")
+            
+            sale = sale_result.data[0]
+            # Use the actual sale_id from the database response
+            actual_sale_id = sale.get("id")
+            
+            if not actual_sale_id:
+                error_detail = f"Sale insert returned data but no id field. sale_id={sale_id}"
+                print(f"[Supabase] ERROR: {error_detail}")
+                raise ValueError(f"Failed to create sale: {error_detail}")
+            
+            # Double-check: Verify the sale exists in the database before inserting sale_items
+            verify_result = self.client.table("sales").select("id").eq("id", actual_sale_id).execute()
+            if not verify_result.data or len(verify_result.data) == 0:
+                error_detail = f"Sale not found in database after insert. sale_id={actual_sale_id}"
+                print(f"[Supabase] ERROR: {error_detail}")
+                raise ValueError(f"Failed to create sale: {error_detail}")
+            
+            print(f"[Supabase] Sale created successfully: sale_id={actual_sale_id}, invoice={invoice_number}")
+        except ValueError:
+            raise
+        except Exception as e:
+            error_msg = str(e)
+            error_type = type(e).__name__
+            print(f"[Supabase] ERROR creating sale ({error_type}): {error_msg}, sale_id={sale_id}")
+            import traceback
+            traceback.print_exc()
+            raise ValueError(f"Failed to create sale record: {error_type}: {error_msg}")
+        
+        # Verify variables are set before proceeding
+        if not actual_sale_id or not sale:
+            raise ValueError(f"Sale creation failed: sale_id or sale object not set. actual_sale_id={actual_sale_id}")
+        
+        # Now insert sale_items using the verified actual_sale_id from database
+        sale_items = []
+        for validated in validated_items:
+            item = validated["item"]
+            product = validated["product"]
+            batch = validated["batch"]
+            
+            # Update batch quantity
+            self.update_batch_quantity(item["batch_id"], -item["quantity"])
+            
+            # Create sale item
+            sale_item_data = {
+                "id": str(uuid.uuid4()),
+                "sale_id": actual_sale_id,  # Use the verified sale_id from database
+                "product_id": item["product_id"],
+                "product_name": product["name"],
+                "batch_number": batch["batch_number"],
+                "quantity": item["quantity"],
+                "unit_price": item["unit_price"],
+                "discount": validated["item_discount"],
+                "total": validated["item_total"]
+            }
+            try:
+                item_result = self.client.table("sale_items").insert(sale_item_data).execute()
+                if not item_result.data or len(item_result.data) == 0:
+                    error_detail = f"Sale item insert returned no data. sale_id={actual_sale_id}, product_id={item['product_id']}"
+                    print(f"[Supabase] ERROR: {error_detail}")
+                    raise ValueError(f"Failed to create sale_item: {error_detail}")
+                sale_items.append(item_result.data[0])
+            except Exception as e:
+                error_msg = str(e)
+                error_type = type(e).__name__
+                print(f"[Supabase] ERROR creating sale_item ({error_type}): {error_msg}, sale_id={actual_sale_id}, product_id={item['product_id']}")
+                import traceback
+                traceback.print_exc()
+                # If sale_items insertion fails, raise error to prevent partial data
+                raise ValueError(f"Failed to create sale_item for product {item['product_id']}: {error_type}: {error_msg}")
+        
         sale["items"] = sale_items
         return sale
     
@@ -931,14 +1010,6 @@ class SupabaseDatabase:
     # SMS Settings methods
     def get_sms_settings(self, user_id: Optional[str] = None, role: Optional[str] = None) -> List[dict]:
         """Get SMS settings for a user or role"""
-        # #region agent log
-        try:
-            import json
-            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"supabase_db.py:932","message":"get_sms_settings called","data":{"user_id":user_id,"role":role},"timestamp":int(datetime.now().timestamp() * 1000)}
-                f.write(json.dumps(log_data) + '\n')
-        except: pass
-        # #endregion
         try:
             query = self.client.table("sms_settings").select("*")
             if user_id:
@@ -946,122 +1017,31 @@ class SupabaseDatabase:
             if role:
                 query = query.eq("role", role)
             result = query.execute()
-            # #region agent log
-            try:
-                import json
-                with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                    log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"supabase_db.py:940","message":"get_sms_settings query executed","data":{"has_data":result.data is not None,"data_count":len(result.data) if result.data else 0,"has_error":hasattr(result, 'error') and result.error is not None},"timestamp":int(datetime.now().timestamp() * 1000)}
-                    f.write(json.dumps(log_data) + '\n')
-            except: pass
-            # #endregion
             if hasattr(result, 'error') and result.error:
-                # #region agent log
-                try:
-                    import json
-                    with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                        log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"supabase_db.py:943","message":"get_sms_settings Supabase error","data":{"error":str(result.error),"error_code":getattr(result.error, 'code', None),"error_message":getattr(result.error, 'message', None)},"timestamp":int(datetime.now().timestamp() * 1000)}
-                        f.write(json.dumps(log_data) + '\n')
-                except: pass
-                # #endregion
                 raise Exception(f"Supabase error: {result.error}")
             return result.data or []
         except Exception as e:
-            # #region agent log
-            try:
-                import json
-                import traceback
-                with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                    log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"supabase_db.py:950","message":"get_sms_settings exception","data":{"error":str(e),"error_type":type(e).__name__,"traceback":traceback.format_exc()},"timestamp":int(datetime.now().timestamp() * 1000)}
-                    f.write(json.dumps(log_data) + '\n')
-            except: pass
-            # #endregion
             raise
     
     def create_sms_settings(self, data: dict) -> dict:
         """Create SMS settings"""
-        # #region agent log
-        try:
-            import json
-            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"supabase_db.py:942","message":"create_sms_settings called","data":{"data":data},"timestamp":int(datetime.now().timestamp() * 1000)}
-                f.write(json.dumps(log_data) + '\n')
-        except: pass
-        # #endregion
         try:
             result = self.client.table("sms_settings").insert(data).execute()
-            # #region agent log
-            try:
-                import json
-                with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                    log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"supabase_db.py:948","message":"create_sms_settings insert executed","data":{"has_data":result.data is not None,"data_count":len(result.data) if result.data else 0,"has_error":hasattr(result, 'error') and result.error is not None},"timestamp":int(datetime.now().timestamp() * 1000)}
-                    f.write(json.dumps(log_data) + '\n')
-            except: pass
-            # #endregion
             if hasattr(result, 'error') and result.error:
-                # #region agent log
-                try:
-                    import json
-                    with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                        log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"supabase_db.py:951","message":"create_sms_settings Supabase error","data":{"error":str(result.error),"error_code":getattr(result.error, 'code', None),"error_message":getattr(result.error, 'message', None)},"timestamp":int(datetime.now().timestamp() * 1000)}
-                        f.write(json.dumps(log_data) + '\n')
-                except: pass
-                # #endregion
                 raise Exception(f"Supabase error: {result.error}")
             return result.data[0] if result.data else data
         except Exception as e:
-            # #region agent log
-            try:
-                import json
-                import traceback
-                with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                    log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"supabase_db.py:958","message":"create_sms_settings exception","data":{"error":str(e),"error_type":type(e).__name__,"traceback":traceback.format_exc()},"timestamp":int(datetime.now().timestamp() * 1000)}
-                    f.write(json.dumps(log_data) + '\n')
-            except: pass
-            # #endregion
             raise
     
     def update_sms_settings(self, settings_id: str, data: dict) -> Optional[dict]:
         """Update SMS settings"""
-        # #region agent log
-        try:
-            import json
-            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"supabase_db.py:965","message":"update_sms_settings called","data":{"settings_id":settings_id,"data":data},"timestamp":int(datetime.now().timestamp() * 1000)}
-                f.write(json.dumps(log_data) + '\n')
-        except: pass
-        # #endregion
         data["updated_at"] = datetime.now().isoformat()
         try:
             result = self.client.table("sms_settings").update(data).eq("id", settings_id).execute()
-            # #region agent log
-            try:
-                import json
-                with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                    log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"supabase_db.py:972","message":"update_sms_settings update executed","data":{"has_data":result.data is not None,"data_count":len(result.data) if result.data else 0,"has_error":hasattr(result, 'error') and result.error is not None},"timestamp":int(datetime.now().timestamp() * 1000)}
-                    f.write(json.dumps(log_data) + '\n')
-            except: pass
-            # #endregion
             if hasattr(result, 'error') and result.error:
-                # #region agent log
-                try:
-                    import json
-                    with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                        log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"supabase_db.py:975","message":"update_sms_settings Supabase error","data":{"error":str(result.error),"error_code":getattr(result.error, 'code', None),"error_message":getattr(result.error, 'message', None)},"timestamp":int(datetime.now().timestamp() * 1000)}
-                        f.write(json.dumps(log_data) + '\n')
-                except: pass
-                # #endregion
                 raise Exception(f"Supabase error: {result.error}")
             return result.data[0] if result.data else None
         except Exception as e:
-            # #region agent log
-            try:
-                import json
-                import traceback
-                with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                    log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"F","location":"supabase_db.py:982","message":"update_sms_settings exception","data":{"error":str(e),"error_type":type(e).__name__,"traceback":traceback.format_exc()},"timestamp":int(datetime.now().timestamp() * 1000)}
-                    f.write(json.dumps(log_data) + '\n')
-            except: pass
-            # #endregion
             raise
     
     def get_sms_settings_by_user_and_event(self, user_id: str, event_type: str) -> Optional[dict]:
