@@ -20,7 +20,7 @@ interface Sale {
   paid_amount: number;
   due_amount: number;
   created_at: string;
-  items: Array<{ product_name: string; quantity: number; unit_price: number; total: number }>;
+  items: Array<{ id: string; product_name: string; quantity: number; unit_price: number; total: number }>;
 }
 
 interface SaleReport extends Sale {
@@ -113,6 +113,8 @@ export function Reports() {
   
   // UI State
   const [selectedInvoice, setSelectedInvoice] = useState<SaleReport | null>(null);
+  const [returnItems, setReturnItems] = useState<Array<{sale_item_id: string; quantity_returned: number; product_name: string}>>([]);
+  const [loadingReturnItems, setLoadingReturnItems] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
 
@@ -277,6 +279,45 @@ export function Reports() {
   useEffect(() => {
     setCurrentPage(1);
   }, [activeReport, startDate, endDate, categoryFilter, productSearch]);
+
+  // Fetch return items when invoice is selected
+  useEffect(() => {
+    const fetchReturnItems = async () => {
+      if (!selectedInvoice) {
+        setReturnItems([]);
+        return;
+      }
+
+      try {
+        setLoadingReturnItems(true);
+        // Get all returns for this sale (includes items)
+        const returnsResponse = await api.get(`/api/sales/${selectedInvoice.id}/returns`);
+        if (returnsResponse.data && Array.isArray(returnsResponse.data)) {
+          // Extract return items from all returns
+          const allReturnItems: Array<{sale_item_id: string; quantity_returned: number; product_name: string}> = [];
+          returnsResponse.data.forEach((ret: any) => {
+            if (ret.items && Array.isArray(ret.items)) {
+              ret.items.forEach((item: any) => {
+                allReturnItems.push({
+                  sale_item_id: item.sale_item_id,
+                  quantity_returned: item.quantity_returned,
+                  product_name: item.product_name
+                });
+              });
+            }
+          });
+          setReturnItems(allReturnItems);
+        }
+      } catch (error) {
+        console.error('[Reports] Error fetching return items:', error);
+        setReturnItems([]);
+      } finally {
+        setLoadingReturnItems(false);
+      }
+    };
+
+    fetchReturnItems();
+  }, [selectedInvoice]);
 
   // Calculate totals for sales report (use summary from API if available, otherwise calculate)
   const salesTotal = salesReportSummary?.total_gross ?? filteredSalesReport.reduce((sum, s) => sum + (s.gross_total || s.total_amount), 0);
@@ -725,9 +766,9 @@ export function Reports() {
                     );
                   })}
                 </tbody>
-                <tfoot className="bg-slate-50 border-t-2 border-slate-200">
-                  <tr>
-                    <td colSpan={3} className="p-2 font-semibold text-slate-900 text-right">
+                <tfoot>
+                  <tr className="bg-blue-50 border-t-2 border-blue-200">
+                    <td colSpan={3} className="p-2 font-bold text-slate-900 text-right">
                       Totals:
                     </td>
                     <td className="p-2 text-right font-bold text-slate-900">
@@ -996,19 +1037,36 @@ export function Reports() {
                     <tr>
                       <th className="text-left p-2 font-semibold text-slate-700">Product</th>
                       <th className="text-right p-2 font-semibold text-slate-700">Qty</th>
+                      <th className="text-right p-2 font-semibold text-slate-700">Returned</th>
                       <th className="text-right p-2 font-semibold text-slate-700">Unit Price</th>
                       <th className="text-right p-2 font-semibold text-slate-700">Total</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {selectedInvoice.items.map((item, idx) => (
-                      <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
-                        <td className="p-2 text-slate-900">{item.product_name}</td>
-                        <td className="p-2 text-right text-slate-600">{item.quantity}</td>
-                        <td className="p-2 text-right text-slate-600">৳ {item.unit_price.toLocaleString()}</td>
-                        <td className="p-2 text-right font-semibold text-slate-900">৳ {item.total.toLocaleString()}</td>
+                    {loadingReturnItems ? (
+                      <tr>
+                        <td colSpan={5} className="p-4 text-center text-slate-500">
+                          Loading return items...
+                        </td>
                       </tr>
-                    ))}
+                    ) : (
+                      selectedInvoice.items.map((item, idx) => {
+                        // Find returned quantity for this item
+                        const returnedItem = returnItems.find(ri => ri.sale_item_id === item.id);
+                        const returnedQty = returnedItem?.quantity_returned || 0;
+                        return (
+                          <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                            <td className="p-2 text-slate-900">{item.product_name}</td>
+                            <td className="p-2 text-right text-slate-600">{item.quantity}</td>
+                            <td className={`p-2 text-right font-semibold ${returnedQty > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                              {returnedQty > 0 ? returnedQty : '-'}
+                            </td>
+                            <td className="p-2 text-right text-slate-600">৳ {item.unit_price.toLocaleString()}</td>
+                            <td className="p-2 text-right font-semibold text-slate-900">৳ {item.total.toLocaleString()}</td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
