@@ -268,7 +268,7 @@ export function Purchase() {
 
                   <button
                     onClick={() => setShowAddModal(true)}
-                    className="btn-primary flex items-center gap-2"
+                    className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-2 shadow-sm hover:shadow-md"
                   >
                     <Plus className="w-4 h-4" />
                     New Purchase
@@ -306,7 +306,7 @@ export function Purchase() {
                         <td className="p-2 text-right text-green-600">
                           ৳ {purchase.paid_amount.toLocaleString()}
                         </td>
-                        <td className="p-2 text-right font-medium text-red-600">
+                        <td className="p-2 text-right font-bold text-red-600">
                           ৳ {(purchase.total_amount - purchase.paid_amount).toLocaleString()}
                         </td>
                         <td className="p-2 text-center">
@@ -679,8 +679,13 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
         </div>
 
         <form onSubmit={(e) => handleSubmit(e, false)} className="p-4 space-y-4">
-          {/* Header Fields */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {/* Header Fields - Section 1 */}
+          <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+            <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+              <Truck className="w-4 h-4 text-blue-600" />
+              Supplier & Warehouse Information
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 Supplier<RequiredMark />
@@ -688,13 +693,13 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
               <select
                 value={formData.supplier_name}
                 onChange={(e) => setFormData({ ...formData, supplier_name: e.target.value })}
-                className="input-field w-full"
-                required
-              >
-                {suppliers.map(s => (
-                  <option key={s} value={s}>{s}</option>
-                ))}
-              </select>
+                  className="input-field w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  required
+                >
+                  {suppliers.map(s => (
+                    <option key={s} value={s}>{s}</option>
+                  ))}
+                </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -705,9 +710,9 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                 type="text"
                 value={formData.supplier_invoice}
                 onChange={(e) => setFormData({ ...formData, supplier_invoice: e.target.value })}
-                className="input-field w-full"
-                placeholder="e.g., INV-2024-001"
-              />
+                  className="input-field w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                  placeholder="e.g., INV-2024-001"
+                />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -737,10 +742,11 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                 required
               />
             </div>
+            </div>
           </div>
 
-          {/* Product Search */}
-          <div className="bg-slate-50 rounded-xl p-3">
+          {/* Product Search - Section 2 */}
+          <div className="bg-slate-50 border border-slate-200 rounded-xl p-3">
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Add Products (Search by Name, SKU, or Barcode)
             </label>
@@ -757,7 +763,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                   }}
                   onFocus={() => setShowProductDropdown(true)}
                   onKeyDown={handleKeyDown}
-                  className="input-field w-full pl-10"
+                  className="input-field w-full pl-10 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                   placeholder="Type product name, SKU, or scan barcode..."
                 />
                 {showProductDropdown && searchTerm && (
@@ -788,7 +794,16 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                   </div>
                 )}
               </div>
-              <BarcodeScanButton onScan={handleBarcodeScan} />
+              <BarcodeScanButton 
+                onScan={(barcode) => {
+                  handleBarcodeScan(barcode);
+                  // Auto-focus on first item's qty field after scan
+                  setTimeout(() => {
+                    const firstQtyInput = document.querySelector('input[type="number"][placeholder*="Qty"], input[type="number"]') as HTMLInputElement;
+                    if (firstQtyInput) firstQtyInput.focus();
+                  }, 100);
+                }} 
+              />
             </div>
           </div>
 
@@ -807,7 +822,10 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                   <th className="text-left p-2 text-sm font-semibold text-slate-700 w-8">SL</th>
                   <th className="text-left p-2 text-sm font-semibold text-slate-700">Product</th>
                   <th className="text-left p-2 text-sm font-semibold text-slate-700 w-28">Batch #<RequiredMark /></th>
-                  <th className="text-left p-2 text-sm font-semibold text-slate-700 w-32">Expiry<RequiredMark /></th>
+                  <th className="text-left p-2 text-sm font-semibold text-slate-700 w-32">
+                    <Calendar className="w-3 h-3 inline mr-1" />
+                    Expiry<RequiredMark />
+                  </th>
                   <th className="text-right p-2 text-sm font-semibold text-slate-700 w-20">Qty<RequiredMark /></th>
                   <th className="text-right p-2 text-sm font-semibold text-slate-700 w-24">Unit Price</th>
                   <th className="text-right p-2 text-sm font-semibold text-slate-700 w-28">Sub-total</th>
@@ -839,7 +857,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                           type="text"
                           value={item.batch}
                           onChange={(e) => updateItem(item.id, 'batch', e.target.value)}
-                          className={`input-field w-full text-sm ${errors[`batch_${index}`] ? 'border-red-500' : ''}`}
+                          className={`input-field w-full text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${errors[`batch_${index}`] ? 'border-red-500' : ''}`}
                           placeholder="BT-XXX"
                         />
                         {errors[`batch_${index}`] && (
@@ -847,13 +865,16 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                         )}
                       </td>
                       <td className="p-2">
-                        <input
-                          type="date"
-                          value={item.expiry}
-                          onChange={(e) => updateItem(item.id, 'expiry', e.target.value)}
-                          className={`input-field w-full text-sm ${errors[`expiry_${index}`] ? 'border-red-500' : ''}`}
-                          min={new Date().toISOString().split('T')[0]}
-                        />
+                        <div className="relative">
+                          <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                          <input
+                            type="date"
+                            value={item.expiry}
+                            onChange={(e) => updateItem(item.id, 'expiry', e.target.value)}
+                            className={`input-field w-full text-sm pl-9 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${errors[`expiry_${index}`] ? 'border-red-500' : ''}`}
+                            min={new Date().toISOString().split('T')[0]}
+                          />
+                        </div>
                         {errors[`expiry_${index}`] && (
                           <p className="text-red-500 text-xs mt-0.5">{errors[`expiry_${index}`]}</p>
                         )}
@@ -863,7 +884,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                           type="number"
                           value={item.qty || ''}
                           onChange={(e) => updateItem(item.id, 'qty', Number(e.target.value))}
-                          className={`input-field w-full text-sm text-right ${errors[`qty_${index}`] ? 'border-red-500' : ''}`}
+                          className={`input-field w-full text-sm text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${errors[`qty_${index}`] ? 'border-red-500' : ''}`}
                           min="1"
                         />
                       </td>
@@ -872,7 +893,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                           type="number"
                           value={item.unit_price || ''}
                           onChange={(e) => updateItem(item.id, 'unit_price', Number(e.target.value))}
-                          className={`input-field w-full text-sm text-right ${errors[`price_${index}`] ? 'border-red-500' : ''}`}
+                          className={`input-field w-full text-sm text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${errors[`price_${index}`] ? 'border-red-500' : ''}`}
                           min="0"
                         />
                       </td>
@@ -930,48 +951,74 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                   placeholder="0"
                 />
               </div>
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-slate-700 w-20">Paid (৳):</label>
-                <input
-                  type="number"
-                  value={formData.paid_amount || ''}
-                  onChange={(e) => setFormData({ ...formData, paid_amount: Number(e.target.value) })}
-                  className="input-field w-32"
-                  min="0"
-                  placeholder="0"
-                />
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <label className="text-sm font-medium text-slate-700 w-20">Paid (৳):</label>
+                  <input
+                    type="number"
+                    value={formData.paid_amount || ''}
+                    onChange={(e) => setFormData({ ...formData, paid_amount: Number(e.target.value) })}
+                    className="input-field w-32 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    min="0"
+                    placeholder="0"
+                  />
+                </div>
+                {/* Quick Payment Buttons */}
+                <div className="flex items-center gap-2 pl-24">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, paid_amount: 5000 })}
+                    className="px-2 py-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded transition-colors"
+                  >
+                    ৫,০০০
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, paid_amount: 10000 })}
+                    className="px-2 py-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded transition-colors"
+                  >
+                    ১০,০০০
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, paid_amount: grandTotal })}
+                    className="px-2 py-1 text-xs bg-green-100 hover:bg-green-200 text-green-700 rounded transition-colors font-medium"
+                  >
+                    Full Paid
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Totals */}
-            <div className="bg-slate-50 rounded-xl p-4 space-y-2">
+            {/* Totals - Highlighted Section */}
+            <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-slate-600">Sub-total:</span>
-                <span className="font-medium">৳ {subTotal.toLocaleString()}</span>
+                <span className="font-medium text-right">৳ {subTotal.toLocaleString()}</span>
               </div>
               {discountAmount > 0 && (
                 <div className="flex justify-between text-sm text-green-600">
                   <span>Discount ({formData.discount_type === 'percent' ? `${formData.discount_value}%` : 'Fixed'}):</span>
-                  <span>- ৳ {discountAmount.toLocaleString()}</span>
+                  <span className="text-right">- ৳ {discountAmount.toLocaleString()}</span>
                 </div>
               )}
               {taxAmount > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-600">Tax ({formData.tax_percent}%):</span>
-                  <span>+ ৳ {taxAmount.toLocaleString()}</span>
+                  <span className="text-right">+ ৳ {taxAmount.toLocaleString()}</span>
                 </div>
               )}
-              <div className="flex justify-between text-lg font-bold border-t border-slate-200 pt-2">
-                <span>Grand Total:</span>
-                <span className="text-primary-600">৳ {grandTotal.toLocaleString()}</span>
+              <div className="flex justify-between text-xl font-bold border-t-2 border-blue-300 pt-3">
+                <span className="text-slate-900">Grand Total:</span>
+                <span className="text-blue-700 text-right">৳ {grandTotal.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-600">Paid:</span>
-                <span className="text-green-600">৳ {formData.paid_amount.toLocaleString()}</span>
+              <div className="flex justify-between text-base">
+                <span className="text-slate-700 font-medium">Paid:</span>
+                <span className="text-green-600 font-semibold text-right">৳ {formData.paid_amount.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between text-sm font-medium">
-                <span className="text-slate-600">Due:</span>
-                <span className={dueAmount > 0 ? 'text-red-600' : 'text-green-600'}>
+              <div className="flex justify-between text-base font-bold">
+                <span className="text-red-700">Due:</span>
+                <span className={`text-right ${dueAmount > 0 ? 'text-red-600' : 'text-green-600'}`}>
                   ৳ {dueAmount.toLocaleString()}
                 </span>
               </div>
@@ -991,7 +1038,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
               <Printer className="w-4 h-4" />
               Save & Print
             </button>
-            <button type="submit" className="btn-primary">
+            <button type="submit" className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md">
               Create Purchase
             </button>
           </div>
