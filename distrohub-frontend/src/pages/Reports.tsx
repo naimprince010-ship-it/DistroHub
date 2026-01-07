@@ -93,7 +93,6 @@ export function Reports() {
   const [productSearch, setProductSearch] = useState('');
   
   // Data
-  const [sales, setSales] = useState<Sale[]>([]);
   const [salesReport, setSalesReport] = useState<SaleReport[]>([]);
   const [salesReportSummary, setSalesReportSummary] = useState<SalesReportSummary | null>(null);
   const [salesReturns, setSalesReturns] = useState<SaleReturnReport[]>([]);
