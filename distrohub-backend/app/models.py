@@ -235,6 +235,9 @@ class SaleReport(Sale):
     net_total: float  # gross - returned
     has_returns: bool
     return_count: int
+    total_items: int  # total quantity of items sold
+    returned_qty: int  # total quantity of items returned
+    net_items: int  # total_items - returned_qty
 
 class SaleReturnReport(BaseModel):
     """Simplified return view for reports"""
@@ -258,6 +261,9 @@ class SalesReportSummary(BaseModel):
     return_rate: float  # (total_returns / total_gross) * 100
     total_sales: int
     sales_with_returns: int
+    total_items: int  # total quantity of all items sold
+    total_returned_items: int  # total quantity of all items returned
+    total_net_items: int  # total_items - total_returned_items
 
 class InventoryItem(BaseModel):
     product_id: str

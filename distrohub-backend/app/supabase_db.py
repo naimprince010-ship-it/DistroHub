@@ -453,6 +453,7 @@ class SupabaseDatabase:
         returns_by_sale = {}
         total_returns = 0.0
         sales_with_returns_count = 0
+        all_returns = []  # Define outside if block for later use
         
         if sale_ids:
             # Supabase doesn't support IN with list, so we'll need to query returns differently
@@ -473,9 +474,29 @@ class SupabaseDatabase:
             
             sales_with_returns_count = len(returns_by_sale)
         
+        # Get all return items for these sales to calculate returned quantities
+        return_items_by_sale = {}
+        if sale_ids and all_returns:
+            # Get all return items
+            return_items_result = self.client.table("sales_return_items").select("*").execute()
+            all_return_items = return_items_result.data or []
+            
+            # Create a mapping of return_id -> sale_id for quick lookup
+            return_to_sale_map = {ret["id"]: ret.get("sale_id") for ret in all_returns if ret.get("sale_id") in sale_ids}
+            
+            # Group return items by sale_id
+            for ret_item in all_return_items:
+                return_id = ret_item.get("return_id")
+                sale_id = return_to_sale_map.get(return_id)
+                if sale_id:
+                    if sale_id not in return_items_by_sale:
+                        return_items_by_sale[sale_id] = []
+                    return_items_by_sale[sale_id].append(ret_item)
+        
         # Build sales report with return data
         sales_report = []
         total_gross = 0.0
+        total_returned_items = 0
         
         for sale in sales:
             sale_id = sale["id"]
@@ -486,9 +507,20 @@ class SupabaseDatabase:
             items_result = self.client.table("sale_items").select("*").eq("sale_id", sale_id).execute()
             sale["items"] = items_result.data or []
             
+            # Calculate total items quantity
+            total_items_qty = sum(int(item.get("quantity", 0)) for item in sale["items"])
+            
             # Calculate return totals for this sale
             sale_returns = returns_by_sale.get(sale_id, [])
             returned_total = sum(float(r.get("total_return_amount", 0)) for r in sale_returns)
+            
+            # Calculate returned items quantity
+            sale_return_items = return_items_by_sale.get(sale_id, [])
+            returned_qty = sum(int(item.get("quantity_returned", 0)) for item in sale_return_items)
+            
+            # Calculate net items (total - returned)
+            net_items_qty = max(0, total_items_qty - returned_qty)
+            
             gross_total = float(sale.get("total_amount", 0))
             net_total = gross_total - returned_total
             
@@ -503,15 +535,20 @@ class SupabaseDatabase:
             sale["net_total"] = net_total
             sale["has_returns"] = len(sale_returns) > 0
             sale["return_count"] = len(sale_returns)
+            sale["total_items"] = total_items_qty
+            sale["returned_qty"] = returned_qty
+            sale["net_items"] = net_items_qty
             # Update due_amount to reflect returns
             sale["due_amount"] = adjusted_due_amount
             
             total_gross += gross_total
+            total_returned_items += returned_qty
             sales_report.append(sale)
         
         # Calculate summary totals
         total_net = total_gross - total_returns
         return_rate = (total_returns / total_gross * 100) if total_gross > 0 else 0.0
+        total_items = sum(s.get("total_items", 0) for s in sales_report)
         
         summary = {
             "total_gross": total_gross,
@@ -519,7 +556,10 @@ class SupabaseDatabase:
             "total_net": total_net,
             "return_rate": return_rate,
             "total_sales": len(sales_report),
-            "sales_with_returns": sales_with_returns_count
+            "sales_with_returns": sales_with_returns_count,
+            "total_items": total_items,
+            "total_returned_items": total_returned_items,
+            "total_net_items": total_items - total_returned_items
         }
         
         return sales_report, summary
