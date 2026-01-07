@@ -492,12 +492,19 @@ class SupabaseDatabase:
             gross_total = float(sale.get("total_amount", 0))
             net_total = gross_total - returned_total
             
+            # Calculate adjusted due amount (net_total - paid_amount)
+            # Original due_amount is gross_total - paid_amount, but after returns it should be net_total - paid_amount
+            paid_amount = float(sale.get("paid_amount", 0))
+            adjusted_due_amount = max(0, net_total - paid_amount)
+            
             # Add report fields
             sale["gross_total"] = gross_total
             sale["returned_total"] = returned_total
             sale["net_total"] = net_total
             sale["has_returns"] = len(sale_returns) > 0
             sale["return_count"] = len(sale_returns)
+            # Update due_amount to reflect returns
+            sale["due_amount"] = adjusted_due_amount
             
             total_gross += gross_total
             sales_report.append(sale)
