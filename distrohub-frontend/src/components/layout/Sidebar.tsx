@@ -11,6 +11,7 @@ import {
   LogOut,
   TrendingUp,
   AlertTriangle,
+  RotateCcw,
 } from 'lucide-react';
 
 const menuItems = [
@@ -20,6 +21,7 @@ const menuItems = [
   { icon: ShoppingCart, label: 'Purchase', path: '/purchase' },
   { icon: Warehouse, label: 'Inventory', path: '/inventory' },
   { icon: Receipt, label: 'Sales Orders', path: '/sales' },
+  { icon: RotateCcw, label: 'Sales Returns', path: '/sales-returns' },
   { icon: TrendingUp, label: 'Receivables', path: '/receivables' },
   { icon: AlertTriangle, label: 'Expiry Alerts', path: '/expiry' },
   { icon: FileText, label: 'Reports', path: '/reports' },

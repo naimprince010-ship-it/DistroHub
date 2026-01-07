@@ -8,6 +8,7 @@ import { Retailers } from '@/pages/Retailers';
 import { Purchase } from '@/pages/Purchase';
 import { Inventory } from '@/pages/Inventory';
 import { Sales } from '@/pages/Sales';
+import { SalesReturns } from '@/pages/SalesReturns';
 import { Payments } from '@/pages/Payments';
 import { Receivables } from '@/pages/Receivables';
 import { Expiry } from '@/pages/Expiry';
@@ -49,6 +50,7 @@ function App() {
                 <Route path="purchase" element={<Purchase />} />
                 <Route path="inventory" element={<Inventory />} />
                 <Route path="sales" element={<Sales />} />
+                <Route path="sales-returns" element={<SalesReturns />} />
                 <Route path="payments" element={<Payments />} />
                 <Route path="receivables" element={<Receivables />} />
                 <Route path="expiry" element={<Expiry />} />
