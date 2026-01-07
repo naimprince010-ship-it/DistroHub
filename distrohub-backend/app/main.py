@@ -26,7 +26,8 @@ from app.models import (
     SmsTemplate, SmsTemplateCreate, SmsTemplateUpdate,
     SmsLog, SmsSendRequest, SmsBulkSendRequest,
     SmsEventType, SmsDeliveryMode, SmsStatus,
-    SaleReturnCreate, SaleReturn, RefundType
+    SaleReturnCreate, SaleReturn, RefundType,
+    SaleReport, SaleReturnReport, SalesReportSummary
 )
 from app.database import db
 from app.auth import create_access_token, get_current_user
@@ -807,6 +808,66 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
 @app.get("/api/receivables")
 async def get_receivables(current_user: dict = Depends(get_current_user)):
     return db.get_receivables()
+
+@app.get("/api/reports/sales")
+async def get_sales_report(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get sales report with return aggregation.
+    
+    Query params:
+    - from_date: Start date (YYYY-MM-DD)
+    - to_date: End date (YYYY-MM-DD)
+    
+    Returns:
+    - sales: List of sales with return totals (gross_total, returned_total, net_total)
+    - summary: Aggregate totals (total_gross, total_returns, total_net, return_rate)
+    """
+    try:
+        sales_report, summary = db.get_sales_report(from_date, to_date)
+        return {
+            "sales": [SaleReport(**sale) for sale in sales_report],
+            "summary": SalesReportSummary(**summary)
+        }
+    except Exception as e:
+        error_msg = str(e)
+        error_type = type(e).__name__
+        print(f"[API] Error getting sales report: {error_type}: {error_msg}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get sales report: {error_type}: {error_msg}"
+        )
+
+@app.get("/api/reports/sales-returns")
+async def get_sales_returns_report(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get sales returns report.
+    
+    Query params:
+    - from_date: Start date (YYYY-MM-DD)
+    - to_date: End date (YYYY-MM-DD)
+    
+    Returns:
+    - List of return records with retailer, reason, refund_type, total_return_amount
+    """
+    try:
+        returns_report = db.get_sales_returns_report(from_date, to_date)
+        return [SaleReturnReport(**ret) for ret in returns_report]
+    except Exception as e:
+        error_msg = str(e)
+        error_type = type(e).__name__
+        print(f"[API] Error getting sales returns report: {error_type}: {error_msg}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get sales returns report: {error_type}: {error_msg}"
+        )
 
 @app.post("/api/products/import")
 async def import_products(products: List[ProductCreate], current_user: dict = Depends(get_current_user)):

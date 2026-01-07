@@ -1,6 +1,6 @@
 import os
 import hashlib
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional
 from supabase import create_client, Client
 from app.models import (
@@ -427,6 +427,132 @@ class SupabaseDatabase:
             items_result = self.client.table("sales_return_items").select("*").eq("return_id", return_record["id"]).execute()
             return_record["items"] = items_result.data or []
         return returns
+    
+    def get_sales_report(self, from_date: Optional[str] = None, to_date: Optional[str] = None) -> tuple[List[dict], dict]:
+        """
+        Get sales report with return aggregation.
+        Returns (sales_with_returns, summary_totals)
+        """
+        # Build date filter for sales
+        sales_query = self.client.table("sales").select("*")
+        if from_date:
+            sales_query = sales_query.gte("created_at", from_date)
+        if to_date:
+            # Add one day to include the end date
+            end_datetime = datetime.fromisoformat(to_date.replace('Z', '+00:00')) + timedelta(days=1)
+            sales_query = sales_query.lt("created_at", end_datetime.isoformat())
+        
+        sales_query = sales_query.order("created_at", desc=True)
+        sales_result = sales_query.execute()
+        sales = sales_result.data or []
+        
+        # Get all sale IDs for return aggregation
+        sale_ids = [sale["id"] for sale in sales] if sales else []
+        
+        # Get all returns for these sales in one query
+        returns_by_sale = {}
+        total_returns = 0.0
+        sales_with_returns_count = 0
+        
+        if sale_ids:
+            # Supabase doesn't support IN with list, so we'll need to query returns differently
+            # Get all returns where sale_id is in our list
+            # Since Supabase Python client doesn't support array filters easily, we'll fetch all returns
+            # and filter in Python (for small datasets this is fine)
+            returns_result = self.client.table("sales_returns").select("*").execute()
+            all_returns = returns_result.data or []
+            
+            # Filter returns for our sales and aggregate
+            for ret in all_returns:
+                ret_sale_id = ret.get("sale_id")
+                if ret_sale_id in sale_ids:
+                    if ret_sale_id not in returns_by_sale:
+                        returns_by_sale[ret_sale_id] = []
+                    returns_by_sale[ret_sale_id].append(ret)
+                    total_returns += float(ret.get("total_return_amount", 0))
+            
+            sales_with_returns_count = len(returns_by_sale)
+        
+        # Build sales report with return data
+        sales_report = []
+        total_gross = 0.0
+        
+        for sale in sales:
+            sale_id = sale["id"]
+            sale["payment_status"] = PaymentStatus(sale["payment_status"]) if sale.get("payment_status") else PaymentStatus.DUE
+            sale["status"] = OrderStatus(sale["status"]) if sale.get("status") else OrderStatus.PENDING
+            
+            # Get sale items
+            items_result = self.client.table("sale_items").select("*").eq("sale_id", sale_id).execute()
+            sale["items"] = items_result.data or []
+            
+            # Calculate return totals for this sale
+            sale_returns = returns_by_sale.get(sale_id, [])
+            returned_total = sum(float(r.get("total_return_amount", 0)) for r in sale_returns)
+            gross_total = float(sale.get("total_amount", 0))
+            net_total = gross_total - returned_total
+            
+            # Add report fields
+            sale["gross_total"] = gross_total
+            sale["returned_total"] = returned_total
+            sale["net_total"] = net_total
+            sale["has_returns"] = len(sale_returns) > 0
+            sale["return_count"] = len(sale_returns)
+            
+            total_gross += gross_total
+            sales_report.append(sale)
+        
+        # Calculate summary totals
+        total_net = total_gross - total_returns
+        return_rate = (total_returns / total_gross * 100) if total_gross > 0 else 0.0
+        
+        summary = {
+            "total_gross": total_gross,
+            "total_returns": total_returns,
+            "total_net": total_net,
+            "return_rate": return_rate,
+            "total_sales": len(sales_report),
+            "sales_with_returns": sales_with_returns_count
+        }
+        
+        return sales_report, summary
+    
+    def get_sales_returns_report(self, from_date: Optional[str] = None, to_date: Optional[str] = None) -> List[dict]:
+        """Get sales returns report with sale invoice info"""
+        # Build date filter
+        returns_query = self.client.table("sales_returns").select("*")
+        if from_date:
+            returns_query = returns_query.gte("created_at", from_date)
+        if to_date:
+            # Add one day to include the end date
+            end_datetime = datetime.fromisoformat(to_date.replace('Z', '+00:00')) + timedelta(days=1)
+            returns_query = returns_query.lt("created_at", end_datetime.isoformat())
+        
+        returns_query = returns_query.order("created_at", desc=True)
+        returns_result = returns_query.execute()
+        returns = returns_result.data or []
+        
+        # Get sale invoice numbers for each return
+        sale_ids = list(set([r.get("sale_id") for r in returns if r.get("sale_id")]))
+        sales_map = {}
+        
+        if sale_ids:
+            # Fetch sales to get invoice numbers
+            # Since Supabase doesn't support IN easily, fetch in batches or all at once
+            for sale_id in sale_ids:
+                sale_result = self.client.table("sales").select("id,invoice_number").eq("id", sale_id).execute()
+                if sale_result.data:
+                    sale_data = sale_result.data[0]
+                    sales_map[sale_id] = sale_data.get("invoice_number", "")
+        
+        # Build return report with invoice numbers
+        returns_report = []
+        for ret in returns:
+            sale_id = ret.get("sale_id")
+            ret["invoice_number"] = sales_map.get(sale_id, "")
+            returns_report.append(ret)
+        
+        return returns_report
     
     def create_sale_return(self, sale_id: str, data: dict, items: List[dict], user_id: Optional[str] = None) -> dict:
         """

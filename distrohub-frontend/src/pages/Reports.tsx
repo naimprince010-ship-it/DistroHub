@@ -19,6 +19,35 @@ interface Sale {
   items: Array<{ product_name: string; quantity: number; unit_price: number; total: number }>;
 }
 
+interface SaleReport extends Sale {
+  gross_total: number;
+  returned_total: number;
+  net_total: number;
+  has_returns: boolean;
+  return_count: number;
+}
+
+interface SaleReturnReport {
+  id: string;
+  return_number: string;
+  sale_id: string;
+  invoice_number: string;
+  retailer_name: string;
+  total_return_amount: number;
+  reason?: string;
+  refund_type: string;
+  created_at: string;
+}
+
+interface SalesReportSummary {
+  total_gross: number;
+  total_returns: number;
+  total_net: number;
+  return_rate: number;
+  total_sales: number;
+  sales_with_returns: number;
+}
+
 interface Purchase {
   id: string;
   invoice_number: string;
@@ -43,7 +72,7 @@ interface Category {
   name: string;
 }
 
-type ReportType = 'sales' | 'purchases' | 'stock';
+type ReportType = 'sales' | 'purchases' | 'stock' | 'sales-returns';
 
 export function Reports() {
   const [activeReport, setActiveReport] = useState<ReportType>('sales');
@@ -65,6 +94,9 @@ export function Reports() {
   
   // Data
   const [sales, setSales] = useState<Sale[]>([]);
+  const [salesReport, setSalesReport] = useState<SaleReport[]>([]);
+  const [salesReportSummary, setSalesReportSummary] = useState<SalesReportSummary | null>(null);
+  const [salesReturns, setSalesReturns] = useState<SaleReturnReport[]>([]);
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -114,10 +146,27 @@ export function Reports() {
       console.log(`[Reports] Fetching ${activeReport} report data...`);
 
       if (activeReport === 'sales') {
-        const response = await api.get('/api/sales');
+        // Use new reports endpoint with date filters
+        const params = new URLSearchParams();
+        if (startDate) params.append('from_date', startDate);
+        if (endDate) params.append('to_date', endDate);
+        const url = `/api/reports/sales${params.toString() ? '?' + params.toString() : ''}`;
+        const response = await api.get(url);
         if (response.data) {
-          setSales(response.data);
-          console.log('[Reports] Sales fetched:', response.data.length);
+          setSalesReport(response.data.sales || []);
+          setSalesReportSummary(response.data.summary || null);
+          console.log('[Reports] Sales report fetched:', response.data.sales?.length || 0);
+        }
+      } else if (activeReport === 'sales-returns') {
+        // Get sales returns report
+        const params = new URLSearchParams();
+        if (startDate) params.append('from_date', startDate);
+        if (endDate) params.append('to_date', endDate);
+        const url = `/api/reports/sales-returns${params.toString() ? '?' + params.toString() : ''}`;
+        const response = await api.get(url);
+        if (response.data) {
+          setSalesReturns(response.data);
+          console.log('[Reports] Sales returns fetched:', response.data.length);
         }
       } else if (activeReport === 'purchases') {
         const response = await api.get('/api/purchases');
@@ -145,12 +194,10 @@ export function Reports() {
 
   useEffect(() => {
     fetchReportData();
-  }, [activeReport]);
+  }, [activeReport, startDate, endDate]);
 
-  // Filter sales by date range
-  const filteredSales = sales.filter((sale) => {
-    const saleDate = new Date(sale.created_at).toISOString().split('T')[0];
-    const matchesDate = saleDate >= startDate && saleDate <= endDate;
+  // Filter sales report by category/product (date filtering done on backend)
+  const filteredSalesReport = salesReport.filter((sale) => {
     const matchesCategory = categoryFilter === 'all' || 
       sale.items.some(item => {
         const product = products.find(p => p.name === item.product_name);
@@ -160,7 +207,16 @@ export function Reports() {
       sale.items.some(item => 
         item.product_name.toLowerCase().includes(productSearch.toLowerCase())
       );
-    return matchesDate && matchesCategory && matchesProduct;
+    return matchesCategory && matchesProduct;
+  });
+
+  // Filter sales returns by date (date filtering done on backend)
+  const filteredSalesReturns = salesReturns.filter((return_record) => {
+    const matchesRetailer = !productSearch || 
+      return_record.retailer_name.toLowerCase().includes(productSearch.toLowerCase()) ||
+      return_record.return_number.toLowerCase().includes(productSearch.toLowerCase()) ||
+      return_record.invoice_number.toLowerCase().includes(productSearch.toLowerCase());
+    return matchesRetailer;
   });
 
   // Filter purchases by date range
@@ -188,11 +244,19 @@ export function Reports() {
     return matchesCategory && matchesProduct;
   });
 
-  // Calculate totals
-  const salesTotal = filteredSales.reduce((sum, s) => sum + s.total_amount, 0);
-  const salesPaid = filteredSales.reduce((sum, s) => sum + s.paid_amount, 0);
-  const salesDue = filteredSales.reduce((sum, s) => sum + s.due_amount, 0);
-  const salesItems = filteredSales.reduce((sum, s) => sum + s.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0);
+  // Calculate totals for sales report (use summary from API if available, otherwise calculate)
+  const salesTotal = salesReportSummary?.total_gross ?? filteredSalesReport.reduce((sum, s) => sum + (s.gross_total || s.total_amount), 0);
+  const salesReturnsTotal = salesReportSummary?.total_returns ?? filteredSalesReport.reduce((sum, s) => sum + (s.returned_total || 0), 0);
+  const salesNetTotal = salesReportSummary?.total_net ?? filteredSalesReport.reduce((sum, s) => sum + (s.net_total || s.total_amount), 0);
+  const salesPaid = filteredSalesReport.reduce((sum, s) => sum + s.paid_amount, 0);
+  const salesDue = filteredSalesReport.reduce((sum, s) => sum + s.due_amount, 0);
+  const salesItems = filteredSalesReport.reduce((sum, s) => sum + s.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0);
+  const returnRate = salesReportSummary?.return_rate ?? (salesTotal > 0 ? (salesReturnsTotal / salesTotal * 100) : 0);
+
+  // Calculate totals for sales returns
+  const returnsTotalAmount = filteredSalesReturns.reduce((sum, r) => sum + r.total_return_amount, 0);
+  const returnsCount = filteredSalesReturns.length;
+  const returnsAvgAmount = returnsCount > 0 ? returnsTotalAmount / returnsCount : 0;
 
   const purchasesTotal = filteredPurchases.reduce((sum, p) => sum + p.total_amount, 0);
   const purchasesPaid = filteredPurchases.reduce((sum, p) => sum + p.paid_amount, 0);
@@ -208,10 +272,20 @@ export function Reports() {
 
     if (activeReport === 'sales') {
       filename = `sales-report-${startDate}-to-${endDate}.csv`;
-      csvContent = 'Date,Invoice,Retailer,Total Amount,Paid,Due\n';
-      filteredSales.forEach((sale) => {
+      csvContent = 'Date,Invoice,Retailer,Gross Sales,Returns,Net Sales,Paid,Due\n';
+      filteredSalesReport.forEach((sale) => {
         const date = new Date(sale.created_at).toISOString().split('T')[0];
-        csvContent += `${date},${sale.invoice_number},${sale.retailer_name},${sale.total_amount},${sale.paid_amount},${sale.due_amount}\n`;
+        const gross = sale.gross_total || sale.total_amount;
+        const returned = sale.returned_total || 0;
+        const net = sale.net_total || gross;
+        csvContent += `${date},${sale.invoice_number},${sale.retailer_name},${gross},${returned},${net},${sale.paid_amount},${sale.due_amount}\n`;
+      });
+    } else if (activeReport === 'sales-returns') {
+      filename = `sales-returns-report-${startDate}-to-${endDate}.csv`;
+      csvContent = 'Date,Return Number,Sale Invoice,Retailer,Amount,Reason,Refund Type\n';
+      filteredSalesReturns.forEach((return_record) => {
+        const date = new Date(return_record.created_at).toISOString().split('T')[0];
+        csvContent += `${date},${return_record.return_number},${return_record.invoice_number},${return_record.retailer_name},${return_record.total_return_amount},${return_record.reason || ''},${return_record.refund_type}\n`;
       });
     } else if (activeReport === 'purchases') {
       filename = `purchases-report-${startDate}-to-${endDate}.csv`;
@@ -272,6 +346,16 @@ export function Reports() {
               }`}
             >
               Stock Summary
+            </button>
+            <button
+              onClick={() => setActiveReport('sales-returns')}
+              className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                activeReport === 'sales-returns'
+                  ? 'text-primary-600 border-b-2 border-primary-600'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Sales Returns Report
             </button>
           </div>
         </div>
@@ -348,20 +432,37 @@ export function Reports() {
         {activeReport === 'sales' && (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2">
             <div className="bg-white rounded-xl p-3 shadow-sm">
-              <p className="text-slate-500 text-sm">Total Sales</p>
+              <p className="text-slate-500 text-sm">Gross Sales</p>
               <p className="text-2xl font-bold text-green-600">৳ {salesTotal.toLocaleString()}</p>
             </div>
             <div className="bg-white rounded-xl p-3 shadow-sm">
-              <p className="text-slate-500 text-sm">Collections</p>
-              <p className="text-2xl font-bold text-blue-600">৳ {salesPaid.toLocaleString()}</p>
+              <p className="text-slate-500 text-sm">Returns</p>
+              <p className="text-2xl font-bold text-red-600">৳ {salesReturnsTotal.toLocaleString()}</p>
             </div>
             <div className="bg-white rounded-xl p-3 shadow-sm">
-              <p className="text-slate-500 text-sm">Outstanding</p>
-              <p className="text-2xl font-bold text-red-600">৳ {salesDue.toLocaleString()}</p>
+              <p className="text-slate-500 text-sm">Net Sales</p>
+              <p className="text-2xl font-bold text-blue-600">৳ {salesNetTotal.toLocaleString()}</p>
             </div>
             <div className="bg-white rounded-xl p-3 shadow-sm">
-              <p className="text-slate-500 text-sm">Total Orders</p>
-              <p className="text-2xl font-bold text-slate-900">{filteredSales.length}</p>
+              <p className="text-slate-500 text-sm">Return Rate</p>
+              <p className="text-2xl font-bold text-slate-900">{returnRate.toFixed(2)}%</p>
+            </div>
+          </div>
+        )}
+
+        {activeReport === 'sales-returns' && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
+            <div className="bg-white rounded-xl p-3 shadow-sm">
+              <p className="text-slate-500 text-sm">Total Returns</p>
+              <p className="text-2xl font-bold text-red-600">৳ {returnsTotalAmount.toLocaleString()}</p>
+            </div>
+            <div className="bg-white rounded-xl p-3 shadow-sm">
+              <p className="text-slate-500 text-sm">Returns Count</p>
+              <p className="text-2xl font-bold text-slate-900">{returnsCount}</p>
+            </div>
+            <div className="bg-white rounded-xl p-3 shadow-sm">
+              <p className="text-slate-500 text-sm">Avg Return Amount</p>
+              <p className="text-2xl font-bold text-blue-600">৳ {returnsAvgAmount.toLocaleString()}</p>
             </div>
           </div>
         )}
@@ -410,34 +511,47 @@ export function Reports() {
                     <th className="text-left p-2 font-semibold text-slate-700">Date</th>
                     <th className="text-left p-2 font-semibold text-slate-700">Invoice</th>
                     <th className="text-left p-2 font-semibold text-slate-700">Retailer</th>
-                    <th className="text-right p-2 font-semibold text-slate-700">Total</th>
+                    <th className="text-right p-2 font-semibold text-slate-700">Gross</th>
+                    <th className="text-right p-2 font-semibold text-slate-700">Returns</th>
+                    <th className="text-right p-2 font-semibold text-slate-700">Net</th>
                     <th className="text-right p-2 font-semibold text-slate-700">Paid</th>
                     <th className="text-right p-2 font-semibold text-slate-700">Due</th>
                     <th className="text-center p-2 font-semibold text-slate-700">Items</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredSales.map((sale) => (
-                    <tr key={sale.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="p-2 text-slate-600">
-                        {new Date(sale.created_at).toLocaleDateString()}
-                      </td>
-                      <td className="p-2 font-medium text-primary-600">{sale.invoice_number}</td>
-                      <td className="p-2 text-slate-900">{sale.retailer_name}</td>
-                      <td className="p-2 text-right font-semibold text-slate-900">
-                        ৳ {sale.total_amount.toLocaleString()}
-                      </td>
-                      <td className="p-2 text-right font-semibold text-green-600">
-                        ৳ {sale.paid_amount.toLocaleString()}
-                      </td>
-                      <td className="p-2 text-right font-semibold text-red-600">
-                        ৳ {sale.due_amount.toLocaleString()}
-                      </td>
-                      <td className="p-2 text-center text-slate-600">
-                        {sale.items.reduce((sum, item) => sum + item.quantity, 0)}
-                      </td>
-                    </tr>
-                  ))}
+                  {filteredSalesReport.map((sale) => {
+                    const gross = sale.gross_total || sale.total_amount;
+                    const returned = sale.returned_total || 0;
+                    const net = sale.net_total || gross;
+                    return (
+                      <tr key={sale.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-2 text-slate-600">
+                          {new Date(sale.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="p-2 font-medium text-primary-600">{sale.invoice_number}</td>
+                        <td className="p-2 text-slate-900">{sale.retailer_name}</td>
+                        <td className="p-2 text-right font-semibold text-slate-900">
+                          ৳ {gross.toLocaleString()}
+                        </td>
+                        <td className={`p-2 text-right font-semibold ${returned > 0 ? 'text-red-600' : 'text-slate-400'}`}>
+                          ৳ {returned.toLocaleString()}
+                        </td>
+                        <td className="p-2 text-right font-semibold text-blue-600">
+                          ৳ {net.toLocaleString()}
+                        </td>
+                        <td className="p-2 text-right font-semibold text-green-600">
+                          ৳ {sale.paid_amount.toLocaleString()}
+                        </td>
+                        <td className="p-2 text-right font-semibold text-red-600">
+                          ৳ {sale.due_amount.toLocaleString()}
+                        </td>
+                        <td className="p-2 text-center text-slate-600">
+                          {sale.items.reduce((sum, item) => sum + item.quantity, 0)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
                 <tfoot className="bg-slate-50 border-t-2 border-slate-200">
                   <tr>
@@ -446,6 +560,12 @@ export function Reports() {
                     </td>
                     <td className="p-2 text-right font-bold text-slate-900">
                       ৳ {salesTotal.toLocaleString()}
+                    </td>
+                    <td className="p-2 text-right font-bold text-red-600">
+                      ৳ {salesReturnsTotal.toLocaleString()}
+                    </td>
+                    <td className="p-2 text-right font-bold text-blue-600">
+                      ৳ {salesNetTotal.toLocaleString()}
                     </td>
                     <td className="p-2 text-right font-bold text-green-600">
                       ৳ {salesPaid.toLocaleString()}
@@ -460,9 +580,72 @@ export function Reports() {
                 </tfoot>
               </table>
             </div>
-            {filteredSales.length === 0 && (
+            {filteredSalesReport.length === 0 && (
               <div className="p-8 text-center text-slate-500">
                 No sales found for the selected filters.
+              </div>
+            )}
+          </div>
+        ) : activeReport === 'sales-returns' ? (
+          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="text-left p-2 font-semibold text-slate-700">Date</th>
+                    <th className="text-left p-2 font-semibold text-slate-700">Return #</th>
+                    <th className="text-left p-2 font-semibold text-slate-700">Sale Invoice</th>
+                    <th className="text-left p-2 font-semibold text-slate-700">Retailer</th>
+                    <th className="text-right p-2 font-semibold text-slate-700">Amount</th>
+                    <th className="text-left p-2 font-semibold text-slate-700">Reason</th>
+                    <th className="text-left p-2 font-semibold text-slate-700">Refund Type</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredSalesReturns.map((return_record) => (
+                    <tr key={return_record.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="p-2 text-slate-600">
+                        {new Date(return_record.created_at).toLocaleDateString()}
+                      </td>
+                      <td className="p-2 font-medium text-primary-600">{return_record.return_number}</td>
+                      <td className="p-2 text-slate-600">{return_record.invoice_number || '-'}</td>
+                      <td className="p-2 text-slate-900">{return_record.retailer_name}</td>
+                      <td className="p-2 text-right font-semibold text-red-600">
+                        ৳ {return_record.total_return_amount.toLocaleString()}
+                      </td>
+                      <td className="p-2 text-slate-600 text-sm max-w-xs truncate" title={return_record.reason || ''}>
+                        {return_record.reason || '-'}
+                      </td>
+                      <td className="p-2 text-slate-600">
+                        <span className={`px-2 py-1 rounded text-xs ${
+                          return_record.refund_type === 'adjust_due' 
+                            ? 'bg-blue-100 text-blue-700' 
+                            : 'bg-green-100 text-green-700'
+                        }`}>
+                          {return_record.refund_type === 'adjust_due' ? 'Adjust Due' : 'Cash Refund'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-slate-50 border-t-2 border-slate-200">
+                  <tr>
+                    <td colSpan={4} className="p-2 font-semibold text-slate-900 text-right">
+                      Totals:
+                    </td>
+                    <td className="p-2 text-right font-bold text-red-600">
+                      ৳ {returnsTotalAmount.toLocaleString()}
+                    </td>
+                    <td colSpan={2} className="p-2 text-center font-bold text-slate-900">
+                      {returnsCount} returns
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            {filteredSalesReturns.length === 0 && (
+              <div className="p-8 text-center text-slate-500">
+                No returns found for the selected filters.
               </div>
             )}
           </div>

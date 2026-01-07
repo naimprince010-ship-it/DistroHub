@@ -228,6 +228,37 @@ class SaleReturn(BaseModel):
     items: List[SaleReturnItem]
     created_at: datetime
 
+class SaleReport(Sale):
+    """Sale with return aggregation for reports"""
+    gross_total: float  # original total_amount
+    returned_total: float  # sum of returns
+    net_total: float  # gross - returned
+    has_returns: bool
+    return_count: int
+
+class SaleReturnReport(BaseModel):
+    """Simplified return view for reports"""
+    id: str
+    return_number: str
+    sale_id: str
+    invoice_number: str  # from related sale
+    retailer_id: str
+    retailer_name: str
+    total_return_amount: float
+    reason: Optional[str] = None
+    refund_type: RefundType
+    status: str
+    created_at: datetime
+
+class SalesReportSummary(BaseModel):
+    """Summary totals for sales report"""
+    total_gross: float
+    total_returns: float
+    total_net: float
+    return_rate: float  # (total_returns / total_gross) * 100
+    total_sales: int
+    sales_with_returns: int
+
 class InventoryItem(BaseModel):
     product_id: str
     product_name: str
