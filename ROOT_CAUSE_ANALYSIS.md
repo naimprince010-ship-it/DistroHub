@@ -82,3 +82,6 @@ CREATE POLICY "Allow all to insert SMS settings" ON sms_settings
 - `distrohub-backend/supabase/migrations/20260106000000_fix_sms_settings_rls_urgent.sql` (NEW)
 - No code changes needed (backend logic is correct)
 
+
+
+

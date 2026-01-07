@@ -27,7 +27,8 @@ from app.models import (
     SmsLog, SmsSendRequest, SmsBulkSendRequest,
     SmsEventType, SmsDeliveryMode, SmsStatus,
     SaleReturnCreate, SaleReturn, RefundType,
-    SaleReport, SaleReturnReport, SalesReportSummary
+    SaleReport, SaleReturnReport, SalesReportSummary,
+    WarehouseCreate, Warehouse, WarehouseStockSummary
 )
 from app.database import db
 from app.auth import create_access_token, get_current_user
@@ -493,6 +494,51 @@ async def update_retailer(retailer_id: str, retailer_data: RetailerCreate, curre
     if not retailer:
         raise HTTPException(status_code=404, detail="Retailer not found")
     return Retailer(**retailer)
+
+# Warehouse endpoints
+@app.get("/api/warehouses", response_model=List[Warehouse])
+async def get_warehouses(current_user: dict = Depends(get_current_user)):
+    warehouses = db.get_warehouses()
+    return [Warehouse(**w) for w in warehouses]
+
+@app.get("/api/warehouses/{warehouse_id}", response_model=Warehouse)
+async def get_warehouse(warehouse_id: str, current_user: dict = Depends(get_current_user)):
+    warehouse = db.get_warehouse(warehouse_id)
+    if not warehouse:
+        raise HTTPException(status_code=404, detail="Warehouse not found")
+    return Warehouse(**warehouse)
+
+@app.post("/api/warehouses", response_model=Warehouse)
+async def create_warehouse(warehouse_data: WarehouseCreate, current_user: dict = Depends(get_current_user)):
+    warehouse = db.create_warehouse(warehouse_data.model_dump())
+    return Warehouse(**warehouse)
+
+@app.put("/api/warehouses/{warehouse_id}", response_model=Warehouse)
+async def update_warehouse(warehouse_id: str, warehouse_data: WarehouseCreate, current_user: dict = Depends(get_current_user)):
+    warehouse = db.update_warehouse(warehouse_id, warehouse_data.model_dump())
+    if not warehouse:
+        raise HTTPException(status_code=404, detail="Warehouse not found")
+    return Warehouse(**warehouse)
+
+@app.delete("/api/warehouses/{warehouse_id}")
+async def delete_warehouse(warehouse_id: str, current_user: dict = Depends(get_current_user)):
+    try:
+        db.delete_warehouse(warehouse_id)
+        return {"message": "Warehouse deleted successfully"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=404, detail="Warehouse not found")
+
+@app.get("/api/warehouses/{warehouse_id}/stock", response_model=List[WarehouseStockSummary])
+async def get_warehouse_stock(warehouse_id: str, current_user: dict = Depends(get_current_user)):
+    stock_summary = db.get_warehouse_stock_summary(warehouse_id)
+    return [WarehouseStockSummary(**s) for s in stock_summary]
+
+@app.get("/api/warehouses/{warehouse_id}/stock-count")
+async def get_warehouse_stock_count(warehouse_id: str, current_user: dict = Depends(get_current_user)):
+    count = db.get_warehouse_stock_count(warehouse_id)
+    return {"warehouse_id": warehouse_id, "total_stock": count}
 
 @app.delete("/api/retailers/{retailer_id}")
 async def delete_retailer(retailer_id: str, current_user: dict = Depends(get_current_user)):

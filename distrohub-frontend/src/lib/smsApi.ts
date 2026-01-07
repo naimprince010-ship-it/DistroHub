@@ -28,8 +28,21 @@ export async function getSmsSettings(userId?: string, role?: string): Promise<Sm
  * Create or update SMS settings
  */
 export async function updateSmsSettings(settings: SmsSettingsCreate): Promise<SmsSettings> {
-  const response = await api.put<SmsSettings>('/api/sms/settings', settings);
-  return response.data;
+  // #region agent log
+  fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsApi.ts:31',message:'updateSmsSettings API call starting',data:{settings,hasToken:!!localStorage.getItem('token')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
+  try {
+    const response = await api.put<SmsSettings>('/api/sms/settings', settings);
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsApi.ts:35',message:'updateSmsSettings API call succeeded',data:{status:response.status,data:response.data},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    return response.data;
+  } catch (error: any) {
+    // #region agent log
+    fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'smsApi.ts:38',message:'updateSmsSettings API call failed',data:{errorMessage:error?.message,status:error?.response?.status,statusText:error?.response?.statusText,data:error?.response?.data,configUrl:error?.config?.url,hasAuthHeader:!!error?.config?.headers?.Authorization},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+    // #endregion
+    throw error;
+  }
 }
 
 /**

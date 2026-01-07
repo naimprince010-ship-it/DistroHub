@@ -15,6 +15,12 @@ build/
 .env.local
 .env.*.local
 
+# Credentials and secrets (NEVER commit these!)
+credentials.json
+*.credentials
+secrets/
+.credentials/
+
 # IDE
 .idea/
 .vscode/

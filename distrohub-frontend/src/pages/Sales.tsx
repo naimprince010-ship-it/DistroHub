@@ -328,6 +328,8 @@ export function Sales() {
               // Map frontend items to backend SaleItemCreate format
               // Note: This is simplified - in production, you'd need to select batches
               const saleItems = [];
+              const productsWithoutBatches: string[] = [];
+              
               for (const item of order.items) {
                 const product = products.find((p: any) => p.name === item.product);
                 if (!product) {
@@ -340,8 +342,9 @@ export function Sales() {
                 const batches = batchesResponse.data || [];
                 
                 if (batches.length === 0) {
-                  alert(`No batches found for product "${item.product}". Please add stock first.`);
-                  return;
+                  productsWithoutBatches.push(item.product);
+                  console.warn(`[Sales] No batches found for product "${item.product}", skipping`);
+                  continue;
                 }
                 
                 // Use first available batch (in production, user should select)
@@ -356,8 +359,25 @@ export function Sales() {
                 });
               }
               
+              // Show warning if some products don't have batches
+              if (productsWithoutBatches.length > 0) {
+                const message = productsWithoutBatches.length === order.items.length
+                  ? `No batches found for the following products. Please add stock first:\n\n${productsWithoutBatches.join('\n')}\n\nYou need to create a purchase order to add stock before creating a sales order.`
+                  : `Warning: The following products don't have stock and were skipped:\n\n${productsWithoutBatches.join('\n')}\n\nThe sale will be created only for products with available stock.`;
+                
+                if (productsWithoutBatches.length === order.items.length) {
+                  alert(message);
+                  return;
+                } else {
+                  const proceed = confirm(message + '\n\nDo you want to continue with the remaining products?');
+                  if (!proceed) {
+                    return;
+                  }
+                }
+              }
+              
               if (saleItems.length === 0) {
-                alert('No valid items to create sale. Please check product names.');
+                alert('No valid items to create sale. All selected products need stock. Please add stock first via a purchase order.');
                 return;
               }
               

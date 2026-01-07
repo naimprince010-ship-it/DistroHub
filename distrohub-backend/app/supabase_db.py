@@ -125,6 +125,11 @@ class SupabaseDatabase:
     def create_batch(self, data: dict) -> dict:
         if "expiry_date" in data and isinstance(data["expiry_date"], date):
             data["expiry_date"] = data["expiry_date"].isoformat()
+        # Ensure warehouse_id is set (use default if not provided)
+        if not data.get("warehouse_id"):
+            default_warehouse = self.client.table("warehouses").select("*").eq("name", "Main Warehouse").limit(1).execute()
+            if default_warehouse.data:
+                data["warehouse_id"] = default_warehouse.data[0]["id"]
         result = self.client.table("product_batches").insert(data).execute()
         return result.data[0] if result.data else data
     
@@ -165,6 +170,105 @@ class SupabaseDatabase:
         self.client.table("retailers").delete().eq("id", retailer_id).execute()
         return True
     
+    # Warehouse methods
+    def get_warehouses(self) -> List[dict]:
+        """Get all warehouses"""
+        result = self.client.table("warehouses").select("*").order("name").execute()
+        return result.data or []
+    
+    def get_warehouse(self, warehouse_id: str) -> Optional[dict]:
+        """Get single warehouse by ID"""
+        result = self.client.table("warehouses").select("*").eq("id", warehouse_id).execute()
+        return result.data[0] if result.data else None
+    
+    def create_warehouse(self, data: dict) -> dict:
+        """Create new warehouse"""
+        result = self.client.table("warehouses").insert(data).execute()
+        return result.data[0] if result.data else data
+    
+    def update_warehouse(self, warehouse_id: str, data: dict) -> Optional[dict]:
+        """Update warehouse"""
+        result = self.client.table("warehouses").update(data).eq("id", warehouse_id).execute()
+        return result.data[0] if result.data else None
+    
+    def get_warehouse_stock_count(self, warehouse_id: str) -> int:
+        """Get total stock count in warehouse (sum of all batches)"""
+        result = self.client.table("product_batches").select("quantity").eq("warehouse_id", warehouse_id).execute()
+        batches = result.data or []
+        return sum(int(batch.get("quantity", 0)) for batch in batches)
+    
+    def get_warehouse_stock_summary(self, warehouse_id: str) -> List[dict]:
+        """Get stock summary per product for a warehouse"""
+        # Get warehouse name
+        warehouse = self.get_warehouse(warehouse_id)
+        if not warehouse:
+            return []
+        
+        # Get all batches for this warehouse
+        batches_result = self.client.table("product_batches").select("*").eq("warehouse_id", warehouse_id).execute()
+        batches = batches_result.data or []
+        
+        # Aggregate by product
+        product_stock = {}
+        for batch in batches:
+            product_id = batch.get("product_id")
+            if not product_id:
+                continue
+            
+            if product_id not in product_stock:
+                product = self.get_product(product_id)
+                product_stock[product_id] = {
+                    "warehouse_id": warehouse_id,
+                    "warehouse_name": warehouse.get("name", ""),
+                    "product_id": product_id,
+                    "product_name": product.get("name", "") if product else "Unknown",
+                    "total_quantity": 0
+                }
+            product_stock[product_id]["total_quantity"] += int(batch.get("quantity", 0))
+        
+        return list(product_stock.values())
+    
+    def update_warehouse_stock(self, warehouse_id: str, product_id: str, quantity_change: int) -> Optional[dict]:
+        """Update warehouse_stock summary table"""
+        # Get current stock
+        result = self.client.table("warehouse_stock").select("*").eq("warehouse_id", warehouse_id).eq("product_id", product_id).execute()
+        existing = result.data[0] if result.data else None
+        
+        if existing:
+            new_quantity = max(0, existing.get("total_quantity", 0) + quantity_change)
+            if new_quantity == 0:
+                # Delete if quantity becomes 0
+                self.client.table("warehouse_stock").delete().eq("warehouse_id", warehouse_id).eq("product_id", product_id).execute()
+                return None
+            else:
+                # Update
+                update_result = self.client.table("warehouse_stock").update({
+                    "total_quantity": new_quantity,
+                    "last_updated": datetime.now().isoformat()
+                }).eq("warehouse_id", warehouse_id).eq("product_id", product_id).execute()
+                return update_result.data[0] if update_result.data else None
+        else:
+            # Create new entry if quantity > 0
+            if quantity_change > 0:
+                warehouse = self.get_warehouse(warehouse_id)
+                product = self.get_product(product_id)
+                insert_result = self.client.table("warehouse_stock").insert({
+                    "warehouse_id": warehouse_id,
+                    "product_id": product_id,
+                    "total_quantity": quantity_change,
+                    "last_updated": datetime.now().isoformat()
+                }).execute()
+                return insert_result.data[0] if insert_result.data else None
+        return None
+    
+    def delete_warehouse(self, warehouse_id: str) -> bool:
+        """Delete warehouse with stock check"""
+        stock_count = self.get_warehouse_stock_count(warehouse_id)
+        if stock_count > 0:
+            raise ValueError(f"Cannot delete warehouse. It contains {stock_count} items. Please transfer or remove stock first.")
+        self.client.table("warehouses").delete().eq("id", warehouse_id).execute()
+        return True
+    
     def get_purchases(self) -> List[dict]:
         # Order by created_at descending to show latest first
         result = self.client.table("purchases").select("*").order("created_at", desc=True).execute()
@@ -185,11 +289,27 @@ class SupabaseDatabase:
         purchase_id = str(uuid.uuid4())
         total_amount = sum(item["quantity"] * item["unit_price"] for item in items)
         
+        # Get warehouse info if provided
+        warehouse_id = data.get("warehouse_id")
+        warehouse_name = None
+        if warehouse_id:
+            warehouse = self.get_warehouse(warehouse_id)
+            if warehouse:
+                warehouse_name = warehouse.get("name")
+            else:
+                # Fallback to default if warehouse not found
+                default_warehouse = self.client.table("warehouses").select("*").eq("name", "Main Warehouse").limit(1).execute()
+                if default_warehouse.data:
+                    warehouse_id = default_warehouse.data[0]["id"]
+                    warehouse_name = "Main Warehouse"
+        
         # Create purchase record
         purchase_data = {
             "id": purchase_id,
             "supplier_name": data["supplier_name"],
             "invoice_number": data["invoice_number"],
+            "warehouse_id": warehouse_id,
+            "warehouse_name": warehouse_name or "Main Warehouse",
             "total_amount": total_amount,
             "notes": data.get("notes"),
             "created_at": datetime.now().isoformat()
@@ -207,15 +327,20 @@ class SupabaseDatabase:
             if not product:
                 continue
             
-            # Create batch
+            # Create batch with warehouse_id
             batch_data = {
                 "product_id": item["product_id"],
                 "batch_number": item["batch_number"],
                 "expiry_date": item["expiry_date"] if isinstance(item["expiry_date"], str) else item["expiry_date"].isoformat(),
                 "quantity": item["quantity"],
-                "purchase_price": item["unit_price"]
+                "purchase_price": item["unit_price"],
+                "warehouse_id": warehouse_id  # Link batch to warehouse
             }
             batch = self.create_batch(batch_data)
+            
+            # Update warehouse_stock summary
+            if warehouse_id and batch:
+                self.update_warehouse_stock(warehouse_id, item["product_id"], item["quantity"])
             
             # Create purchase item
             item_total = item["quantity"] * item["unit_price"]

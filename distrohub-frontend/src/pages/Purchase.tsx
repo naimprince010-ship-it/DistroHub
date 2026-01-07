@@ -52,8 +52,15 @@ interface Purchase {
   items: PurchaseItem[];
 }
 
-const warehouses = ['Main Warehouse', 'Godown 1', 'Godown 2', 'Shop Floor'];
 const suppliers = ['Akij Food & Beverage Ltd.', 'Pran Foods Ltd.', 'Square Food Ltd.', 'ACI Foods Ltd.', 'Nestle Bangladesh'];
+
+interface Warehouse {
+  id: string;
+  name: string;
+  address: string | null;
+  is_active: boolean;
+  created_at: string;
+}
 
 interface ProductCatalogItem {
   id: string;
@@ -399,9 +406,12 @@ export function Purchase() {
               console.log('[Purchase] Creating purchase:', purchase);
               
               // Map frontend Purchase to backend PurchaseCreate format
+              // Get warehouse_id from the purchase object (stored in formData)
+              const warehouseId = (purchase as any).warehouse_id || warehouses.find(w => w.name === purchase.warehouse)?.id;
               const purchasePayload = {
                 supplier_name: purchase.supplier_name,
                 invoice_number: purchase.invoice_number,
+                warehouse_id: warehouseId,
                 items: purchase.items.map(item => ({
                   product_id: item.product_id,
                   batch_number: item.batch,
@@ -438,7 +448,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
   const [formData, setFormData] = useState({
     supplier_name: suppliers[0],
     supplier_invoice: '',
-    warehouse: warehouses[0],
+    warehouse_id: '',
     purchase_date: new Date().toISOString().split('T')[0],
     discount_type: 'percent' as 'percent' | 'fixed',
     discount_value: 0,
@@ -452,8 +462,26 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
   const [errors, setErrors] = useState<ValidationError>({});
   const [productCatalog, setProductCatalog] = useState<ProductCatalogItem[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Fetch warehouses from API
+  useEffect(() => {
+    const fetchWarehouses = async () => {
+      try {
+        const response = await api.get('/api/warehouses');
+        const activeWarehouses = (response.data || []).filter((w: Warehouse) => w.is_active);
+        setWarehouses(activeWarehouses);
+        if (activeWarehouses.length > 0 && !formData.warehouse_id) {
+          setFormData(prev => ({ ...prev, warehouse_id: activeWarehouses[0].id }));
+        }
+      } catch (error) {
+        console.error('Error fetching warehouses:', error);
+      }
+    };
+    fetchWarehouses();
+  }, []);
 
   // Fetch products from API
   const fetchProducts = async () => {
@@ -628,12 +656,13 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
     
     if (!validateForm()) return;
     
-    const purchase: Purchase = {
+    const purchase: Purchase & { warehouse_id?: string } = {
       id: '',
       invoice_number: `PUR-${Date.now()}`,
       supplier_invoice: formData.supplier_invoice,
       supplier_name: formData.supplier_name,
-      warehouse: formData.warehouse,
+      warehouse: warehouses.find(w => w.id === formData.warehouse_id)?.name || 'Main Warehouse',
+      warehouse_id: formData.warehouse_id, // Include warehouse_id for API call
       purchase_date: formData.purchase_date,
       sub_total: subTotal,
       discount_type: formData.discount_type,
@@ -720,14 +749,18 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                 Warehouse<RequiredMark />
               </label>
               <select
-                value={formData.warehouse}
-                onChange={(e) => setFormData({ ...formData, warehouse: e.target.value })}
-                className="input-field w-full"
+                value={formData.warehouse_id}
+                onChange={(e) => setFormData({ ...formData, warehouse_id: e.target.value })}
+                className="input-field w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                 required
               >
-                {warehouses.map(w => (
-                  <option key={w} value={w}>{w}</option>
-                ))}
+                {warehouses.length === 0 ? (
+                  <option value="">Loading warehouses...</option>
+                ) : (
+                  warehouses.map(w => (
+                    <option key={w.id} value={w.id}>{w.name}</option>
+                  ))
+                )}
               </select>
             </div>
             <div>

@@ -26,3 +26,6 @@ CREATE POLICY "Allow all to insert SMS settings" ON sms_settings
 -- Verify policies are created
 -- SELECT * FROM pg_policies WHERE tablename = 'sms_settings';
 
+
+
+

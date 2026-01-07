@@ -24,3 +24,4 @@ CREATE POLICY "Allow service role to update SMS settings" ON sms_settings
 CREATE POLICY "Allow service role to insert SMS settings" ON sms_settings
     FOR INSERT WITH CHECK (true);
 
+

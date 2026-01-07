@@ -69,6 +69,7 @@ class ProductBatch(BaseModel):
     expiry_date: date
     quantity: int
     purchase_price: float
+    warehouse_id: Optional[str] = None
     created_at: datetime
 
 class ProductBatchCreate(BaseModel):
@@ -104,6 +105,7 @@ class PurchaseItemCreate(BaseModel):
 class PurchaseCreate(BaseModel):
     supplier_name: str
     invoice_number: str
+    warehouse_id: Optional[str] = None  # Warehouse where stock will be added
     items: List[PurchaseItemCreate]
     notes: Optional[str] = None
 
@@ -272,6 +274,28 @@ class InventoryItem(BaseModel):
     category: str
     total_stock: int
     batches: List[ProductBatch]
+
+class WarehouseCreate(BaseModel):
+    """Create warehouse request"""
+    name: str
+    address: Optional[str] = None
+    is_active: bool = True
+
+class Warehouse(BaseModel):
+    """Warehouse model"""
+    id: str
+    name: str
+    address: Optional[str] = None
+    is_active: bool
+    created_at: datetime
+
+class WarehouseStockSummary(BaseModel):
+    """Stock summary per product per warehouse"""
+    warehouse_id: str
+    warehouse_name: str
+    product_id: str
+    product_name: str
+    total_quantity: int
 
 class ExpiryAlert(BaseModel):
     id: str
