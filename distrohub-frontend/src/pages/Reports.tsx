@@ -5,6 +5,10 @@ import {
   Calendar,
   Filter,
   Search,
+  FileText,
+  Printer,
+  X,
+  Eye,
 } from 'lucide-react';
 import api from '@/lib/api';
 
@@ -25,6 +29,9 @@ interface SaleReport extends Sale {
   net_total: number;
   has_returns: boolean;
   return_count: number;
+  total_items: number;
+  returned_qty: number;
+  net_items: number;
 }
 
 interface SaleReturnReport {
@@ -46,6 +53,9 @@ interface SalesReportSummary {
   return_rate: number;
   total_sales: number;
   sales_with_returns: number;
+  total_items: number;
+  total_returned_items: number;
+  total_net_items: number;
 }
 
 interface Purchase {
@@ -100,6 +110,11 @@ export function Reports() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Array<{ id: string; name: string; category: string }>>([]);
+  
+  // UI State
+  const [selectedInvoice, setSelectedInvoice] = useState<SaleReport | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 50;
 
   // Fetch categories and products for filter
   useEffect(() => {
@@ -243,13 +258,35 @@ export function Reports() {
     return matchesCategory && matchesProduct;
   });
 
+  // Helper function to format date as DD/MM/YYYY
+  const formatDate = (dateString: string): string => {
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
+
+  // Pagination for sales report
+  const totalPages = Math.ceil(filteredSalesReport.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedSalesReport = filteredSalesReport.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeReport, startDate, endDate, categoryFilter, productSearch]);
+
   // Calculate totals for sales report (use summary from API if available, otherwise calculate)
   const salesTotal = salesReportSummary?.total_gross ?? filteredSalesReport.reduce((sum, s) => sum + (s.gross_total || s.total_amount), 0);
   const salesReturnsTotal = salesReportSummary?.total_returns ?? filteredSalesReport.reduce((sum, s) => sum + (s.returned_total || 0), 0);
   const salesNetTotal = salesReportSummary?.total_net ?? filteredSalesReport.reduce((sum, s) => sum + (s.net_total || s.total_amount), 0);
   const salesPaid = filteredSalesReport.reduce((sum, s) => sum + s.paid_amount, 0);
   const salesDue = filteredSalesReport.reduce((sum, s) => sum + s.due_amount, 0);
-  const salesItems = filteredSalesReport.reduce((sum, s) => sum + s.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0);
+  const salesItems = salesReportSummary?.total_items ?? filteredSalesReport.reduce((sum, s) => sum + (s.total_items || s.items.reduce((itemSum, item) => itemSum + item.quantity, 0)), 0);
+  const salesReturnedItems = salesReportSummary?.total_returned_items ?? filteredSalesReport.reduce((sum, s) => sum + (s.returned_qty || 0), 0);
+  const salesNetItems = salesReportSummary?.total_net_items ?? filteredSalesReport.reduce((sum, s) => sum + (s.net_items || s.items.reduce((itemSum, item) => itemSum + item.quantity, 0)), 0);
   const returnRate = salesReportSummary?.return_rate ?? (salesTotal > 0 ? (salesReturnsTotal / salesTotal * 100) : 0);
 
   // Calculate totals for sales returns
@@ -264,6 +301,96 @@ export function Reports() {
   const stockTotal = filteredInventory.reduce((sum, i) => sum + i.total_stock, 0);
   const stockProducts = filteredInventory.length;
 
+  // Export to PDF
+  const exportToPDF = () => {
+    // Simple PDF generation using window.print with CSS
+    // For production, consider using jsPDF or similar library
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) return;
+    
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Sales Report - ${startDate} to ${endDate}</title>
+          <style>
+            body { font-family: Arial, sans-serif; padding: 20px; }
+            h1 { text-align: center; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: right; }
+            th { background-color: #f2f2f2; text-align: center; }
+            .text-left { text-align: left; }
+            @media print {
+              @page { size: A4 landscape; margin: 1cm; }
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Sales Report</h1>
+          <p><strong>Period:</strong> ${formatDate(startDate)} to ${formatDate(endDate)}</p>
+          <table>
+            <thead>
+              <tr>
+                <th class="text-left">Date</th>
+                <th class="text-left">Invoice</th>
+                <th class="text-left">Retailer</th>
+                <th>Gross</th>
+                <th>Returns</th>
+                <th>Net</th>
+                <th>Paid</th>
+                <th>Due</th>
+                <th>Items</th>
+                <th>Returned</th>
+                <th>Net Items</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filteredSalesReport.map(sale => {
+                const gross = sale.gross_total || sale.total_amount;
+                const returned = sale.returned_total || 0;
+                const net = sale.net_total || gross;
+                const totalItems = sale.total_items || sale.items.reduce((sum, item) => sum + item.quantity, 0);
+                const returnedQty = sale.returned_qty || 0;
+                const netItems = sale.net_items || totalItems;
+                return `
+                  <tr>
+                    <td class="text-left">${formatDate(sale.created_at)}</td>
+                    <td class="text-left">${sale.invoice_number}</td>
+                    <td class="text-left">${sale.retailer_name}</td>
+                    <td>৳${gross.toLocaleString()}</td>
+                    <td>৳${returned.toLocaleString()}</td>
+                    <td>৳${net.toLocaleString()}</td>
+                    <td>৳${sale.paid_amount.toLocaleString()}</td>
+                    <td>৳${sale.due_amount.toLocaleString()}</td>
+                    <td>${totalItems}</td>
+                    <td>${returnedQty}</td>
+                    <td>${netItems}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+            <tfoot>
+              <tr style="font-weight: bold;">
+                <td colspan="3" class="text-left">Totals:</td>
+                <td>৳${salesTotal.toLocaleString()}</td>
+                <td>৳${salesReturnsTotal.toLocaleString()}</td>
+                <td>৳${salesNetTotal.toLocaleString()}</td>
+                <td>৳${salesPaid.toLocaleString()}</td>
+                <td>৳${salesDue.toLocaleString()}</td>
+                <td>${salesItems}</td>
+                <td>${salesReturnedItems}</td>
+                <td>${salesNetItems}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </body>
+      </html>
+    `;
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
   // Export to CSV
   const exportToCSV = () => {
     let csvContent = '';
@@ -271,13 +398,16 @@ export function Reports() {
 
     if (activeReport === 'sales') {
       filename = `sales-report-${startDate}-to-${endDate}.csv`;
-      csvContent = 'Date,Invoice,Retailer,Gross Sales,Returns,Net Sales,Paid,Due\n';
+      csvContent = 'Date,Invoice,Retailer,Gross Sales,Returns,Net Sales,Paid,Due,Items,Returned Qty,Net Items\n';
       filteredSalesReport.forEach((sale) => {
-        const date = new Date(sale.created_at).toISOString().split('T')[0];
+        const date = formatDate(sale.created_at);
         const gross = sale.gross_total || sale.total_amount;
         const returned = sale.returned_total || 0;
         const net = sale.net_total || gross;
-        csvContent += `${date},${sale.invoice_number},${sale.retailer_name},${gross},${returned},${net},${sale.paid_amount},${sale.due_amount}\n`;
+        const totalItems = sale.total_items || sale.items.reduce((sum, item) => sum + item.quantity, 0);
+        const returnedQty = sale.returned_qty || 0;
+        const netItems = sale.net_items || totalItems;
+        csvContent += `${date},${sale.invoice_number},${sale.retailer_name},${gross},${returned},${net},${sale.paid_amount},${sale.due_amount},${totalItems},${returnedQty},${netItems}\n`;
       });
     } else if (activeReport === 'sales-returns') {
       filename = `sales-returns-report-${startDate}-to-${endDate}.csv`;
@@ -424,6 +554,24 @@ export function Reports() {
               <Download className="w-4 h-4" />
               Export CSV
             </button>
+            {activeReport === 'sales' && (
+              <>
+                <button
+                  onClick={() => exportToPDF()}
+                  className="btn-secondary flex items-center gap-2"
+                >
+                  <FileText className="w-4 h-4" />
+                  Export PDF
+                </button>
+                <button
+                  onClick={() => window.print()}
+                  className="btn-secondary flex items-center gap-2"
+                >
+                  <Printer className="w-4 h-4" />
+                  Print
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -433,14 +581,17 @@ export function Reports() {
             <div className="bg-white rounded-xl p-3 shadow-sm">
               <p className="text-slate-500 text-sm">Gross Sales</p>
               <p className="text-2xl font-bold text-green-600">৳ {salesTotal.toLocaleString()}</p>
+              <p className="text-xs text-slate-400 mt-1">{salesItems} items</p>
             </div>
             <div className="bg-white rounded-xl p-3 shadow-sm">
               <p className="text-slate-500 text-sm">Returns</p>
               <p className="text-2xl font-bold text-red-600">৳ {salesReturnsTotal.toLocaleString()}</p>
+              <p className="text-xs text-slate-400 mt-1">({salesReturnedItems} items)</p>
             </div>
             <div className="bg-white rounded-xl p-3 shadow-sm">
               <p className="text-slate-500 text-sm">Net Sales</p>
               <p className="text-2xl font-bold text-blue-600">৳ {salesNetTotal.toLocaleString()}</p>
+              <p className="text-xs text-slate-400 mt-1">{salesNetItems} items</p>
             </div>
             <div className="bg-white rounded-xl p-3 shadow-sm">
               <p className="text-slate-500 text-sm">Return Rate</p>
@@ -515,20 +666,36 @@ export function Reports() {
                     <th className="text-right p-2 font-semibold text-slate-700">Net</th>
                     <th className="text-right p-2 font-semibold text-slate-700">Paid</th>
                     <th className="text-right p-2 font-semibold text-slate-700">Due</th>
-                    <th className="text-center p-2 font-semibold text-slate-700">Items</th>
+                    <th className="text-right p-2 font-semibold text-slate-700">Items</th>
+                    <th className="text-right p-2 font-semibold text-slate-700">Returned Qty</th>
+                    <th className="text-right p-2 font-semibold text-slate-700">Net Items</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {filteredSalesReport.map((sale) => {
+                  {paginatedSalesReport.map((sale, index) => {
                     const gross = sale.gross_total || sale.total_amount;
                     const returned = sale.returned_total || 0;
                     const net = sale.net_total || gross;
+                    const totalItems = sale.total_items || sale.items.reduce((sum, item) => sum + item.quantity, 0);
+                    const returnedQty = sale.returned_qty || 0;
+                    const netItems = sale.net_items || totalItems;
                     return (
-                      <tr key={sale.id} className="hover:bg-slate-50 transition-colors">
+                      <tr 
+                        key={sale.id} 
+                        className={`hover:bg-slate-50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}
+                      >
                         <td className="p-2 text-slate-600">
-                          {new Date(sale.created_at).toLocaleDateString()}
+                          {formatDate(sale.created_at)}
                         </td>
-                        <td className="p-2 font-medium text-primary-600">{sale.invoice_number}</td>
+                        <td className="p-2">
+                          <button
+                            onClick={() => setSelectedInvoice(sale)}
+                            className="font-medium text-primary-600 hover:text-primary-700 hover:underline cursor-pointer flex items-center gap-1"
+                          >
+                            <Eye className="w-3 h-3" />
+                            {sale.invoice_number}
+                          </button>
+                        </td>
                         <td className="p-2 text-slate-900">{sale.retailer_name}</td>
                         <td className="p-2 text-right font-semibold text-slate-900">
                           ৳ {gross.toLocaleString()}
@@ -545,8 +712,14 @@ export function Reports() {
                         <td className="p-2 text-right font-semibold text-red-600">
                           ৳ {sale.due_amount.toLocaleString()}
                         </td>
-                        <td className="p-2 text-center text-slate-600">
-                          {sale.items.reduce((sum, item) => sum + item.quantity, 0)}
+                        <td className="p-2 text-right text-slate-600">
+                          {totalItems}
+                        </td>
+                        <td className={`p-2 text-right ${returnedQty > 0 ? 'text-red-600 font-semibold' : 'text-slate-400'}`}>
+                          {returnedQty}
+                        </td>
+                        <td className="p-2 text-right text-blue-600 font-semibold">
+                          {netItems}
                         </td>
                       </tr>
                     );
@@ -572,13 +745,46 @@ export function Reports() {
                     <td className="p-2 text-right font-bold text-red-600">
                       ৳ {salesDue.toLocaleString()}
                     </td>
-                    <td className="p-2 text-center font-bold text-slate-900">
+                    <td className="p-2 text-right font-bold text-slate-900">
                       {salesItems}
+                    </td>
+                    <td className="p-2 text-right font-bold text-red-600">
+                      {salesReturnedItems}
+                    </td>
+                    <td className="p-2 text-right font-bold text-blue-600">
+                      {salesNetItems}
                     </td>
                   </tr>
                 </tfoot>
               </table>
             </div>
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="p-3 border-t border-slate-200 flex items-center justify-between">
+                <div className="text-sm text-slate-600">
+                  Showing {startIndex + 1} to {Math.min(endIndex, filteredSalesReport.length)} of {filteredSalesReport.length} invoices
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 text-sm border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Previous
+                  </button>
+                  <span className="text-sm text-slate-600">
+                    Page {currentPage} of {totalPages}
+                  </span>
+                  <button
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1 text-sm border border-slate-300 rounded hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
             {filteredSalesReport.length === 0 && (
               <div className="p-8 text-center text-slate-500">
                 No sales found for the selected filters.
@@ -757,6 +963,120 @@ export function Reports() {
           </div>
         )}
       </div>
+
+      {/* Invoice Details Modal */}
+      {selectedInvoice && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b border-slate-200 p-4 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-slate-900">Invoice Details - {selectedInvoice.invoice_number}</h2>
+              <button
+                onClick={() => setSelectedInvoice(null)}
+                className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-slate-600" />
+              </button>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div>
+                  <p className="text-sm text-slate-500">Retailer</p>
+                  <p className="font-semibold text-slate-900">{selectedInvoice.retailer_name}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-slate-500">Date</p>
+                  <p className="font-semibold text-slate-900">{formatDate(selectedInvoice.created_at)}</p>
+                </div>
+              </div>
+
+              <div className="mb-6">
+                <h3 className="font-semibold text-slate-900 mb-3">Items</h3>
+                <table className="w-full">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="text-left p-2 font-semibold text-slate-700">Product</th>
+                      <th className="text-right p-2 font-semibold text-slate-700">Qty</th>
+                      <th className="text-right p-2 font-semibold text-slate-700">Unit Price</th>
+                      <th className="text-right p-2 font-semibold text-slate-700">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {selectedInvoice.items.map((item, idx) => (
+                      <tr key={idx} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+                        <td className="p-2 text-slate-900">{item.product_name}</td>
+                        <td className="p-2 text-right text-slate-600">{item.quantity}</td>
+                        <td className="p-2 text-right text-slate-600">৳ {item.unit_price.toLocaleString()}</td>
+                        <td className="p-2 text-right font-semibold text-slate-900">৳ {item.total.toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="border-t border-slate-200 pt-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-slate-500">Gross Total</p>
+                    <p className="text-lg font-bold text-green-600">
+                      ৳ {(selectedInvoice.gross_total || selectedInvoice.total_amount).toLocaleString()}
+                    </p>
+                  </div>
+                  {selectedInvoice.returned_total > 0 && (
+                    <>
+                      <div>
+                        <p className="text-sm text-slate-500">Returns</p>
+                        <p className="text-lg font-bold text-red-600">
+                          ৳ {selectedInvoice.returned_total.toLocaleString()}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-slate-500">Net Total</p>
+                        <p className="text-lg font-bold text-blue-600">
+                          ৳ {selectedInvoice.net_total.toLocaleString()}
+                        </p>
+                      </div>
+                    </>
+                  )}
+                  <div>
+                    <p className="text-sm text-slate-500">Paid</p>
+                    <p className="text-lg font-bold text-green-600">
+                      ৳ {selectedInvoice.paid_amount.toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500">Due</p>
+                    <p className="text-lg font-bold text-red-600">
+                      ৳ {selectedInvoice.due_amount.toLocaleString()}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-slate-500">Total Items</p>
+                    <p className="text-lg font-bold text-slate-900">
+                      {(selectedInvoice.total_items || selectedInvoice.items.reduce((sum, item) => sum + item.quantity, 0))}
+                    </p>
+                  </div>
+                  {(selectedInvoice.returned_qty || 0) > 0 && (
+                    <>
+                      <div>
+                        <p className="text-sm text-slate-500">Returned Items</p>
+                        <p className="text-lg font-bold text-red-600">
+                          {selectedInvoice.returned_qty || 0}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-slate-500">Net Items</p>
+                        <p className="text-lg font-bold text-blue-600">
+                          {selectedInvoice.net_items || (selectedInvoice.total_items || selectedInvoice.items.reduce((sum, item) => sum + item.quantity, 0))}
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
