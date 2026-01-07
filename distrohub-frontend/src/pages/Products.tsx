@@ -494,7 +494,7 @@ export function Products() {
                         fetchCategoriesAndSuppliers();
                         setShowAddModal(true);
                       }}
-                      className="btn-primary flex items-center gap-2"
+                      className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-2 shadow-sm hover:shadow-md"
                     >
                       <Plus className="w-4 h-4" />
                       Add Product
@@ -888,7 +888,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, onRefre
                     setFormData({ ...formData, name: e.target.value });
                     validateField('name', e.target.value);
                   }}
-                  className={`input-field w-full ${errors.name ? 'border-red-500 focus:ring-red-500' : ''}`}
+                  className={`input-field w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${errors.name ? 'border-red-500 focus:ring-red-500' : ''}`}
                   required
                 />
                 {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
@@ -902,7 +902,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, onRefre
                     type="text"
                     value={formData.sku}
                     onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                    className="input-field flex-1"
+                    className="input-field flex-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                     required
                   />
                   <button
@@ -927,7 +927,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, onRefre
                   type="text"
                   value={formData.barcode}
                   onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                  className="input-field flex-1"
+                  className="input-field flex-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                   placeholder="Scan or enter barcode"
                 />
                 <BarcodeScanButton onScan={handleBarcodeScan} />
@@ -940,7 +940,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, onRefre
               <select
                 value={formData.category}
                 onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="input-field w-full"
+                className="input-field w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                 required
               >
                 <option value="">Select Category</option>
@@ -958,7 +958,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, onRefre
               <select
                 value={formData.unit}
                 onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                className="input-field w-full"
+                className="input-field w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
               >
                 <option value="Pack">Pack</option>
                 <option value="Bag">Bag</option>
@@ -973,7 +973,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, onRefre
                 type="number"
                 value={formData.pack_size}
                 onChange={(e) => setFormData({ ...formData, pack_size: Number(e.target.value) })}
-                className="input-field w-full"
+                className="input-field w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                 min="1"
               />
             </div>
@@ -983,7 +983,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, onRefre
                 type="number"
                 value={formData.pieces_per_carton}
                 onChange={(e) => setFormData({ ...formData, pieces_per_carton: Number(e.target.value) })}
-                className="input-field w-full"
+                className="input-field w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                 min="1"
                 placeholder="e.g., 12"
               />
@@ -1164,7 +1164,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, onRefre
                 Add & Add Another
               </button>
             )}
-            <button type="submit" className="btn-primary">
+            <button type="submit" className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md">
               {product ? 'Update Product' : 'Add Product'}
             </button>
           </div>
