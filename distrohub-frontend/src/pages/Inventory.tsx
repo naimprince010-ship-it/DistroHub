@@ -645,8 +645,10 @@ export function Inventory() {
 
   useEffect(() => {
     const urlTab = searchParams.get('tab') || 'stock';
-    setActiveTab(urlTab);
-  }, [searchParams]);
+    if (urlTab !== activeTab) {
+      setActiveTab(urlTab);
+    }
+  }, [searchParams, activeTab]);
 
   const tabs = [
     { id: 'stock', label: 'Stock Overview', icon: Package },
@@ -654,8 +656,10 @@ export function Inventory() {
   ];
 
   const handleTabChange = (tabId: string) => {
-    setActiveTab(tabId);
-    setSearchParams({ tab: tabId });
+    if (tabId !== activeTab) {
+      setActiveTab(tabId);
+      setSearchParams({ tab: tabId }, { replace: true });
+    }
   };
 
   return (
