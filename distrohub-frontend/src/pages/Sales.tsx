@@ -10,6 +10,7 @@ import {
   Clock,
   XCircle,
   FileText,
+  Edit,
 } from 'lucide-react';
 import { InvoicePrint } from '@/components/print/InvoicePrint';
 import { ChallanPrint } from '@/components/print/ChallanPrint';
@@ -50,6 +51,7 @@ export function Sales() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
+  const [editOrder, setEditOrder] = useState<SalesOrder | null>(null);
   const [printInvoiceOrder, setPrintInvoiceOrder] = useState<SalesOrder | null>(null);
   const [printChallanOrder, setPrintChallanOrder] = useState<SalesOrder | null>(null);
 
@@ -301,7 +303,27 @@ export function Sales() {
 
       {/* Order Details Modal */}
       {selectedOrder && (
-        <OrderDetailsModal order={selectedOrder} onClose={() => setSelectedOrder(null)} />
+        <OrderDetailsModal 
+          order={selectedOrder} 
+          onClose={() => setSelectedOrder(null)}
+          onEdit={() => {
+            setEditOrder(selectedOrder);
+            setSelectedOrder(null);
+          }}
+          onRefresh={fetchSales}
+        />
+      )}
+
+      {/* Edit Order Modal */}
+      {editOrder && (
+        <EditSaleModal
+          order={editOrder}
+          onClose={() => setEditOrder(null)}
+          onSave={async () => {
+            await fetchSales();
+            setEditOrder(null);
+          }}
+        />
       )}
 
       {/* Add Order Modal */}
@@ -446,7 +468,17 @@ export function Sales() {
   );
 }
 
-function OrderDetailsModal({ order, onClose }: { order: SalesOrder; onClose: () => void }) {
+function OrderDetailsModal({ 
+  order, 
+  onClose, 
+  onEdit,
+  onRefresh 
+}: { 
+  order: SalesOrder; 
+  onClose: () => void;
+  onEdit: () => void;
+  onRefresh: () => void;
+}) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
@@ -529,6 +561,13 @@ function OrderDetailsModal({ order, onClose }: { order: SalesOrder; onClose: () 
         </div>
 
         <div className="p-3 border-t border-slate-200 flex justify-end gap-2">
+          <button 
+            onClick={onEdit}
+            className="btn-secondary flex items-center gap-2"
+          >
+            <Edit className="w-4 h-4" />
+            Edit Payment
+          </button>
           <button className="btn-secondary flex items-center gap-2">
             <Printer className="w-4 h-4" />
             Print Challan
@@ -537,6 +576,178 @@ function OrderDetailsModal({ order, onClose }: { order: SalesOrder; onClose: () 
             Close
           </button>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function EditSaleModal({ 
+  order, 
+  onClose, 
+  onSave 
+}: { 
+  order: SalesOrder; 
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  const [formData, setFormData] = useState({
+    paid_amount: order.paid_amount,
+    delivery_status: 'pending',
+    notes: '',
+  });
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      const updatePayload: any = {
+        paid_amount: formData.paid_amount,
+      };
+
+      // Auto-calculate due amount (will be done by backend, but we show it)
+      const calculatedDue = Math.max(0, order.total_amount - formData.paid_amount);
+
+      // Update delivery status if needed
+      if (formData.delivery_status !== 'pending') {
+        updatePayload.delivery_status = formData.delivery_status;
+      }
+
+      if (formData.notes) {
+        updatePayload.notes = formData.notes;
+      }
+
+      console.log('[EditSaleModal] Updating sale:', order.id, updatePayload);
+      await api.put(`/api/sales/${order.id}`, updatePayload);
+      console.log('[EditSaleModal] Sale updated successfully');
+
+      alert('Payment updated successfully!');
+      onSave();
+    } catch (error: any) {
+      console.error('[EditSaleModal] Error updating sale:', error);
+      alert(`Failed to update payment: ${error.response?.data?.detail || error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const calculatedDue = Math.max(0, order.total_amount - formData.paid_amount);
+  const calculatedPaymentStatus = 
+    calculatedDue === 0 ? 'paid' : 
+    formData.paid_amount > 0 ? 'partial' : 
+    'unpaid';
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
+        <div className="p-3 border-b border-slate-200">
+          <h2 className="text-xl font-semibold text-slate-900">Update Payment</h2>
+          <p className="text-slate-500">{order.order_number} - {order.retailer_name}</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-3 space-y-3">
+          <div className="bg-slate-50 rounded-lg p-3">
+            <div className="flex justify-between mb-2">
+              <span className="text-slate-600">Total Amount</span>
+              <span className="font-semibold text-slate-900">৳ {order.total_amount.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between mb-2">
+              <span className="text-slate-600">Current Paid</span>
+              <span className="font-semibold text-green-600">৳ {order.paid_amount.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between pt-2 border-t border-slate-200">
+              <span className="text-slate-900 font-medium">Current Due</span>
+              <span className="font-bold text-red-600">
+                ৳ {(order.total_amount - order.paid_amount).toLocaleString()}
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Paid Amount (৳)
+            </label>
+            <input
+              type="number"
+              value={formData.paid_amount}
+              onChange={(e) => setFormData({ ...formData, paid_amount: Number(e.target.value) })}
+              className="input-field"
+              min={0}
+              max={order.total_amount}
+              step="0.01"
+              required
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Enter the total amount paid (including previous payments)
+            </p>
+          </div>
+
+          <div className="bg-blue-50 rounded-lg p-2">
+            <div className="flex justify-between mb-1">
+              <span className="text-sm text-slate-600">New Due Amount</span>
+              <span className="font-semibold text-red-600">৳ {calculatedDue.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-sm text-slate-600">Payment Status</span>
+              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                calculatedPaymentStatus === 'paid' ? 'bg-green-100 text-green-700' :
+                calculatedPaymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-700' :
+                'bg-red-100 text-red-700'
+              }`}>
+                {calculatedPaymentStatus === 'paid' ? 'Paid' :
+                 calculatedPaymentStatus === 'partial' ? 'Partial' : 'Unpaid'}
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Delivery Status
+            </label>
+            <select
+              value={formData.delivery_status}
+              onChange={(e) => setFormData({ ...formData, delivery_status: e.target.value })}
+              className="input-field"
+            >
+              <option value="pending">Pending</option>
+              <option value="delivered">Delivered</option>
+              <option value="partially_delivered">Partially Delivered</option>
+              <option value="returned">Returned</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Notes (Optional)
+            </label>
+            <textarea
+              value={formData.notes}
+              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+              className="input-field"
+              rows={2}
+              placeholder="Add any notes about this update..."
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button 
+              type="button" 
+              onClick={onClose} 
+              className="btn-secondary"
+              disabled={loading}
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit" 
+              className="btn-primary flex items-center gap-2"
+              disabled={loading}
+            >
+              {loading ? 'Updating...' : 'Update Payment'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );
