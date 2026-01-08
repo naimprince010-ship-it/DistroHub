@@ -310,7 +310,6 @@ export function Sales() {
             setEditOrder(selectedOrder);
             setSelectedOrder(null);
           }}
-          onRefresh={fetchSales}
         />
       )}
 
@@ -471,13 +470,11 @@ export function Sales() {
 function OrderDetailsModal({ 
   order, 
   onClose, 
-  onEdit,
-  onRefresh 
+  onEdit
 }: { 
   order: SalesOrder; 
   onClose: () => void;
   onEdit: () => void;
-  onRefresh: () => void;
 }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -605,9 +602,6 @@ function EditSaleModal({
       const updatePayload: any = {
         paid_amount: formData.paid_amount,
       };
-
-      // Auto-calculate due amount (will be done by backend, but we show it)
-      const calculatedDue = Math.max(0, order.total_amount - formData.paid_amount);
 
       // Update delivery status if needed
       if (formData.delivery_status !== 'pending') {
