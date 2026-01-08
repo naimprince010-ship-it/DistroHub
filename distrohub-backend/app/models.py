@@ -170,6 +170,15 @@ class Sale(BaseModel):
     notes: Optional[str] = None
     created_at: datetime
 
+class SaleUpdate(BaseModel):
+    """Update sale invoice manually (admin only)"""
+    delivery_status: Optional[str] = None
+    paid_amount: Optional[float] = None
+    due_amount: Optional[float] = None
+    payment_status: Optional[PaymentStatus] = None
+    delivered_at: Optional[datetime] = None
+    notes: Optional[str] = None
+
 class PaymentCreate(BaseModel):
     retailer_id: str
     sale_id: Optional[str] = None

@@ -28,7 +28,8 @@ from app.models import (
     SmsEventType, SmsDeliveryMode, SmsStatus,
     SaleReturnCreate, SaleReturn, RefundType,
     SaleReport, SaleReturnReport, SalesReportSummary,
-    WarehouseCreate, Warehouse, WarehouseStockSummary
+    WarehouseCreate, Warehouse, WarehouseStockSummary,
+    SaleUpdate
 )
 from app.database import db
 from app.auth import create_access_token, get_current_user
@@ -650,6 +651,76 @@ async def get_sale(sale_id: str, current_user: dict = Depends(get_current_user))
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found")
     return Sale(**sale)
+
+@app.put("/api/sales/{sale_id}", response_model=Sale)
+async def update_sale(
+    sale_id: str, 
+    sale_update: SaleUpdate, 
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Update sale invoice manually (admin only).
+    
+    Allows updating:
+    - delivery_status: Delivery status (pending, delivered, partially_delivered, returned)
+    - paid_amount: Paid amount (will auto-calculate due_amount and payment_status)
+    - due_amount: Due amount (optional, if not provided, calculated from paid_amount)
+    - payment_status: Payment status (optional, if not provided, auto-calculated)
+    - delivered_at: Delivery timestamp (optional)
+    - notes: Additional notes (optional)
+    
+    Auto-calculation logic:
+    - If paid_amount is provided: due_amount = total_amount - paid_amount
+    - Payment status: "paid" if due_amount <= 0, "partial" if paid_amount > 0, "due" otherwise
+    - If delivery_status = "delivered" and delivered_at not provided: auto-set current timestamp
+    
+    Returns:
+        Sale: Updated sale record
+        
+    Raises:
+        404: Sale not found
+        400: Validation error
+        500: Server error
+    """
+    try:
+        # Verify sale exists
+        existing_sale = db.get_sale(sale_id)
+        if not existing_sale:
+            raise HTTPException(status_code=404, detail="Sale not found")
+        
+        # Prepare update data (exclude None values)
+        update_data = sale_update.model_dump(exclude_unset=True, exclude_none=True)
+        
+        # Convert datetime if needed
+        if "delivered_at" in update_data and isinstance(update_data["delivered_at"], datetime):
+            update_data["delivered_at"] = update_data["delivered_at"].isoformat()
+        
+        # Update sale
+        updated_sale = db.update_sale(sale_id, update_data)
+        if not updated_sale:
+            raise HTTPException(status_code=404, detail="Sale not found after update")
+        
+        # Fetch complete sale with items
+        complete_sale = db.get_sale(sale_id)
+        if not complete_sale:
+            raise HTTPException(status_code=404, detail="Sale not found")
+        
+        return Sale(**complete_sale)
+        
+    except HTTPException:
+        raise
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        error_msg = str(e)
+        error_type = type(e).__name__
+        print(f"[API] Error updating sale: {error_type}: {error_msg}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update sale: {error_type}: {error_msg}"
+        )
 
 @app.post("/api/sales", response_model=Sale, status_code=status.HTTP_201_CREATED)
 async def create_sale(sale_data: SaleCreate, current_user: dict = Depends(get_current_user)):

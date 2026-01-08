@@ -544,6 +544,120 @@ class SupabaseDatabase:
             return sale
         return None
     
+    def update_sale(self, sale_id: str, data: dict) -> Optional[dict]:
+        """
+        Update sale invoice manually (admin only).
+        Handles payment amount updates, delivery status, and automatic calculations.
+        
+        Args:
+            sale_id: Sale ID to update
+            data: Update data containing:
+                - delivery_status: Optional delivery status
+                - paid_amount: Optional paid amount (will auto-calculate due_amount)
+                - due_amount: Optional due amount (if not provided, calculated from paid_amount)
+                - payment_status: Optional payment status (if not provided, auto-calculated)
+                - delivered_at: Optional delivery timestamp
+                - notes: Optional notes
+        
+        Returns:
+            Updated sale record or None if not found
+        """
+        from datetime import datetime
+        
+        # Fetch current sale data
+        current_sale = self.get_sale(sale_id)
+        if not current_sale:
+            return None
+        
+        total_amount = float(current_sale.get("total_amount", 0))
+        current_paid = float(current_sale.get("paid_amount", 0))
+        current_due = float(current_sale.get("due_amount", 0))
+        retailer_id = current_sale.get("retailer_id")
+        
+        # Prepare update data
+        update_data = {}
+        paid_amount_changed = False
+        old_paid = current_paid
+        
+        # Handle paid_amount update (auto-calculate due_amount and payment_status)
+        if "paid_amount" in data and data["paid_amount"] is not None:
+            new_paid = float(data["paid_amount"])
+            if new_paid != current_paid:
+                paid_amount_changed = True
+                update_data["paid_amount"] = new_paid
+                
+                # Auto-calculate due_amount
+                new_due = max(0, total_amount - new_paid)  # Ensure non-negative
+                update_data["due_amount"] = new_due
+                
+                # Auto-calculate payment_status
+                if new_due <= 0:
+                    update_data["payment_status"] = PaymentStatus.PAID.value
+                elif new_paid > 0:
+                    update_data["payment_status"] = PaymentStatus.PARTIAL.value
+                else:
+                    update_data["payment_status"] = PaymentStatus.DUE.value
+        
+        # Handle due_amount update (if provided explicitly, override auto-calculation)
+        if "due_amount" in data and data["due_amount"] is not None:
+            new_due = max(0, float(data["due_amount"]))  # Ensure non-negative
+            update_data["due_amount"] = new_due
+            
+            # Recalculate payment_status based on due_amount
+            current_paid_for_status = update_data.get("paid_amount", current_paid)
+            if new_due <= 0:
+                update_data["payment_status"] = PaymentStatus.PAID.value
+            elif current_paid_for_status > 0:
+                update_data["payment_status"] = PaymentStatus.PARTIAL.value
+            else:
+                update_data["payment_status"] = PaymentStatus.DUE.value
+        
+        # Handle payment_status (if provided explicitly, override auto-calculation)
+        if "payment_status" in data and data["payment_status"] is not None:
+            if isinstance(data["payment_status"], PaymentStatus):
+                update_data["payment_status"] = data["payment_status"].value
+            else:
+                update_data["payment_status"] = data["payment_status"]
+        
+        # Handle delivery_status
+        if "delivery_status" in data and data["delivery_status"] is not None:
+            update_data["delivery_status"] = data["delivery_status"]
+            
+            # Auto-set delivered_at if delivery_status is "delivered" and delivered_at not provided
+            if data["delivery_status"] == "delivered" and "delivered_at" not in data:
+                if not current_sale.get("delivered_at"):
+                    update_data["delivered_at"] = datetime.now().isoformat()
+        
+        # Handle delivered_at
+        if "delivered_at" in data and data["delivered_at"] is not None:
+            if isinstance(data["delivered_at"], datetime):
+                update_data["delivered_at"] = data["delivered_at"].isoformat()
+            else:
+                update_data["delivered_at"] = data["delivered_at"]
+        
+        # Handle notes
+        if "notes" in data:
+            update_data["notes"] = data["notes"]
+        
+        # Update retailer due amount if paid_amount changed
+        if paid_amount_changed and retailer_id:
+            paid_difference = update_data["paid_amount"] - old_paid
+            # If paid amount increased, reduce retailer due
+            # If paid amount decreased, increase retailer due
+            self.update_retailer_due(retailer_id, -paid_difference)
+        
+        # Update sale in database
+        if update_data:
+            result = self.client.table("sales").update(update_data).eq("id", sale_id).execute()
+            if result.data:
+                updated_sale = result.data[0]
+                # Convert payment_status to enum if needed
+                if "payment_status" in updated_sale:
+                    updated_sale["payment_status"] = PaymentStatus(updated_sale["payment_status"])
+                return updated_sale
+        
+        return current_sale
+    
     def get_sale_returns(self, sale_id: str) -> List[dict]:
         """Get all returns for a specific sale"""
         result = self.client.table("sales_returns").select("*").eq("sale_id", sale_id).order("created_at", desc=True).execute()
@@ -912,6 +1026,35 @@ class SupabaseDatabase:
                 retailer_id = sale.get("retailer_id")
                 self.update_retailer_due(retailer_id, -total_return_amount)
             
+            # CRITICAL: Recalculate original sale payment status after return
+            # This ensures invoice reflects actual delivered amount and payment status
+            original_total = float(sale.get("total_amount", 0))
+            original_paid = float(sale.get("paid_amount", 0))
+            
+            # Calculate new totals after return
+            new_total_amount = original_total - total_return_amount
+            new_due_amount = new_total_amount - original_paid
+            
+            # Recalculate payment status based on new amounts
+            if new_due_amount <= 0:
+                new_payment_status = PaymentStatus.PAID.value
+            elif original_paid > 0:
+                new_payment_status = PaymentStatus.PARTIAL.value
+            else:
+                new_payment_status = PaymentStatus.DUE.value
+            
+            # Update original sale with recalculated amounts
+            self.client.table("sales").update({
+                "total_amount": new_total_amount,
+                "due_amount": max(0, new_due_amount),  # Ensure non-negative
+                "payment_status": new_payment_status
+            }).eq("id", sale_id).execute()
+            
+            print(f"[Supabase] Updated original sale payment status: sale_id={sale_id}, "
+                  f"original_total={original_total}, return_amount={total_return_amount}, "
+                  f"new_total={new_total_amount}, new_due={new_due_amount}, "
+                  f"new_payment_status={new_payment_status}")
+            
             return_record["items"] = return_items
             
             print(f"[Supabase] Sale return created: return_id={return_id}, return_number={return_number}, amount={total_return_amount}")
@@ -942,11 +1085,16 @@ class SupabaseDatabase:
                 new_paid = sale["paid_amount"] + data["amount"]
                 new_due = sale["due_amount"] - data["amount"]
                 payment_status = "paid" if new_due <= 0 else "partial"
-                self.client.table("sales").update({
+                
+                # Update payment amounts only (delivery_status will be updated manually by admin)
+                update_data = {
                     "paid_amount": new_paid,
-                    "due_amount": new_due,
+                    "due_amount": max(0, new_due),  # Ensure non-negative
                     "payment_status": payment_status
-                }).eq("id", data["sale_id"]).execute()
+                }
+                
+                # DO NOT update delivery_status automatically - admin will update manually
+                self.client.table("sales").update(update_data).eq("id", data["sale_id"]).execute()
         
         payment_data = {
             "retailer_id": data["retailer_id"],
