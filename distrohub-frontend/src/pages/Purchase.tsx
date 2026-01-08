@@ -407,7 +407,7 @@ export function Purchase() {
               
               // Map frontend Purchase to backend PurchaseCreate format
               // Get warehouse_id from the purchase object (stored in formData)
-              const warehouseId = (purchase as any).warehouse_id || warehouses.find(w => w.name === purchase.warehouse)?.id;
+              const warehouseId = (purchase as any).warehouse_id || null;
               const purchasePayload = {
                 supplier_name: purchase.supplier_name,
                 invoice_number: purchase.invoice_number,
