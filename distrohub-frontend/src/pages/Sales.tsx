@@ -11,6 +11,7 @@ import {
   XCircle,
   FileText,
   Edit,
+  Trash2,
 } from 'lucide-react';
 import { InvoicePrint } from '@/components/print/InvoicePrint';
 import { ChallanPrint } from '@/components/print/ChallanPrint';
@@ -164,6 +165,24 @@ export function Sales() {
     setSearchTerm(globalSearch);
   }, [searchParams]);
 
+  // Delete sale order
+  const handleDelete = async (order: SalesOrder) => {
+    if (!confirm(`Are you sure you want to delete order ${order.order_number}? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      console.log('[Sales] Deleting sale:', order.id);
+      await api.delete(`/api/sales/${order.id}`);
+      console.log('[Sales] Sale deleted successfully');
+      await fetchSales(); // Refresh the list
+    } catch (error: any) {
+      console.error('[Sales] Error deleting sale:', error);
+      const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to delete order';
+      alert(`Failed to delete order: ${errorMessage}`);
+    }
+  };
+
   const filteredOrders = orders.filter((order) => {
     const matchesSearch =
       order.order_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -285,6 +304,20 @@ export function Sales() {
                               title="View Details"
                             >
                               <Eye className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setEditOrder(order)}
+                              className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                              title="Edit Order"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(order)}
+                              className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="Delete Order"
+                            >
+                              <Trash2 className="w-4 h-4" />
                             </button>
                             {(order.total_amount - order.paid_amount) > 0 && (
                               <button

@@ -879,6 +879,41 @@ async def create_sale_return(
             detail=f"Failed to create sale return: {error_type}: {error_msg}"
         )
 
+@app.delete("/api/sales/{sale_id}")
+async def delete_sale(sale_id: str, current_user: dict = Depends(get_current_user)):
+    """
+    Delete a sale order.
+    
+    Returns:
+        dict: Success message
+        
+    Raises:
+        401: Authentication error
+        404: Sale not found
+        500: Server error
+    """
+    try:
+        # Verify sale exists
+        sale = db.get_sale(sale_id)
+        if not sale:
+            raise HTTPException(status_code=404, detail="Sale not found")
+        
+        # Delete the sale
+        db.delete_sale(sale_id)
+        return {"message": "Sale deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = str(e)
+        error_type = type(e).__name__
+        print(f"[API] Error deleting sale: {error_type}: {error_msg}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete sale: {error_msg}"
+        )
+
 @app.get("/api/sales/{sale_id}/returns", response_model=List[SaleReturn])
 async def get_sale_returns(sale_id: str, current_user: dict = Depends(get_current_user)):
     """

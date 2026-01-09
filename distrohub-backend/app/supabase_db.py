@@ -570,6 +570,18 @@ class SupabaseDatabase:
             return sale
         return None
     
+    def delete_sale(self, sale_id: str) -> bool:
+        """Delete a sale and its items"""
+        try:
+            # First delete sale items
+            self.client.table("sale_items").delete().eq("sale_id", sale_id).execute()
+            # Then delete the sale
+            result = self.client.table("sales").delete().eq("id", sale_id).execute()
+            return len(result.data) > 0
+        except Exception as e:
+            print(f"[DB] Error deleting sale {sale_id}: {e}")
+            raise
+
     def update_sale(self, sale_id: str, data: dict) -> Optional[dict]:
         """
         Update sale invoice manually (admin only).
