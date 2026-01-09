@@ -550,3 +550,103 @@ class SmsBulkSendRequest(BaseModel):
     recipient_phones: List[str]
     message: str
     event_type: Optional[SmsEventType] = None
+
+# Route/Batch System Models
+class RouteStatus(str, Enum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    RECONCILED = "reconciled"
+
+class RouteBase(BaseModel):
+    assigned_to: str  # User ID of SR/delivery man
+    route_date: date
+    notes: Optional[str] = None
+
+class RouteCreate(RouteBase):
+    sale_ids: List[str]  # List of sale IDs to add to route
+
+class Route(RouteBase):
+    id: str
+    route_number: str
+    assigned_to_name: str
+    status: RouteStatus
+    total_orders: int
+    total_amount: float
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+    reconciled_at: Optional[datetime] = None
+
+class RouteUpdate(BaseModel):
+    status: Optional[RouteStatus] = None
+    notes: Optional[str] = None
+
+class RouteSale(BaseModel):
+    """Sale order within a route with previous due snapshot"""
+    id: str
+    route_id: str
+    sale_id: str
+    previous_due: float  # Snapshot at route creation time
+    created_at: datetime
+
+class RouteWithSales(Route):
+    """Route with its associated sales and previous due information"""
+    sales: List[Sale] = []
+    route_sales: List[RouteSale] = []  # Previous due snapshots
+
+class RouteReconciliationCreate(BaseModel):
+    """Create reconciliation record for a route"""
+    total_collected_cash: float
+    total_returns_amount: float = 0
+    notes: Optional[str] = None
+    reconciliation_items: List[dict] = []  # List of {sale_id, sale_item_id, quantity_returned, return_reason}
+
+class RouteReconciliationItem(BaseModel):
+    """Returned item during reconciliation"""
+    id: str
+    reconciliation_id: str
+    sale_id: str
+    sale_item_id: str
+    quantity_returned: int
+    return_reason: Optional[str] = None
+    created_at: datetime
+
+class RouteReconciliation(BaseModel):
+    """Reconciliation record for a route"""
+    id: str
+    route_id: str
+    reconciled_by: Optional[str] = None
+    total_expected_cash: float
+    total_collected_cash: float
+    total_returns_amount: float
+    discrepancy: float
+    notes: Optional[str] = None
+    reconciled_at: datetime
+    items: List[RouteReconciliationItem] = []
+
+class RouteReconciliationUpdate(BaseModel):
+    """Update reconciliation record"""
+    total_collected_cash: Optional[float] = None
+    total_returns_amount: Optional[float] = None
+    notes: Optional[str] = None
+
+class SrCashHolding(BaseModel):
+    """SR cash holding record"""
+    id: str
+    user_id: str
+    amount: float
+    source: str  # 'reconciliation', 'manual_adjustment', 'initial'
+    reference_id: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: datetime
+
+class SrAccountability(BaseModel):
+    """SR accountability report"""
+    user_id: str
+    user_name: str
+    current_cash_holding: float
+    active_routes_count: int
+    pending_reconciliation_count: int
+    total_expected_cash: float  # Sum of all outstanding in active routes
+    routes: List[Route] = []
+    reconciliations: List[RouteReconciliation] = []

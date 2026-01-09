@@ -2026,3 +2026,447 @@ class SupabaseDatabase:
             query = query.eq("recipient_phone", recipient_phone)
         result = query.execute()
         return result.data or []
+    
+    # ============================================
+    # Route/Batch System Methods
+    # ============================================
+    
+    def calculate_previous_due(self, retailer_id: str, exclude_route_id: Optional[str] = None) -> float:
+        """
+        Calculate previous due for a retailer (sum of unpaid/partial orders not in any route).
+        Excludes orders already in routes (unless exclude_route_id is specified, then excludes only that route).
+        """
+        # Get all sales for this retailer
+        query = self.client.table("sales").select("due_amount, route_id, payment_status")
+        query = query.eq("retailer_id", retailer_id)
+        query = query.neq("payment_status", "paid")  # Only unpaid/partial orders
+        
+        result = query.execute()
+        sales = result.data or []
+        
+        # Filter in Python (Supabase Python client doesn't support complex OR queries easily)
+        if exclude_route_id:
+            # Exclude orders in the specified route (for editing routes)
+            filtered_sales = [s for s in sales if not s.get("route_id") or s.get("route_id") != exclude_route_id]
+        else:
+            # Exclude orders already in any route
+            filtered_sales = [s for s in sales if not s.get("route_id")]
+        
+        previous_due = sum(float(s.get("due_amount", 0)) for s in filtered_sales)
+        return previous_due
+    
+    def create_route(self, data: dict, sale_ids: List[str]) -> dict:
+        """Create a new route/batch with sales orders and calculate previous due snapshots"""
+        from datetime import datetime
+        import uuid
+        
+        # Validate assigned_to user
+        assigned_user = self.get_user_by_id(data["assigned_to"])
+        if not assigned_user:
+            raise ValueError("Assigned user not found")
+        
+        # Generate route number
+        route_number = f"RT-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:4].upper()}"
+        
+        # Calculate previous due for each retailer and create route_sales records
+        route_sales_data = []
+        retailer_previous_due = {}  # Cache previous due per retailer
+        
+        # First pass: collect all retailer IDs and calculate their previous due
+        retailer_ids = set()
+        for sale_id in sale_ids:
+            sale = self.get_sale(sale_id)
+            if sale and sale.get("retailer_id"):
+                retailer_ids.add(sale.get("retailer_id"))
+        
+        # Calculate previous due for each retailer (excluding sales being added to route)
+        for retailer_id in retailer_ids:
+            # Get all sales for this retailer that are being added to route
+            route_sale_ids_for_retailer = [
+                sale_id for sale_id in sale_ids
+                if self.get_sale(sale_id)?.get("retailer_id") == retailer_id
+            ]
+            
+            # Calculate total due for these sales
+            route_sales_due = sum(
+                float(self.get_sale(sid).get("due_amount", 0))
+                for sid in route_sale_ids_for_retailer
+            )
+            
+            # Calculate all previous due for retailer
+            all_previous_due = self.calculate_previous_due(retailer_id)
+            
+            # Previous due snapshot = all previous due - due from sales being added to route
+            retailer_previous_due[retailer_id] = max(0, all_previous_due - route_sales_due)
+        
+        # Second pass: create route_sales records with previous due snapshots
+        for sale_id in sale_ids:
+            sale = self.get_sale(sale_id)
+            if not sale:
+                continue
+            
+            retailer_id = sale.get("retailer_id")
+            if not retailer_id:
+                continue
+            
+            previous_due_snapshot = retailer_previous_due.get(retailer_id, 0)
+            
+            route_sales_data.append({
+                "sale_id": sale_id,
+                "previous_due": previous_due_snapshot
+            })
+        
+        if not route_sales_data:
+            raise ValueError("No valid sales found to add to route")
+        
+        # Calculate route totals
+        total_orders = len(route_sales_data)
+        total_amount = sum(float(self.get_sale(rs["sale_id"]).get("total_amount", 0)) for rs in route_sales_data)
+        
+        # Create route record
+        route_data = {
+            "route_number": route_number,
+            "assigned_to": data["assigned_to"],
+            "assigned_to_name": assigned_user.get("name"),
+            "route_date": data["route_date"].isoformat() if isinstance(data["route_date"], date) else data["route_date"],
+            "status": "pending",
+            "total_orders": total_orders,
+            "total_amount": total_amount,
+            "notes": data.get("notes")
+        }
+        
+        route_result = self.client.table("routes").insert(route_data).execute()
+        if not route_result.data:
+            raise ValueError("Failed to create route")
+        
+        route = route_result.data[0]
+        route_id = route["id"]
+        
+        # Create route_sales records with previous_due snapshots
+        for rs_data in route_sales_data:
+            route_sale_data = {
+                "route_id": route_id,
+                "sale_id": rs_data["sale_id"],
+                "previous_due": rs_data["previous_due"]
+            }
+            self.client.table("route_sales").insert(route_sale_data).execute()
+            
+            # Update sale.route_id
+            self.client.table("sales").update({"route_id": route_id}).eq("id", rs_data["sale_id"]).execute()
+        
+        # Fetch complete route with sales
+        return self.get_route(route_id)
+    
+    def get_routes(self, assigned_to: Optional[str] = None, status: Optional[str] = None, route_date: Optional[str] = None) -> List[dict]:
+        """Get all routes with optional filters"""
+        query = self.client.table("routes").select("*").order("created_at", desc=True)
+        
+        if assigned_to:
+            query = query.eq("assigned_to", assigned_to)
+        if status:
+            query = query.eq("status", status)
+        if route_date:
+            query = query.eq("route_date", route_date)
+        
+        result = query.execute()
+        return result.data or []
+    
+    def get_route(self, route_id: str) -> Optional[dict]:
+        """Get route with all associated sales and previous due snapshots"""
+        route_result = self.client.table("routes").select("*").eq("id", route_id).execute()
+        if not route_result.data:
+            return None
+        
+        route = route_result.data[0]
+        
+        # Get route_sales (previous due snapshots)
+        route_sales_result = self.client.table("route_sales").select("*").eq("route_id", route_id).execute()
+        route_sales = route_sales_result.data or []
+        
+        # Get sales for this route
+        sale_ids = [rs["sale_id"] for rs in route_sales]
+        sales = []
+        for sale_id in sale_ids:
+            sale = self.get_sale(sale_id)
+            if sale:
+                # Find corresponding previous_due from route_sales
+                route_sale = next((rs for rs in route_sales if rs["sale_id"] == sale_id), None)
+                if route_sale:
+                    sale["previous_due"] = float(route_sale.get("previous_due", 0))
+                sales.append(sale)
+        
+        route["sales"] = sales
+        route["route_sales"] = route_sales
+        
+        return route
+    
+    def update_route(self, route_id: str, data: dict) -> Optional[dict]:
+        """Update route (status, notes, etc.)"""
+        update_data = {}
+        
+        if "status" in data:
+            update_data["status"] = data["status"]
+            if data["status"] == "completed":
+                update_data["completed_at"] = datetime.now().isoformat()
+            elif data["status"] == "reconciled":
+                update_data["reconciled_at"] = datetime.now().isoformat()
+        
+        if "notes" in data:
+            update_data["notes"] = data["notes"]
+        
+        if not update_data:
+            return None
+        
+        result = self.client.table("routes").update(update_data).eq("id", route_id).execute()
+        return result.data[0] if result.data else None
+    
+    def add_sales_to_route(self, route_id: str, sale_ids: List[str]) -> dict:
+        """Add sales orders to an existing route"""
+        route = self.get_route(route_id)
+        if not route:
+            raise ValueError("Route not found")
+        
+        # Calculate previous due for new sales
+        route_sales_data = []
+        retailer_previous_due = {}
+        
+        for sale_id in sale_ids:
+            # Check if sale already in route
+            existing = self.client.table("route_sales").select("*").eq("route_id", route_id).eq("sale_id", sale_id).execute()
+            if existing.data:
+                continue  # Already in route
+            
+            sale = self.get_sale(sale_id)
+            if not sale:
+                continue
+            
+            retailer_id = sale.get("retailer_id")
+            if not retailer_id:
+                continue
+            
+            # Calculate previous due (excluding current route)
+            if retailer_id not in retailer_previous_due:
+                retailer_previous_due[retailer_id] = self.calculate_previous_due(retailer_id, exclude_route_id=route_id)
+            
+            previous_due = retailer_previous_due[retailer_id]
+            current_sale_due = float(sale.get("due_amount", 0))
+            previous_due_snapshot = max(0, previous_due - current_sale_due)
+            
+            route_sales_data.append({
+                "sale_id": sale_id,
+                "previous_due": previous_due_snapshot
+            })
+        
+        if not route_sales_data:
+            raise ValueError("No new valid sales to add")
+        
+        # Add route_sales records
+        for rs_data in route_sales_data:
+            route_sale_data = {
+                "route_id": route_id,
+                "sale_id": rs_data["sale_id"],
+                "previous_due": rs_data["previous_due"]
+            }
+            self.client.table("route_sales").insert(route_sale_data).execute()
+            self.client.table("sales").update({"route_id": route_id}).eq("id", rs_data["sale_id"]).execute()
+        
+        # Update route totals
+        route = self.get_route(route_id)
+        total_orders = len(route.get("sales", []))
+        total_amount = sum(float(s.get("total_amount", 0)) for s in route.get("sales", []))
+        
+        self.client.table("routes").update({
+            "total_orders": total_orders,
+            "total_amount": total_amount
+        }).eq("id", route_id).execute()
+        
+        return self.get_route(route_id)
+    
+    def remove_sale_from_route(self, route_id: str, sale_id: str) -> dict:
+        """Remove a sale from route"""
+        # Remove from route_sales
+        self.client.table("route_sales").delete().eq("route_id", route_id).eq("sale_id", sale_id).execute()
+        
+        # Clear sale.route_id
+        self.client.table("sales").update({"route_id": None}).eq("id", sale_id).execute()
+        
+        # Update route totals
+        route = self.get_route(route_id)
+        if route:
+            total_orders = len(route.get("sales", []))
+            total_amount = sum(float(s.get("total_amount", 0)) for s in route.get("sales", []))
+            
+            self.client.table("routes").update({
+                "total_orders": total_orders,
+                "total_amount": total_amount
+            }).eq("id", route_id).execute()
+        
+        return self.get_route(route_id)
+    
+    def delete_route(self, route_id: str) -> bool:
+        """Delete a route (cascades to route_sales, clears sales.route_id)"""
+        try:
+            # Clear sales.route_id for all sales in this route
+            self.client.table("sales").update({"route_id": None}).eq("route_id", route_id).execute()
+            
+            # Delete route (cascades to route_sales)
+            result = self.client.table("routes").delete().eq("id", route_id).execute()
+            return len(result.data) > 0 if result.data else False
+        except Exception as e:
+            print(f"[DB] Error deleting route {route_id}: {e}")
+            raise
+    
+    def create_route_reconciliation(self, route_id: str, data: dict, user_id: Optional[str] = None) -> dict:
+        """Create reconciliation record for a route"""
+        route = self.get_route(route_id)
+        if not route:
+            raise ValueError("Route not found")
+        
+        # Calculate total expected cash (sum of all Total Outstanding)
+        total_expected = 0.0
+        for sale in route.get("sales", []):
+            previous_due = float(sale.get("previous_due", 0))
+            current_bill = float(sale.get("total_amount", 0))
+            total_outstanding = previous_due + current_bill
+            total_expected += total_outstanding
+        
+        total_collected = float(data.get("total_collected_cash", 0))
+        total_returns = float(data.get("total_returns_amount", 0))
+        discrepancy = total_expected - total_collected - total_returns
+        
+        # Create reconciliation record
+        reconciliation_data = {
+            "route_id": route_id,
+            "reconciled_by": user_id,
+            "total_expected_cash": total_expected,
+            "total_collected_cash": total_collected,
+            "total_returns_amount": total_returns,
+            "discrepancy": discrepancy,
+            "notes": data.get("notes")
+        }
+        
+        reconciliation_result = self.client.table("route_reconciliations").insert(reconciliation_data).execute()
+        if not reconciliation_result.data:
+            raise ValueError("Failed to create reconciliation")
+        
+        reconciliation = reconciliation_result.data[0]
+        reconciliation_id = reconciliation["id"]
+        
+        # Create reconciliation items (returns)
+        reconciliation_items = data.get("reconciliation_items", [])
+        for item_data in reconciliation_items:
+            item_record = {
+                "reconciliation_id": reconciliation_id,
+                "sale_id": item_data["sale_id"],
+                "sale_item_id": item_data["sale_item_id"],
+                "quantity_returned": item_data.get("quantity_returned", 0),
+                "return_reason": item_data.get("return_reason")
+            }
+            self.client.table("route_reconciliation_items").insert(item_record).execute()
+        
+        # Update SR cash holding
+        if route.get("assigned_to"):
+            self.update_sr_cash_holding(route["assigned_to"], total_collected, "reconciliation", reconciliation_id)
+        
+        # Update route status
+        self.client.table("routes").update({
+            "status": "reconciled",
+            "reconciled_at": datetime.now().isoformat()
+        }).eq("id", route_id).execute()
+        
+        return self.get_route_reconciliation(reconciliation_id)
+    
+    def get_route_reconciliation(self, reconciliation_id: str) -> Optional[dict]:
+        """Get reconciliation with items"""
+        result = self.client.table("route_reconciliations").select("*").eq("id", reconciliation_id).execute()
+        if not result.data:
+            return None
+        
+        reconciliation = result.data[0]
+        
+        # Get reconciliation items
+        items_result = self.client.table("route_reconciliation_items").select("*").eq("reconciliation_id", reconciliation_id).execute()
+        reconciliation["items"] = items_result.data or []
+        
+        return reconciliation
+    
+    def get_route_reconciliations(self, route_id: Optional[str] = None) -> List[dict]:
+        """Get all reconciliations"""
+        query = self.client.table("route_reconciliations").select("*").order("reconciled_at", desc=True)
+        if route_id:
+            query = query.eq("route_id", route_id)
+        
+        result = query.execute()
+        reconciliations = result.data or []
+        
+        # Add items for each reconciliation
+        for rec in reconciliations:
+            items_result = self.client.table("route_reconciliation_items").select("*").eq("reconciliation_id", rec["id"]).execute()
+            rec["items"] = items_result.data or []
+        
+        return reconciliations
+    
+    def update_sr_cash_holding(self, user_id: str, amount: float, source: str, reference_id: Optional[str] = None, notes: Optional[str] = None) -> dict:
+        """Update SR cash holding (add to historical and update current)"""
+        # Get current holding
+        user = self.get_user_by_id(user_id)
+        if not user:
+            raise ValueError("User not found")
+        
+        current_holding = float(user.get("current_cash_holding", 0))
+        new_holding = current_holding + amount
+        
+        # Update users.current_cash_holding
+        self.client.table("users").update({"current_cash_holding": new_holding}).eq("id", user_id).execute()
+        
+        # Create historical record
+        holding_record = {
+            "user_id": user_id,
+            "amount": amount,
+            "source": source,
+            "reference_id": reference_id,
+            "notes": notes
+        }
+        
+        result = self.client.table("sr_cash_holdings").insert(holding_record).execute()
+        return result.data[0] if result.data else holding_record
+    
+    def get_sr_accountability(self, user_id: str) -> Optional[dict]:
+        """Get SR accountability report"""
+        user = self.get_user_by_id(user_id)
+        if not user:
+            return None
+        
+        # Get active routes
+        active_routes = self.get_routes(assigned_to=user_id, status="in_progress")
+        active_routes.extend(self.get_routes(assigned_to=user_id, status="completed"))
+        
+        # Get pending reconciliations
+        pending_routes = [r for r in active_routes if r.get("status") == "completed"]
+        
+        # Calculate total expected cash
+        total_expected = 0.0
+        for route in active_routes:
+            route_details = self.get_route(route["id"])
+            if route_details:
+                for sale in route_details.get("sales", []):
+                    previous_due = float(sale.get("previous_due", 0))
+                    current_bill = float(sale.get("total_amount", 0))
+                    total_expected += previous_due + current_bill
+        
+        # Get reconciliations
+        reconciliations = []
+        for route in active_routes:
+            route_recons = self.get_route_reconciliations(route_id=route["id"])
+            reconciliations.extend(route_recons)
+        
+        return {
+            "user_id": user_id,
+            "user_name": user.get("name"),
+            "current_cash_holding": float(user.get("current_cash_holding", 0)),
+            "active_routes_count": len(active_routes),
+            "pending_reconciliation_count": len(pending_routes),
+            "total_expected_cash": total_expected,
+            "routes": active_routes,
+            "reconciliations": reconciliations
+        }

@@ -29,7 +29,10 @@ from app.models import (
     SaleReturnCreate, SaleReturn, RefundType,
     SaleReport, SaleReturnReport, SalesReportSummary,
     WarehouseCreate, Warehouse, WarehouseStockSummary,
-    SaleUpdate, CollectionReport, CollectionReportSummary
+    SaleUpdate, CollectionReport, CollectionReportSummary,
+    RouteCreate, Route, RouteUpdate, RouteWithSales, RouteStatus,
+    RouteReconciliationCreate, RouteReconciliation, RouteReconciliationUpdate,
+    SrAccountability
 )
 from app.database import db
 from app.auth import create_access_token, get_current_user
@@ -1733,3 +1736,192 @@ async def send_sms(
     db.create_sms_log(log_data)
     
     return result
+
+# ============================================
+# Route/Batch System Endpoints
+# ============================================
+
+@app.post("/api/routes", response_model=RouteWithSales, status_code=status.HTTP_201_CREATED)
+async def create_route(route_data: RouteCreate, current_user: dict = Depends(get_current_user)):
+    """Create a new route/batch with sales orders"""
+    try:
+        route = db.create_route(route_data.model_dump(), route_data.sale_ids)
+        return RouteWithSales(**route)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[API] Error creating route: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to create route: {str(e)}")
+
+@app.get("/api/routes", response_model=List[Route])
+async def get_routes(
+    assigned_to: Optional[str] = None,
+    status: Optional[str] = None,
+    route_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all routes with optional filters"""
+    routes = db.get_routes(assigned_to=assigned_to, status=status, route_date=route_date)
+    return [Route(**r) for r in routes]
+
+@app.get("/api/routes/{route_id}", response_model=RouteWithSales)
+async def get_route(route_id: str, current_user: dict = Depends(get_current_user)):
+    """Get route details with all sales and previous due information"""
+    route = db.get_route(route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Route not found")
+    return RouteWithSales(**route)
+
+@app.put("/api/routes/{route_id}", response_model=Route)
+async def update_route(
+    route_id: str,
+    route_update: RouteUpdate,
+    current_user: dict = Depends(get_current_user)
+):
+    """Update route (status, notes, etc.)"""
+    route = db.update_route(route_id, route_update.model_dump(exclude_unset=True))
+    if not route:
+        raise HTTPException(status_code=404, detail="Route not found")
+    return Route(**route)
+
+@app.post("/api/routes/{route_id}/sales", response_model=RouteWithSales)
+async def add_sales_to_route(
+    route_id: str,
+    sale_ids: List[str],
+    current_user: dict = Depends(get_current_user)
+):
+    """Add sales orders to an existing route"""
+    try:
+        route = db.add_sales_to_route(route_id, sale_ids)
+        return RouteWithSales(**route)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to add sales to route: {str(e)}")
+
+@app.delete("/api/routes/{route_id}/sales/{sale_id}", response_model=RouteWithSales)
+async def remove_sale_from_route(
+    route_id: str,
+    sale_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Remove a sale from route"""
+    route = db.remove_sale_from_route(route_id, sale_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Route not found")
+    return RouteWithSales(**route)
+
+@app.delete("/api/routes/{route_id}")
+async def delete_route(route_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a route"""
+    success = db.delete_route(route_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Route not found")
+    return {"message": "Route deleted successfully"}
+
+@app.get("/api/retailers/{retailer_id}/previous-due")
+async def get_retailer_previous_due(
+    retailer_id: str,
+    exclude_route_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get current previous due for a retailer (for new routes)"""
+    previous_due = db.calculate_previous_due(retailer_id, exclude_route_id=exclude_route_id)
+    return {"retailer_id": retailer_id, "previous_due": previous_due}
+
+@app.get("/api/routes/{route_id}/previous-due")
+async def get_route_previous_due(
+    route_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get previous due calculation for all retailers in route"""
+    route = db.get_route(route_id)
+    if not route:
+        raise HTTPException(status_code=404, detail="Route not found")
+    
+    # Return previous due snapshots from route_sales
+    previous_due_map = {}
+    for route_sale in route.get("route_sales", []):
+        sale_id = route_sale["sale_id"]
+        sale = next((s for s in route.get("sales", []) if s["id"] == sale_id), None)
+        if sale:
+            retailer_id = sale.get("retailer_id")
+            if retailer_id not in previous_due_map:
+                previous_due_map[retailer_id] = {
+                    "retailer_id": retailer_id,
+                    "retailer_name": sale.get("retailer_name"),
+                    "previous_due": float(route_sale.get("previous_due", 0))
+                }
+    
+    return {"route_id": route_id, "previous_due_by_retailer": list(previous_due_map.values())}
+
+@app.post("/api/routes/{route_id}/reconcile", response_model=RouteReconciliation, status_code=status.HTTP_201_CREATED)
+async def create_route_reconciliation(
+    route_id: str,
+    reconciliation_data: RouteReconciliationCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    """Create reconciliation record for a route"""
+    try:
+        reconciliation = db.create_route_reconciliation(
+            route_id,
+            reconciliation_data.model_dump(),
+            user_id=current_user.get("id")
+        )
+        return RouteReconciliation(**reconciliation)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[API] Error creating reconciliation: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to create reconciliation: {str(e)}")
+
+@app.get("/api/reconciliations", response_model=List[RouteReconciliation])
+async def get_reconciliations(
+    route_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all reconciliations"""
+    reconciliations = db.get_route_reconciliations(route_id=route_id)
+    return [RouteReconciliation(**r) for r in reconciliations]
+
+@app.get("/api/reconciliations/{reconciliation_id}", response_model=RouteReconciliation)
+async def get_reconciliation(
+    reconciliation_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get reconciliation details"""
+    reconciliation = db.get_route_reconciliation(reconciliation_id)
+    if not reconciliation:
+        raise HTTPException(status_code=404, detail="Reconciliation not found")
+    return RouteReconciliation(**reconciliation)
+
+@app.get("/api/users/{user_id}/cash-holding")
+async def get_sr_cash_holding(
+    user_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get current cash holding for an SR"""
+    user = db.get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return {
+        "user_id": user_id,
+        "user_name": user.get("name"),
+        "current_cash_holding": float(user.get("current_cash_holding", 0))
+    }
+
+@app.get("/api/users/{user_id}/accountability", response_model=SrAccountability)
+async def get_sr_accountability(
+    user_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get full accountability report for an SR"""
+    accountability = db.get_sr_accountability(user_id)
+    if not accountability:
+        raise HTTPException(status_code=404, detail="User not found or not an SR")
+    return SrAccountability(**accountability)
