@@ -2084,14 +2084,15 @@ class SupabaseDatabase:
             # Get all sales for this retailer that are being added to route
             route_sale_ids_for_retailer = [
                 sale_id for sale_id in sale_ids
-                if self.get_sale(sale_id)?.get("retailer_id") == retailer_id
+                if (sale := self.get_sale(sale_id)) and sale.get("retailer_id") == retailer_id
             ]
             
             # Calculate total due for these sales
-            route_sales_due = sum(
-                float(self.get_sale(sid).get("due_amount", 0))
-                for sid in route_sale_ids_for_retailer
-            )
+            route_sales_due = 0.0
+            for sid in route_sale_ids_for_retailer:
+                sale = self.get_sale(sid)
+                if sale:
+                    route_sales_due += float(sale.get("due_amount", 0))
             
             # Calculate all previous due for retailer
             all_previous_due = self.calculate_previous_due(retailer_id)
