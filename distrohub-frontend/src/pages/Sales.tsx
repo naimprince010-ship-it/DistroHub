@@ -24,6 +24,7 @@ interface Payment {
   payment_method: string;
   created_at: string;
   collected_by_name?: string;
+  notes?: string;
 }
 
 interface SalesOrder {
