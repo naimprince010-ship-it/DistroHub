@@ -12,6 +12,8 @@ import {
   TrendingUp,
   AlertTriangle,
   RotateCcw,
+  MapPin,
+  DollarSign,
 } from 'lucide-react';
 
 const menuItems = [
@@ -22,6 +24,8 @@ const menuItems = [
   { icon: Warehouse, label: 'Inventory', path: '/inventory' },
   { icon: Receipt, label: 'Sales Orders', path: '/sales' },
   { icon: RotateCcw, label: 'Sales Returns', path: '/sales-returns' },
+  { icon: MapPin, label: 'Routes / Batches', path: '/routes' },
+  { icon: DollarSign, label: 'SR Accountability', path: '/accountability' },
   { icon: TrendingUp, label: 'Receivables', path: '/receivables' },
   { icon: AlertTriangle, label: 'Expiry Alerts', path: '/expiry' },
   { icon: FileText, label: 'Reports', path: '/reports' },

@@ -36,9 +36,12 @@ interface ChallanData {
   distributor_name?: string;
   route_name?: string;
   route_code?: string;
+  route_number?: string;
   sr_name?: string;
   sr_id?: string;
   sr_phone?: string;
+  // Route/Batch Info
+  previous_due?: number;  // Previous due amount (from route snapshot)
 }
 
 interface ChallanPrintProps {
@@ -321,7 +324,8 @@ export function ChallanPrint({ data, onClose }: ChallanPrintProps) {
             .signature-section { 
               display: flex; 
               justify-content: space-between; 
-              margin-top: 50px; 
+              margin-top: auto; 
+              padding-top: 50px;
               gap: 20px;
             }
             .signature-box { 
@@ -400,7 +404,10 @@ export function ChallanPrint({ data, onClose }: ChallanPrintProps) {
                 margin: 15mm;
               }
               table { page-break-inside: avoid; }
-              .signature-section { page-break-inside: avoid; }
+              .signature-section { 
+                page-break-inside: avoid; 
+                margin-top: auto;
+              }
             }
           </style>
         </head>
@@ -465,10 +472,10 @@ export function ChallanPrint({ data, onClose }: ChallanPrintProps) {
           <style>{`
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap');
             .challan-container { 
-              max-width: 210mm; 
+              max-width: 100%; 
               width: 100%;
               margin: 0 auto; 
-              padding: 15mm; 
+              padding: 20px; 
               font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
               background: white;
               border: 1px solid #e5e7eb;
@@ -683,7 +690,8 @@ export function ChallanPrint({ data, onClose }: ChallanPrintProps) {
             .signature-section { 
               display: flex; 
               justify-content: space-between; 
-              margin-top: 50px; 
+              margin-top: auto; 
+              padding-top: 50px;
               gap: 20px;
             }
             .signature-box { 
@@ -723,6 +731,12 @@ export function ChallanPrint({ data, onClose }: ChallanPrintProps) {
                   <span className="meta-label">Invoice/Challan No:</span>
                   <span className="meta-value">{data.challan_number}</span>
                 </div>
+                {data.route_number && (
+                  <div className="meta-row">
+                    <span className="meta-label">Route No:</span>
+                    <span className="meta-value">{data.route_number}</span>
+                  </div>
+                )}
                 <div className="meta-row">
                   <span className="meta-label">Date:</span>
                   <span className="meta-value">{data.date}</span>
@@ -810,20 +824,40 @@ export function ChallanPrint({ data, onClose }: ChallanPrintProps) {
 
             {/* Payment & Status Summary */}
             <div className="payment-summary">
+              {data.previous_due !== undefined && data.previous_due > 0 && (
+                <div className="payment-summary-row">
+                  <span>Previous Due:</span>
+                  <span style={{ fontWeight: 700, fontSize: '18px', color: '#dc2626' }}>
+                    ৳{data.previous_due.toFixed(2)}
+                  </span>
+                </div>
+              )}
               <div className="payment-summary-row">
-                <span>Total Amount:</span>
+                <span>Current Bill:</span>
                 <span style={{ fontWeight: 700, fontSize: '18px' }}>৳{totalAmount.toFixed(2)}</span>
               </div>
-              <div className="payment-summary-row">
-                <span>Paid Amount:</span>
-                <span style={{ fontWeight: 700, fontSize: '18px' }}>৳{paidAmount.toFixed(2)}</span>
-              </div>
-              <div className="payment-summary-row">
-                <span>Due Amount:</span>
-                <span style={{ fontWeight: 700, fontSize: '18px', color: dueAmount > 0 ? '#dc2626' : '#16a34a' }}>
-                  ৳{dueAmount.toFixed(2)}
-                </span>
-              </div>
+              {data.previous_due !== undefined && (
+                <div className="payment-summary-row" style={{ borderTop: '2px solid #d1d5db', paddingTop: '10px', marginTop: '10px' }}>
+                  <span>Total Outstanding:</span>
+                  <span style={{ fontWeight: 700, fontSize: '18px', color: '#dc2626' }}>
+                    ৳{(data.previous_due + totalAmount).toFixed(2)}
+                  </span>
+                </div>
+              )}
+              {data.previous_due === undefined && (
+                <>
+                  <div className="payment-summary-row">
+                    <span>Paid Amount:</span>
+                    <span style={{ fontWeight: 700, fontSize: '18px' }}>৳{paidAmount.toFixed(2)}</span>
+                  </div>
+                  <div className="payment-summary-row">
+                    <span>Due Amount:</span>
+                    <span style={{ fontWeight: 700, fontSize: '18px', color: dueAmount > 0 ? '#dc2626' : '#16a34a' }}>
+                      ৳{dueAmount.toFixed(2)}
+                    </span>
+                  </div>
+                </>
+              )}
               <div className="payment-summary-row">
                 <span>Payment Status:</span>
                 <span>

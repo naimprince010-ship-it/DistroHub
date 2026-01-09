@@ -513,9 +513,11 @@ function ChallanPrintWrapper({
   onClose: () => void;
 }) {
   const [srPhone, setSrPhone] = useState<string | null>(null);
+  const [returnItems, setReturnItems] = useState<Array<{sale_item_id: string; quantity_returned: number; product_name: string}>>([]);
 
   useEffect(() => {
-    const fetchSrPhone = async () => {
+    const fetchData = async () => {
+      // Fetch SR phone
       if (order.assigned_to) {
         try {
           const usersRes = await api.get('/api/users');
@@ -527,9 +529,39 @@ function ChallanPrintWrapper({
           console.error('[ChallanPrintWrapper] Error fetching SR phone:', error);
         }
       }
+
+      // Fetch returns data
+      try {
+        const returnsRes = await api.get(`/api/sales/${order.id}/returns`);
+        if (returnsRes.data && Array.isArray(returnsRes.data)) {
+          const allReturnItems: Array<{sale_item_id: string; quantity_returned: number; product_name: string}> = [];
+          returnsRes.data.forEach((ret: any) => {
+            if (ret.items && Array.isArray(ret.items)) {
+              ret.items.forEach((item: any) => {
+                allReturnItems.push({
+                  sale_item_id: item.sale_item_id,
+                  quantity_returned: item.quantity_returned,
+                  product_name: item.product_name || ''
+                });
+              });
+            }
+          });
+          setReturnItems(allReturnItems);
+        }
+      } catch (error) {
+        console.error('[ChallanPrintWrapper] Error fetching returns:', error);
+        // If returns endpoint doesn't exist or fails, continue without returns data
+      }
     };
-    fetchSrPhone();
-  }, [order.assigned_to]);
+    fetchData();
+  }, [order.assigned_to, order.id]);
+
+  // Create a map of product name to returned quantity
+  const returnsByProduct = new Map<string, number>();
+  returnItems.forEach(item => {
+    const currentQty = returnsByProduct.get(item.product_name) || 0;
+    returnsByProduct.set(item.product_name, currentQty + item.quantity_returned);
+  });
 
   return (
     <ChallanPrint
@@ -548,7 +580,8 @@ function ChallanPrintWrapper({
           unit_price: item.price,
           bonus_qty: 0,
           discount: 0,
-          discount_amount: 0
+          discount_amount: 0,
+          returned_qty: returnsByProduct.get(item.product) || 0
         })),
         total_items: order.items.length,
         total_amount: order.total_amount,
