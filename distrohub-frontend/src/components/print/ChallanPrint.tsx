@@ -415,8 +415,6 @@ export function ChallanPrint({ data, onClose }: ChallanPrintProps) {
     }, 250);
   };
 
-  const totalQuantity = data.items.reduce((sum, item) => sum + item.qty, 0);
-  const deliveryStatus = data.delivery_status || 'pending';
   const paymentStatus = data.payment_status || 'unpaid';
   const challanType = data.challan_type || 'Normal';
   const totalAmount = data.total_amount || 0;
@@ -430,28 +428,6 @@ export function ChallanPrint({ data, onClose }: ChallanPrintProps) {
     minute: '2-digit',
     second: '2-digit'
   });
-
-  const getStatusBadgeClass = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'delivered':
-        return 'bg-green-100 text-green-800 border-green-300';
-      case 'pending':
-        return 'bg-orange-100 text-orange-800 border-orange-300';
-      case 'partially_delivered':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-300';
-      case 'returned':
-        return 'bg-red-100 text-red-800 border-red-300';
-      default:
-        return 'bg-orange-100 text-orange-800 border-orange-300';
-    }
-  };
-
-  const getStatusLabel = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'delivered':
-        return 'Delivered';
-      case 'pending':
-        return 'Pending';
       case 'partially_delivered':
         return 'Partially Delivered';
       case 'returned':

@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { DollarSign } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import {
@@ -17,13 +16,21 @@ import { InvoicePrint } from '@/components/print/InvoicePrint';
 import { ChallanPrint } from '@/components/print/ChallanPrint';
 import { BarcodeScanButton } from '@/components/BarcodeScanner';
 import api from '@/lib/api';
-import { Payment } from '@/types';
 import { formatDateBD } from '@/lib/utils';
+
+interface Payment {
+  id: string;
+  amount: number;
+  payment_method: string;
+  created_at: string;
+  collected_by_name?: string;
+}
 
 interface SalesOrder {
   id: string;
   order_number: string;
   retailer_name: string;
+  retailer_id?: string;
   order_date: string;
   delivery_date: string;
   status: 'pending' | 'confirmed' | 'delivered' | 'cancelled';
@@ -32,6 +39,9 @@ interface SalesOrder {
   paid_amount: number;
   items: { product: string; qty: number; price: number }[];
   delivery_status?: 'pending' | 'delivered' | 'partially_delivered' | 'returned';
+  assigned_to?: string;
+  assigned_to_name?: string;
+  payments?: Payment[];
 }
 
 const statusConfig = {
@@ -58,6 +68,7 @@ export function Sales() {
   const [editOrder, setEditOrder] = useState<SalesOrder | null>(null);
   const [printInvoiceOrder, setPrintInvoiceOrder] = useState<SalesOrder | null>(null);
   const [printChallanOrder, setPrintChallanOrder] = useState<SalesOrder | null>(null);
+  const [collectionOrder, setCollectionOrder] = useState<SalesOrder | null>(null);
 
   // Fetch sales from API
   const fetchSales = async () => {
@@ -425,9 +436,9 @@ export function Sales() {
                 notes: `Delivery date: ${order.delivery_date}`,
               };
               
-              // Add assigned_to if provided
-              if (order.assigned_to) {
-                salePayload.assigned_to = order.assigned_to;
+              // Add assigned_to if provided (only if it exists on the order)
+              if ('assigned_to' in order && order.assigned_to) {
+                (salePayload as any).assigned_to = order.assigned_to;
               }
               
               console.log('[Sales] Sending sale payload:', salePayload);
@@ -608,11 +619,11 @@ function OrderDetailsModal({
             </div>
           </div>
 
-          {payments.length > 0 && (
+          {order.payments && order.payments.length > 0 && (
             <div className="mt-3">
               <h3 className="font-semibold text-slate-900 mb-2">Payment History</h3>
               <div className="space-y-2">
-                {payments.map((payment) => (
+                {order.payments.map((payment: Payment) => (
                   <div key={payment.id} className="bg-slate-50 rounded-lg p-2">
                     <div className="flex justify-between items-start mb-1">
                       <div>
