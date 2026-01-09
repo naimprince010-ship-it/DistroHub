@@ -220,15 +220,19 @@ export function Products() {
   }, [categories, products]);
 
   const isExpiringSoon = (expiryDate: string) => {
+    if (!expiryDate) return false;
     const expiry = new Date(expiryDate);
     const today = new Date();
     const diffDays = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    return diffDays <= 30;
+    return diffDays > 0 && diffDays <= 30;
   };
 
   const isExpired = (expiryDate: string) => {
+    if (!expiryDate) return false;
     const expiry = new Date(expiryDate);
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    expiry.setHours(0, 0, 0, 0);
     return expiry < today;
   };
 
@@ -443,10 +447,10 @@ export function Products() {
                       onChange={(e) => setStockFilter(e.target.value)}
                       className="input-field w-36"
                     >
-                      <option value="all">All Stock</option>
-                      <option value="in_stock">In Stock</option>
-                      <option value="low">Low Stock</option>
-                      <option value="out">Out of Stock</option>
+                      <option value="all">All Stock / সব</option>
+                      <option value="in_stock">In Stock / আছে</option>
+                      <option value="low">Low Stock / কম</option>
+                      <option value="out">Out of Stock / নেই</option>
                     </select>
 
                     <select
@@ -454,10 +458,10 @@ export function Products() {
                       onChange={(e) => setExpiryFilter(e.target.value)}
                       className="input-field w-40"
                     >
-                      <option value="all">All Expiry</option>
-                      <option value="expired">Expired</option>
-                      <option value="expiring">Expiring Soon</option>
-                      <option value="safe">Safe</option>
+                      <option value="all">All Expiry / সব</option>
+                      <option value="expired">Expired / মেয়াদ শেষ</option>
+                      <option value="expiring">Expiring Soon / শীঘ্রই শেষ</option>
+                      <option value="safe">Safe / নিরাপদ</option>
                     </select>
 
                     {activeFiltersCount > 0 && (
@@ -474,7 +478,7 @@ export function Products() {
                   <div className="flex items-center gap-2">
                     <label className="btn-secondary flex items-center gap-2 cursor-pointer">
                       <Upload className="w-4 h-4" />
-                      Import Excel
+                      <span>Import Excel</span>
                       <input
                         type="file"
                         accept=".xlsx,.xls"
@@ -485,7 +489,7 @@ export function Products() {
 
                     <button onClick={handleExcelExport} className="btn-secondary flex items-center gap-2">
                       <Download className="w-4 h-4" />
-                      Export
+                      <span>Export</span>
                     </button>
 
                     <button
@@ -494,10 +498,13 @@ export function Products() {
                         fetchCategoriesAndSuppliers();
                         setShowAddModal(true);
                       }}
-                      className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-2 shadow-sm hover:shadow-md"
+                      className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 flex flex-col items-center gap-0.5 shadow-sm hover:shadow-md"
                     >
-                      <Plus className="w-4 h-4" />
-                      Add Product
+                      <div className="flex items-center gap-2">
+                        <Plus className="w-4 h-4" />
+                        <span>Add Product</span>
+                      </div>
+                      <span className="text-xs font-normal opacity-90">পণ্য যোগ করুন</span>
                     </button>
                   </div>
                 </div>
@@ -515,10 +522,26 @@ export function Products() {
                       <th className="text-left p-2 font-semibold text-slate-700">Product</th>
                       <th className="text-left p-2 font-semibold text-slate-700">SKU</th>
                       <th className="text-left p-2 font-semibold text-slate-700">Category</th>
-                      <th className="text-left p-2 font-semibold text-slate-700">Unit</th>
-                      <th className="text-right p-2 font-semibold text-slate-700">Purchase</th>
-                      <th className="text-right p-2 font-semibold text-slate-700">Selling</th>
-                      <th className="text-right p-2 font-semibold text-slate-700">Stock</th>
+                      <th className="text-left p-2 font-semibold text-slate-700">
+                        Unit
+                        <div className="text-xs font-normal text-slate-500">ইউনিট</div>
+                      </th>
+                      <th className="text-right p-2 font-semibold text-slate-700">
+                        Purchase
+                        <div className="text-xs font-normal text-slate-500">ক্রয়</div>
+                      </th>
+                      <th className="text-right p-2 font-semibold text-slate-700">
+                        Selling
+                        <div className="text-xs font-normal text-slate-500">বিক্রয়</div>
+                      </th>
+                      <th className="text-right p-2 font-semibold text-slate-700">
+                        Stock
+                        <div className="text-xs font-normal text-slate-500">মজুদ</div>
+                      </th>
+                      <th className="text-center p-2 font-semibold text-slate-700">
+                        Pcs/Ctn
+                        <div className="text-xs font-normal text-slate-500">পিস/কার্টন</div>
+                      </th>
                       <th className="text-left p-2 font-semibold text-slate-700">Batch</th>
                       <th className="text-left p-2 font-semibold text-slate-700">Expiry</th>
                       <th className="text-center p-2 font-semibold text-slate-700">Actions</th>
@@ -542,18 +565,25 @@ export function Products() {
                           </span>
                         </td>
                         <td className="p-2 text-slate-600">
-                          {product.unit} ({product.pack_size}/ctn)
+                          {product.unit}
                         </td>
                         <td className="p-2 text-right text-slate-600">৳ {product.purchase_price}</td>
-                        <td className="p-2 text-right font-medium text-slate-900">৳ {product.selling_price}</td>
+                        <td className="p-2 text-right font-bold text-slate-900">৳ {product.selling_price}</td>
                         <td className="p-2 text-right">
                           <span
-                            className={`font-medium ${
-                              product.stock_quantity < 50 ? 'text-red-600' : 'text-green-600'
+                            className={`${
+                              product.stock_quantity === 0 
+                                ? 'font-bold text-red-600' 
+                                : product.stock_quantity < 50 
+                                  ? 'font-medium text-orange-600' 
+                                  : 'font-medium text-green-600'
                             }`}
                           >
                             {product.stock_quantity}
                           </span>
+                        </td>
+                        <td className="p-2 text-center text-slate-600 text-sm">
+                          {product.pieces_per_carton || product.pack_size || '-'}
                         </td>
                         <td className="p-2 text-slate-600 font-mono text-sm">{product.batch_number}</td>
                         <td className="p-2">
@@ -571,18 +601,20 @@ export function Products() {
                           </div>
                         </td>
                         <td className="p-2">
-                          <div className="flex items-center justify-center gap-1">
+                          <div className="flex items-center justify-center gap-2">
                             <button
                               onClick={() => setEditingProduct(product)}
-                              className="p-1 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                              className="p-2 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                              title="Edit"
                             >
-                              <Edit className="w-4 h-4" />
+                              <Edit className="w-5 h-5" />
                             </button>
                             <button
                               onClick={() => handleDelete(product.id)}
-                              className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                              title="Delete"
                             >
-                              <Trash2 className="w-4 h-4" />
+                              <Trash2 className="w-5 h-5" />
                             </button>
                           </div>
                         </td>

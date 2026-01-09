@@ -45,7 +45,7 @@ export function Header({ title }: HeaderProps) {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
           <input
             type="text"
-            placeholder="Search..."
+            placeholder={title === 'Products' ? 'পণ্য বা কোড দিয়ে খুঁজুন...' : 'Search...'}
             value={localSearch}
             onChange={(e) => handleSearchChange(e.target.value)}
             className="h-10 pl-10 pr-8 bg-slate-100 border-0 rounded-lg w-48 md:w-64 lg:w-80 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all duration-200"
