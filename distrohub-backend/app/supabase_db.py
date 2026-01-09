@@ -37,6 +37,23 @@ class SupabaseDatabase:
             return user
         return None
     
+    def get_user_by_id(self, user_id: str) -> Optional[dict]:
+        """Get user by ID"""
+        result = self.client.table("users").select("*").eq("id", user_id).execute()
+        if result.data:
+            user = result.data[0]
+            user["role"] = UserRole(user["role"]) if user.get("role") else UserRole.SALES_REP
+            return user
+        return None
+    
+    def get_users(self) -> List[dict]:
+        """Get all users"""
+        result = self.client.table("users").select("*").order("created_at", desc=True).execute()
+        users = result.data or []
+        for user in users:
+            user["role"] = UserRole(user["role"]) if user.get("role") else UserRole.SALES_REP
+        return users
+    
     def create_user(self, email: str, name: str, password: str, role: UserRole, phone: str = None) -> dict:
         user_data = {
             "email": email,
@@ -431,6 +448,13 @@ class SupabaseDatabase:
         # Generate invoice number
         invoice_number = f"INV-{datetime.now().strftime('%Y%m%d')}-{str(uuid.uuid4())[:4].upper()}"
         
+        # Get assigned_to user name if assigned_to is provided
+        assigned_to_name = None
+        if data.get("assigned_to"):
+            assigned_user = self.get_user_by_id(data["assigned_to"])
+            if assigned_user:
+                assigned_to_name = assigned_user.get("name")
+        
         sale_data = {
             "id": sale_id,
             "invoice_number": invoice_number,
@@ -444,6 +468,8 @@ class SupabaseDatabase:
             "payment_status": payment_status,
             "status": OrderStatus.CONFIRMED.value,
             "notes": data.get("notes"),
+            "assigned_to": data.get("assigned_to"),
+            "assigned_to_name": assigned_to_name,
             "created_at": datetime.now().isoformat()
         }
         
@@ -638,6 +664,18 @@ class SupabaseDatabase:
         # Handle notes
         if "notes" in data:
             update_data["notes"] = data["notes"]
+        
+        # Handle assigned_to update
+        if "assigned_to" in data:
+            assigned_to = data["assigned_to"]
+            update_data["assigned_to"] = assigned_to
+            # Get assigned user name
+            assigned_to_name = None
+            if assigned_to:
+                assigned_user = self.get_user_by_id(assigned_to)
+                if assigned_user:
+                    assigned_to_name = assigned_user.get("name")
+            update_data["assigned_to_name"] = assigned_to_name
         
         # Update retailer due amount if paid_amount changed
         if paid_amount_changed and retailer_id:
@@ -839,6 +877,113 @@ class SupabaseDatabase:
             returns_report.append(ret)
         
         return returns_report
+    
+    def get_collection_report(self, user_id: Optional[str] = None, from_date: Optional[str] = None, to_date: Optional[str] = None) -> List[dict]:
+        """
+        Get collection report for SRs/delivery men.
+        
+        Args:
+            user_id: Optional user ID to filter by specific SR. If None, returns report for all SRs.
+            from_date: Optional start date filter
+            to_date: Optional end date filter
+        
+        Returns:
+            List of collection reports, one per SR
+        """
+        from datetime import datetime, timedelta
+        
+        # Get all users with role 'sales_rep' if user_id not specified
+        if user_id:
+            users_query = self.client.table("users").select("*").eq("id", user_id).eq("role", "sales_rep")
+        else:
+            users_query = self.client.table("users").select("*").eq("role", "sales_rep")
+        
+        users_result = users_query.execute()
+        users = users_result.data or []
+        
+        if not users:
+            return []
+        
+        reports = []
+        
+        for user in users:
+            sr_id = user["id"]
+            sr_name = user["name"]
+            
+            # Get all sales assigned to this SR
+            sales_query = self.client.table("sales").select("*").eq("assigned_to", sr_id)
+            if from_date:
+                sales_query = sales_query.gte("created_at", from_date)
+            if to_date:
+                end_datetime = datetime.fromisoformat(to_date.replace('Z', '+00:00')) + timedelta(days=1)
+                sales_query = sales_query.lt("created_at", end_datetime.isoformat())
+            
+            sales_result = sales_query.execute()
+            assigned_sales = sales_result.data or []
+            
+            # Calculate totals
+            total_orders_assigned = len(assigned_sales)
+            total_sales_amount = sum(float(sale.get("total_amount", 0)) for sale in assigned_sales)
+            
+            # Get all payments collected by this SR
+            payments_query = self.client.table("payments").select("*").eq("collected_by", sr_id)
+            if from_date:
+                payments_query = payments_query.gte("created_at", from_date)
+            if to_date:
+                end_datetime = datetime.fromisoformat(to_date.replace('Z', '+00:00')) + timedelta(days=1)
+                payments_query = payments_query.lt("created_at", end_datetime.isoformat())
+            
+            payments_result = payments_query.execute()
+            payments = payments_result.data or []
+            total_collected_amount = sum(float(payment.get("amount", 0)) for payment in payments)
+            
+            # Get returns for sales assigned to this SR
+            sale_ids = [sale["id"] for sale in assigned_sales]
+            total_returns = 0.0
+            if sale_ids:
+                # Get all returns for these sales
+                for sale_id in sale_ids:
+                    returns_result = self.client.table("sales_returns").select("*").eq("sale_id", sale_id).execute()
+                    returns = returns_result.data or []
+                    for ret in returns:
+                        total_returns += float(ret.get("total_return_amount", 0))
+            
+            # Calculate current pending amount (sum of due_amount for assigned sales)
+            current_pending_amount = sum(float(sale.get("due_amount", 0)) for sale in assigned_sales)
+            
+            # Calculate collection rate
+            net_sales = total_sales_amount - total_returns
+            if net_sales > 0:
+                collection_rate = (total_collected_amount / net_sales) * 100
+            else:
+                collection_rate = 0.0
+            
+            # Format payment history
+            payment_history = []
+            for payment in payments:
+                payment_history.append({
+                    "id": payment.get("id"),
+                    "sale_id": payment.get("sale_id"),
+                    "amount": float(payment.get("amount", 0)),
+                    "payment_method": payment.get("payment_method"),
+                    "collected_by_name": payment.get("collected_by_name"),
+                    "created_at": payment.get("created_at"),
+                    "notes": payment.get("notes")
+                })
+            
+            reports.append({
+                "user_id": sr_id,
+                "user_name": sr_name,
+                "total_orders_assigned": total_orders_assigned,
+                "total_sales_amount": total_sales_amount,
+                "total_collected_amount": total_collected_amount,
+                "total_returns": total_returns,
+                "current_pending_amount": current_pending_amount,
+                "collection_rate": round(collection_rate, 2),
+                "payment_history": payment_history
+            })
+        
+        return reports
     
     def create_sale_return(self, sale_id: str, data: dict, items: List[dict], user_id: Optional[str] = None) -> dict:
         """
@@ -1096,13 +1241,22 @@ class SupabaseDatabase:
                 # DO NOT update delivery_status automatically - admin will update manually
                 self.client.table("sales").update(update_data).eq("id", data["sale_id"]).execute()
         
+        # Get collected_by user name if collected_by is provided
+        collected_by_name = None
+        if data.get("collected_by"):
+            collected_user = self.get_user_by_id(data["collected_by"])
+            if collected_user:
+                collected_by_name = collected_user.get("name")
+        
         payment_data = {
             "retailer_id": data["retailer_id"],
             "retailer_name": retailer["name"],
             "sale_id": data.get("sale_id"),
             "amount": data["amount"],
             "payment_method": data["payment_method"],
-            "notes": data.get("notes")
+            "notes": data.get("notes"),
+            "collected_by": data.get("collected_by"),
+            "collected_by_name": collected_by_name
         }
         result = self.client.table("payments").insert(payment_data).execute()
         return result.data[0] if result.data else payment_data

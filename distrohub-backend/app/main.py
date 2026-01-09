@@ -29,7 +29,7 @@ from app.models import (
     SaleReturnCreate, SaleReturn, RefundType,
     SaleReport, SaleReturnReport, SalesReportSummary,
     WarehouseCreate, Warehouse, WarehouseStockSummary,
-    SaleUpdate
+    SaleUpdate, CollectionReport, CollectionReportSummary
 )
 from app.database import db
 from app.auth import create_access_token, get_current_user
@@ -295,6 +295,18 @@ async def register(user_data: UserCreate):
             created_at=user["created_at"]
         )
     )
+
+@app.get("/api/users", response_model=List[User])
+async def get_users(current_user: dict = Depends(get_current_user)):
+    """Get all users (admin only or for SR selection)"""
+    try:
+        users = db.get_users()
+        return [User(**user) for user in users]
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get users: {str(e)}"
+        )
 
 @app.get("/api/auth/me", response_model=User)
 async def get_me(current_user: dict = Depends(get_current_user)):
@@ -745,7 +757,8 @@ async def create_sale(sale_data: SaleCreate, current_user: dict = Depends(get_cu
                 "retailer_id": sale_data.retailer_id,
                 "payment_type": sale_data.payment_type,
                 "paid_amount": sale_data.paid_amount,
-                "notes": sale_data.notes
+                "notes": sale_data.notes,
+                "assigned_to": sale_data.assigned_to
             },
             items
         )
@@ -898,8 +911,13 @@ async def get_sale_returns(sale_id: str, current_user: dict = Depends(get_curren
         )
 
 @app.get("/api/payments", response_model=List[Payment])
-async def get_payments(current_user: dict = Depends(get_current_user)):
+async def get_payments(
+    sale_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
     payments = db.get_payments()
+    if sale_id:
+        payments = [p for p in payments if p.get("sale_id") == sale_id]
     return [Payment(**p) for p in payments]
 
 @app.post("/api/payments", response_model=Payment)

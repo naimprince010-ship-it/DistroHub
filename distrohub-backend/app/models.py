@@ -142,6 +142,7 @@ class SaleCreate(BaseModel):
     payment_type: str
     paid_amount: float = 0
     notes: Optional[str] = None
+    assigned_to: Optional[str] = None  # User ID of SR/delivery man assigned to collect payment
 
 class SaleItem(BaseModel):
     id: str
@@ -168,6 +169,8 @@ class Sale(BaseModel):
     payment_status: PaymentStatus
     status: OrderStatus
     notes: Optional[str] = None
+    assigned_to: Optional[str] = None  # User ID of SR/delivery man assigned to collect payment
+    assigned_to_name: Optional[str] = None  # Name of assigned SR/delivery man
     created_at: datetime
 
 class SaleUpdate(BaseModel):
@@ -178,6 +181,7 @@ class SaleUpdate(BaseModel):
     payment_status: Optional[PaymentStatus] = None
     delivered_at: Optional[datetime] = None
     notes: Optional[str] = None
+    assigned_to: Optional[str] = None  # Update assigned SR/delivery man
 
 class PaymentCreate(BaseModel):
     retailer_id: str
@@ -194,6 +198,8 @@ class Payment(BaseModel):
     amount: float
     payment_method: str
     notes: Optional[str] = None
+    collected_by: Optional[str] = None  # User ID of SR/delivery man who collected this payment
+    collected_by_name: Optional[str] = None  # Name of SR/delivery man who collected this payment
     created_at: datetime
 
 class RefundType(str, Enum):
@@ -343,6 +349,24 @@ class DueReport(BaseModel):
     shop_name: str
     total_due: float
     last_payment_date: Optional[datetime] = None
+
+class CollectionReport(BaseModel):
+    """Collection report for a specific SR/delivery man"""
+    user_id: str
+    user_name: str
+    total_orders_assigned: int
+    total_sales_amount: float
+    total_collected_amount: float
+    total_returns: float
+    current_pending_amount: float
+    collection_rate: float  # Percentage: (collected / (sales - returns)) * 100
+    payment_history: List[Payment] = []  # List of payments collected by this SR
+
+class CollectionReportSummary(BaseModel):
+    """Summary of all SRs collection reports"""
+    total_srs: int
+    total_pending: float
+    reports: List[CollectionReport]
 
 class CategoryBase(BaseModel):
     name: str

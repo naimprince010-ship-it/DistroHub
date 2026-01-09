@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { DollarSign } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import {
@@ -16,6 +17,8 @@ import { InvoicePrint } from '@/components/print/InvoicePrint';
 import { ChallanPrint } from '@/components/print/ChallanPrint';
 import { BarcodeScanButton } from '@/components/BarcodeScanner';
 import api from '@/lib/api';
+import { Payment } from '@/types';
+import { formatDateBD } from '@/lib/utils';
 
 interface SalesOrder {
   id: string;
@@ -28,6 +31,7 @@ interface SalesOrder {
   total_amount: number;
   paid_amount: number;
   items: { product: string; qty: number; price: number }[];
+  delivery_status?: 'pending' | 'delivered' | 'partially_delivered' | 'returned';
 }
 
 const statusConfig = {
@@ -115,6 +119,7 @@ export function Sales() {
               qty: item.quantity || 0,
               price: item.unit_price || 0,
             })),
+            delivery_status: sale.delivery_status || 'pending',
           };
         });
         setOrders(mappedOrders);
@@ -269,6 +274,15 @@ export function Sales() {
                             >
                               <Eye className="w-4 h-4" />
                             </button>
+                            {(order.total_amount - order.paid_amount) > 0 && (
+                              <button
+                                onClick={() => setCollectionOrder(order)}
+                                className="px-2 py-1 text-xs font-medium bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
+                                title="টাকা জমা নিন (Collect Money)"
+                              >
+                                টাকা জমা
+                              </button>
+                            )}
                             <button
                               onClick={() => setPrintInvoiceOrder(order)}
                               className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
@@ -403,13 +417,18 @@ export function Sales() {
               }
               
               // Map frontend SalesOrder to backend SaleCreate format
-              const salePayload = {
+              const salePayload: any = {
                 retailer_id: retailer.id,
                 items: saleItems,
                 payment_type: 'cash', // Default payment type
                 paid_amount: order.paid_amount || 0,
                 notes: `Delivery date: ${order.delivery_date}`,
               };
+              
+              // Add assigned_to if provided
+              if (order.assigned_to) {
+                salePayload.assigned_to = order.assigned_to;
+              }
               
               console.log('[Sales] Sending sale payload:', salePayload);
               const response = await api.post('/api/sales', salePayload);
@@ -444,6 +463,18 @@ export function Sales() {
         />
       )}
 
+      {/* Collection Modal */}
+      {collectionOrder && (
+        <CollectionModal
+          order={collectionOrder}
+          onClose={() => setCollectionOrder(null)}
+          onSuccess={async () => {
+            await fetchSales();
+            setCollectionOrder(null);
+          }}
+        />
+      )}
+
       {/* Print Challan Modal */}
       {printChallanOrder && (
         <ChallanPrint
@@ -453,12 +484,27 @@ export function Sales() {
             date: printChallanOrder.order_date,
             delivery_date: printChallanOrder.delivery_date,
             retailer_name: printChallanOrder.retailer_name,
+            retailer_id: printChallanOrder.id,
             items: printChallanOrder.items.map(item => ({
               product: item.product,
               qty: item.qty,
-              unit: 'Pcs'
+              unit: 'Pcs',
+              pack_size: 'Pcs',
+              unit_price: item.price,
+              bonus_qty: 0,
+              discount: 0,
+              discount_amount: 0
             })),
             total_items: printChallanOrder.items.length,
+            total_amount: printChallanOrder.total_amount,
+            paid_amount: printChallanOrder.paid_amount,
+            due_amount: printChallanOrder.total_amount - printChallanOrder.paid_amount,
+            payment_status: printChallanOrder.payment_status,
+            challan_type: 'Normal',
+            delivery_status: printChallanOrder.delivery_status,
+            distributor_name: 'DistroHub',
+            route_name: 'Main Route',
+            sr_name: 'Sales Representative',
           }}
           onClose={() => setPrintChallanOrder(null)}
         />
@@ -493,11 +539,11 @@ function OrderDetailsModal({
           <div className="grid grid-cols-2 gap-2 mb-3">
             <div>
               <p className="text-sm text-slate-500">Order Date</p>
-              <p className="font-medium">{order.order_date}</p>
+              <p className="font-medium">{order.order_date ? formatDateBD(order.order_date) : ''}</p>
             </div>
             <div>
               <p className="text-sm text-slate-500">Delivery Date</p>
-              <p className="font-medium">{order.delivery_date}</p>
+              <p className="font-medium">{order.delivery_date ? formatDateBD(order.delivery_date) : ''}</p>
             </div>
             <div>
               <p className="text-sm text-slate-500">Status</p>
@@ -515,6 +561,12 @@ function OrderDetailsModal({
                 {paymentConfig[order.payment_status].label}
               </span>
             </div>
+            {order.assigned_to_name && (
+              <div>
+                <p className="text-sm text-slate-500">কালেক্টর (Assigned To)</p>
+                <p className="font-medium">{order.assigned_to_name}</p>
+              </div>
+            )}
           </div>
 
           <h3 className="font-semibold text-slate-900 mb-2">Order Items</h3>
@@ -555,6 +607,35 @@ function OrderDetailsModal({
               </span>
             </div>
           </div>
+
+          {payments.length > 0 && (
+            <div className="mt-3">
+              <h3 className="font-semibold text-slate-900 mb-2">Payment History</h3>
+              <div className="space-y-2">
+                {payments.map((payment) => (
+                  <div key={payment.id} className="bg-slate-50 rounded-lg p-2">
+                    <div className="flex justify-between items-start mb-1">
+                      <div>
+                        <p className="font-medium text-slate-900">৳ {payment.amount.toLocaleString()}</p>
+                        <p className="text-xs text-slate-500">
+                          {formatDateBD(payment.created_at)}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-slate-600 capitalize">{payment.payment_method}</p>
+                        {payment.collected_by_name && (
+                          <p className="text-xs text-slate-500">by {payment.collected_by_name}</p>
+                        )}
+                      </div>
+                    </div>
+                    {payment.notes && (
+                      <p className="text-xs text-slate-500 mt-1">{payment.notes}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="p-3 border-t border-slate-200 flex justify-end gap-2">
@@ -751,12 +832,15 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
   const [formData, setFormData] = useState({
     retailer_name: '',
     delivery_date: '',
+    assigned_to: '',
     items: [{ product: '', qty: 0, price: 0 }],
   });
   const [retailers, setRetailers] = useState<Array<{ id: string; name: string; shop_name: string }>>([]);
   const [products, setProducts] = useState<Array<{ id: string; name: string; selling_price: number; barcode?: string }>>([]);
+  const [salesReps, setSalesReps] = useState<Array<{ id: string; name: string }>>([]);
   const [loadingRetailers, setLoadingRetailers] = useState(true);
   const [loadingProducts, setLoadingProducts] = useState(true);
+  const [loadingSalesReps, setLoadingSalesReps] = useState(true);
 
   // Fetch retailers and products on mount
   useEffect(() => {
@@ -772,10 +856,12 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
       try {
         setLoadingRetailers(true);
         setLoadingProducts(true);
+        setLoadingSalesReps(true);
         
-        const [retailersRes, productsRes] = await Promise.all([
+        const [retailersRes, productsRes, usersRes] = await Promise.all([
           api.get('/api/retailers'),
-          api.get('/api/products')
+          api.get('/api/products'),
+          api.get('/api/users')
         ]);
         
         if (retailersRes.data) {
@@ -794,11 +880,23 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
             barcode: p.barcode
           })));
         }
+        
+        if (usersRes.data) {
+          // Filter users with role 'sales_rep'
+          const reps = usersRes.data
+            .filter((u: any) => u.role === 'sales_rep')
+            .map((u: any) => ({
+              id: u.id,
+              name: u.name
+            }));
+          setSalesReps(reps);
+        }
       } catch (error: any) {
         console.error('[AddOrderModal] Error fetching data:', error);
       } finally {
         setLoadingRetailers(false);
         setLoadingProducts(false);
+        setLoadingSalesReps(false);
       }
     };
 
@@ -819,6 +917,7 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
       total_amount: total,
       paid_amount: 0,
       items: formData.items,
+      assigned_to: formData.assigned_to || undefined,
     });
   };
 
@@ -893,6 +992,28 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
                 required
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              কালেক্টর (Assigned To)
+            </label>
+            <select
+              value={formData.assigned_to}
+              onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
+              className="input-field"
+              disabled={loadingSalesReps}
+            >
+              <option value="">{loadingSalesReps ? 'Loading SRs...' : 'Select SR/Delivery Man (Optional)'}</option>
+              {salesReps.map((rep) => (
+                <option key={rep.id} value={rep.id}>
+                  {rep.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-500 mt-1">
+              Select the SR/delivery man responsible for collecting payment for this invoice
+            </p>
           </div>
 
                     <div>
@@ -975,6 +1096,223 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
             </button>
             <button type="submit" className="btn-primary">
               Create Order
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function CollectionModal({
+  order,
+  onClose,
+  onSuccess
+}: {
+  order: SalesOrder;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const [amount, setAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [collectedBy, setCollectedBy] = useState('');
+  const [notes, setNotes] = useState('');
+  const [salesReps, setSalesReps] = useState<Array<{ id: string; name: string }>>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadingReps, setLoadingReps] = useState(true);
+
+  const dueAmount = order.total_amount - order.paid_amount;
+
+  useEffect(() => {
+    const fetchSalesReps = async () => {
+      try {
+        const response = await api.get('/api/users');
+        if (response.data) {
+          const reps = response.data
+            .filter((u: any) => u.role === 'sales_rep')
+            .map((u: any) => ({
+              id: u.id,
+              name: u.name
+            }));
+          setSalesReps(reps);
+        }
+      } catch (error) {
+        console.error('[CollectionModal] Error fetching sales reps:', error);
+      } finally {
+        setLoadingReps(false);
+      }
+    };
+    fetchSalesReps();
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const paymentAmount = parseFloat(amount);
+    
+    if (isNaN(paymentAmount) || paymentAmount <= 0) {
+      alert('Please enter a valid payment amount');
+      return;
+    }
+    
+    if (paymentAmount > dueAmount) {
+      alert(`Payment amount cannot exceed due amount of ৳${dueAmount.toLocaleString()}`);
+      return;
+    }
+    
+    if (!collectedBy) {
+      alert('Please select who collected this payment');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Create payment record
+      const paymentPayload = {
+        retailer_id: order.retailer_id,
+        sale_id: order.id,
+        amount: paymentAmount,
+        payment_method: paymentMethod,
+        collected_by: collectedBy,
+        notes: notes || undefined
+      };
+      
+      await api.post('/api/payments', paymentPayload);
+      
+      // Update sale paid_amount
+      const newPaidAmount = order.paid_amount + paymentAmount;
+      await api.put(`/api/sales/${order.id}`, {
+        paid_amount: newPaidAmount
+      });
+      
+      const remainingDue = dueAmount - paymentAmount;
+      const collectorName = salesReps.find(r => r.id === collectedBy)?.name || 'SR';
+      if (remainingDue > 0) {
+        alert(`Payment of ৳${paymentAmount.toLocaleString()} recorded. বাকি ৳${remainingDue.toLocaleString()} এখনও ${collectorName} এর কাছে পেন্ডিং।`);
+      } else {
+        alert(`Payment of ৳${paymentAmount.toLocaleString()} recorded. Invoice is now fully paid.`);
+      }
+      
+      onSuccess();
+    } catch (error: any) {
+      console.error('[CollectionModal] Error recording payment:', error);
+      alert(`Failed to record payment: ${error.response?.data?.detail || error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
+        <div className="p-3 border-b border-slate-200">
+          <h2 className="text-xl font-semibold text-slate-900">টাকা জমা নিন (Collect Money)</h2>
+          <p className="text-slate-500">{order.order_number} - {order.retailer_name}</p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-3 space-y-3">
+          <div className="bg-red-50 rounded-lg p-3 text-center">
+            <p className="text-sm text-red-600 mb-1">Current Due Amount</p>
+            <p className="text-3xl font-bold text-red-600">৳ {dueAmount.toLocaleString()}</p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Payment Amount (৳) <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="input-field"
+              placeholder="Enter amount"
+              min={0}
+              max={dueAmount}
+              step="0.01"
+              required
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Maximum: ৳{dueAmount.toLocaleString()} (partial payments allowed)
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              কালেক্টর (Collected By) <span className="text-red-500">*</span>
+            </label>
+            <select
+              value={collectedBy}
+              onChange={(e) => setCollectedBy(e.target.value)}
+              className="input-field"
+              required
+              disabled={loadingReps}
+            >
+              <option value="">{loadingReps ? 'Loading SRs...' : 'Select SR/Delivery Man'}</option>
+              {salesReps.map((rep) => (
+                <option key={rep.id} value={rep.id}>
+                  {rep.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Payment Method
+            </label>
+            <select
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value)}
+              className="input-field"
+            >
+              <option value="cash">Cash</option>
+              <option value="bank">Bank Transfer</option>
+              <option value="mobile">Mobile Banking (bKash/Nagad)</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
+              Notes (Optional)
+            </label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="input-field"
+              rows={2}
+              placeholder="Add any notes about this payment..."
+            />
+          </div>
+
+          {amount && parseFloat(amount) > 0 && (
+            <div className="bg-blue-50 rounded-lg p-2">
+              <div className="flex justify-between mb-1">
+                <span className="text-sm text-slate-600">Payment Amount</span>
+                <span className="font-semibold text-green-600">৳ {parseFloat(amount || '0').toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between pt-1 border-t border-blue-200">
+                <span className="text-sm text-slate-600">Remaining Due</span>
+                <span className="font-bold text-red-600">
+                  ৳ {Math.max(0, dueAmount - parseFloat(amount || '0')).toLocaleString()}
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="btn-secondary"
+              disabled={loading}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="btn-primary flex items-center gap-2"
+              disabled={loading}
+            >
+              {loading ? 'Recording...' : 'Record Payment'}
             </button>
           </div>
         </form>

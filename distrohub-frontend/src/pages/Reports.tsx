@@ -11,6 +11,7 @@ import {
   Eye,
 } from 'lucide-react';
 import api from '@/lib/api';
+import { CollectionReport, CollectionReportSummary } from '@/types';
 
 interface Sale {
   id: string;
@@ -82,7 +83,7 @@ interface Category {
   name: string;
 }
 
-type ReportType = 'sales' | 'purchases' | 'stock' | 'sales-returns';
+type ReportType = 'sales' | 'purchases' | 'stock' | 'sales-returns' | 'collection';
 
 export function Reports() {
   const [activeReport, setActiveReport] = useState<ReportType>('sales');
@@ -110,6 +111,8 @@ export function Reports() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Array<{ id: string; name: string; category: string }>>([]);
+  const [collectionReports, setCollectionReports] = useState<CollectionReport[]>([]);
+  const [collectionSummary, setCollectionSummary] = useState<CollectionReportSummary | null>(null);
   
   // UI State
   const [selectedInvoice, setSelectedInvoice] = useState<SaleReport | null>(null);
@@ -195,6 +198,17 @@ export function Reports() {
         if (response.data) {
           setInventory(response.data);
           console.log('[Reports] Inventory fetched:', response.data.length);
+        }
+      } else if (activeReport === 'collection') {
+        const params = new URLSearchParams();
+        if (startDate) params.append('from_date', startDate);
+        if (endDate) params.append('to_date', endDate);
+        const url = `/api/reports/collection${params.toString() ? '?' + params.toString() : ''}`;
+        const response = await api.get(url);
+        if (response.data) {
+          setCollectionReports(response.data.reports || []);
+          setCollectionSummary(response.data.summary || null);
+          console.log('[Reports] Collection report fetched:', response.data.reports?.length || 0);
         }
       }
     } catch (error: any) {
@@ -527,6 +541,16 @@ export function Reports() {
             >
               Sales Returns Report
             </button>
+            <button
+              onClick={() => setActiveReport('collection')}
+              className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
+                activeReport === 'collection'
+                  ? 'text-primary-600 border-b-2 border-primary-600'
+                  : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              Collection Report
+            </button>
           </div>
         </div>
 
@@ -654,6 +678,19 @@ export function Reports() {
             <div className="bg-white rounded-xl p-3 shadow-sm">
               <p className="text-slate-500 text-sm">Avg Return Amount</p>
               <p className="text-2xl font-bold text-blue-600">৳ {returnsAvgAmount.toLocaleString()}</p>
+            </div>
+          </div>
+        )}
+
+        {activeReport === 'collection' && collectionSummary && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
+            <div className="bg-white rounded-xl p-3 shadow-sm">
+              <p className="text-slate-500 text-sm">Total SRs</p>
+              <p className="text-2xl font-bold text-slate-900">{collectionSummary.total_srs}</p>
+            </div>
+            <div className="bg-white rounded-xl p-3 shadow-sm">
+              <p className="text-slate-500 text-sm">Total Pending</p>
+              <p className="text-2xl font-bold text-red-600">৳ {collectionSummary.total_pending.toLocaleString()}</p>
             </div>
           </div>
         )}
@@ -1002,7 +1039,88 @@ export function Reports() {
               </div>
             )}
           </div>
-        )}
+        ) : activeReport === 'collection' ? (
+          <div className="space-y-3">
+            {loading ? (
+              <div className="p-8 text-center text-slate-500">Loading collection report...</div>
+            ) : collectionReports.length === 0 ? (
+              <div className="bg-white rounded-xl p-8 text-center text-slate-500 shadow-sm">
+                No collection data found for the selected period.
+              </div>
+            ) : (
+              collectionReports.map((report) => {
+                const getCollectionColor = (rate: number) => {
+                  if (rate >= 80) return 'text-green-600 bg-green-100';
+                  if (rate >= 50) return 'text-yellow-600 bg-yellow-100';
+                  return 'text-red-600 bg-red-100';
+                };
+                
+                return (
+                  <div key={report.user_id} className="bg-white rounded-xl shadow-sm overflow-hidden">
+                    <div className="p-3 border-b border-slate-200">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className={`text-lg font-semibold inline-block px-3 py-1 rounded-full ${getCollectionColor(report.collection_rate)}`}>
+                            {report.user_name}
+                          </h3>
+                          <p className="text-sm text-slate-500 mt-1">Collection Rate: {report.collection_rate.toFixed(1)}%</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-slate-500">Pending Amount</p>
+                          <p className="text-2xl font-bold text-red-600">৳ {report.current_pending_amount.toLocaleString()}</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="p-3">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                        <div>
+                          <p className="text-xs text-slate-500">Total Orders</p>
+                          <p className="text-lg font-semibold text-slate-900">{report.total_orders_assigned}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500">Total Sales</p>
+                          <p className="text-lg font-semibold text-blue-600">৳ {report.total_sales_amount.toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500">Total Collected</p>
+                          <p className="text-lg font-semibold text-green-600">৳ {report.total_collected_amount.toLocaleString()}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-slate-500">Total Returns</p>
+                          <p className="text-lg font-semibold text-orange-600">৳ {report.total_returns.toLocaleString()}</p>
+                        </div>
+                      </div>
+                      
+                      {report.payment_history.length > 0 && (
+                        <div className="mt-3">
+                          <h4 className="text-sm font-semibold text-slate-700 mb-2">Payment History</h4>
+                          <div className="space-y-1 max-h-40 overflow-y-auto">
+                            {report.payment_history.map((payment) => (
+                              <div key={payment.id} className="bg-slate-50 rounded p-2 text-sm">
+                                <div className="flex justify-between items-center">
+                                  <div>
+                                    <span className="font-medium">৳ {payment.amount.toLocaleString()}</span>
+                                    <span className="text-slate-500 ml-2">
+                                      {formatDate(payment.created_at)}
+                                    </span>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="text-xs text-slate-500 capitalize">{payment.payment_method}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        ) : null}
       </div>
 
       {/* Invoice Details Modal */}

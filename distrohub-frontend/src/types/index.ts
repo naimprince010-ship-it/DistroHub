@@ -70,6 +70,8 @@ export interface SalesOrder {
   total_amount: number;
   paid_amount: number;
   items: SalesOrderItem[];
+  assigned_to?: string;  // User ID of SR/delivery man assigned to collect payment
+  assigned_to_name?: string;  // Name of assigned SR/delivery man
   created_at: string;
 }
 
@@ -86,11 +88,15 @@ export interface Payment {
   id: string;
   retailer_id: string;
   retailer_name: string;
+  sale_id?: string;
   order_id?: string;
   amount: number;
-  payment_date: string;
+  payment_date?: string;
   payment_method: 'cash' | 'bank' | 'mobile';
   reference?: string;
+  collected_by?: string;  // User ID of SR/delivery man who collected this payment
+  collected_by_name?: string;  // Name of SR/delivery man who collected this payment
+  notes?: string;
   created_at: string;
 }
 
@@ -161,4 +167,23 @@ export interface SmsSendRequest {
   recipient_phone: string;
   message: string;
   event_type?: SmsEventType;
+}
+
+// Collection Report Types
+export interface CollectionReport {
+  user_id: string;
+  user_name: string;
+  total_orders_assigned: number;
+  total_sales_amount: number;
+  total_collected_amount: number;
+  total_returns: number;
+  current_pending_amount: number;
+  collection_rate: number;  // Percentage
+  payment_history: Payment[];
+}
+
+export interface CollectionReportSummary {
+  total_srs: number;
+  total_pending: number;
+  reports: CollectionReport[];
 }
