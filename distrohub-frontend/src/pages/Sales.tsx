@@ -9,11 +9,9 @@ import {
   CheckCircle,
   Clock,
   XCircle,
-  FileText,
   Edit,
   Trash2,
 } from 'lucide-react';
-import { InvoicePrint } from '@/components/print/InvoicePrint';
 import { ChallanPrint } from '@/components/print/ChallanPrint';
 import { BarcodeScanButton } from '@/components/BarcodeScanner';
 import api from '@/lib/api';
@@ -68,7 +66,6 @@ export function Sales() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<SalesOrder | null>(null);
   const [editOrder, setEditOrder] = useState<SalesOrder | null>(null);
-  const [printInvoiceOrder, setPrintInvoiceOrder] = useState<SalesOrder | null>(null);
   const [printChallanOrder, setPrintChallanOrder] = useState<SalesOrder | null>(null);
   const [collectionOrder, setCollectionOrder] = useState<SalesOrder | null>(null);
 
@@ -329,16 +326,9 @@ export function Sales() {
                               </button>
                             )}
                             <button
-                              onClick={() => setPrintInvoiceOrder(order)}
-                              className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                              title="Print Invoice"
-                            >
-                              <FileText className="w-4 h-4" />
-                            </button>
-                            <button
                               onClick={() => setPrintChallanOrder(order)}
                               className="p-1 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
-                              title="Print Challan"
+                              title="প্রিন্ট করুন / PDF সেভ করুন (Print / Save PDF)"
                             >
                               <Printer className="w-4 h-4" />
                             </button>
@@ -487,24 +477,6 @@ export function Sales() {
               alert(`Failed to create sale: ${error.response?.data?.detail || error.message}`);
             }
           }}
-        />
-      )}
-
-      {/* Print Invoice Modal */}
-      {printInvoiceOrder && (
-        <InvoicePrint
-          data={{
-            invoice_number: printInvoiceOrder.order_number,
-            order_date: printInvoiceOrder.order_date,
-            retailer_name: printInvoiceOrder.retailer_name,
-            items: printInvoiceOrder.items,
-            subtotal: printInvoiceOrder.total_amount,
-            discount: 0,
-            total_amount: printInvoiceOrder.total_amount,
-            paid_amount: printInvoiceOrder.paid_amount,
-            due_amount: printInvoiceOrder.total_amount - printInvoiceOrder.paid_amount,
-          }}
-          onClose={() => setPrintInvoiceOrder(null)}
         />
       )}
 
