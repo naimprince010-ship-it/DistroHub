@@ -176,8 +176,21 @@ class SupabaseDatabase:
         return result.data[0] if result.data else None
     
     def delete_product(self, product_id: str) -> bool:
-        self.client.table("products").delete().eq("id", product_id).execute()
-        return True
+        """Delete a product and its associated batches"""
+        try:
+            # First, delete all batches for this product
+            self.client.table("product_batches").delete().eq("product_id", product_id).execute()
+            
+            # Then delete the product
+            result = self.client.table("products").delete().eq("id", product_id).execute()
+            
+            # Check if product was actually deleted
+            if result.data and len(result.data) > 0:
+                return True
+            return False
+        except Exception as e:
+            print(f"[DB] Error deleting product {product_id}: {e}")
+            raise
     
     def get_batches_by_product(self, product_id: str) -> List[dict]:
         result = self.client.table("product_batches").select("*").eq("product_id", product_id).execute()

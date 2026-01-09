@@ -408,7 +408,20 @@ export function Products() {
         await fetchProducts();
       } catch (error: any) {
         console.error('[Products] Failed to delete product:', error);
-        const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to delete product';
+        console.error('[Products] Error details:', {
+          message: error?.message,
+          status: error?.response?.status,
+          data: error?.response?.data,
+          code: error?.code
+        });
+        
+        let errorMessage = 'Failed to delete product';
+        if (error?.code === 'ERR_NETWORK' || error?.message?.includes('Cannot connect')) {
+          errorMessage = 'Backend server is not responding. Please check:\n1. Backend is deployed on Render\n2. Backend service is running\n3. Try refreshing the page';
+        } else {
+          errorMessage = error?.response?.data?.detail || error?.message || 'Failed to delete product';
+        }
+        
         alert(`Failed to delete product: ${errorMessage}`);
       }
     };

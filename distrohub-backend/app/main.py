@@ -578,9 +578,25 @@ async def update_product(product_id: str, product_data: ProductCreate, current_u
 
 @app.delete("/api/products/{product_id}")
 async def delete_product(product_id: str, current_user: dict = Depends(get_current_user)):
-    if not db.delete_product(product_id):
-        raise HTTPException(status_code=404, detail="Product not found")
-    return {"message": "Product deleted"}
+    try:
+        # Check if product exists first
+        product = db.get_product(product_id)
+        if not product:
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        # Delete the product
+        success = db.delete_product(product_id)
+        if not success:
+            raise HTTPException(status_code=500, detail="Failed to delete product")
+        
+        return {"message": "Product deleted successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[API] Error deleting product {product_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to delete product: {str(e)}")
 
 @app.get("/api/products/{product_id}/batches", response_model=List[ProductBatch])
 async def get_product_batches(product_id: str, current_user: dict = Depends(get_current_user)):
