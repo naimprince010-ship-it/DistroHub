@@ -519,6 +519,10 @@ export function Products() {
                 <table className="w-full">
                   <thead className="bg-slate-50 border-b border-slate-200">
                     <tr>
+                      <th className="text-center p-2 font-semibold text-slate-700 w-12">
+                        #
+                        <div className="text-xs font-normal text-slate-500">ক্রম</div>
+                      </th>
                       <th className="text-left p-2 font-semibold text-slate-700">Product</th>
                       <th className="text-left p-2 font-semibold text-slate-700">SKU</th>
                       <th className="text-left p-2 font-semibold text-slate-700">Category</th>
@@ -548,8 +552,11 @@ export function Products() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredProducts.map((product) => (
+                    {filteredProducts.map((product, index) => (
                       <tr key={product.id} className="hover:bg-slate-50 transition-colors">
+                        <td className="p-2 text-center text-slate-600 font-medium">
+                          {index + 1}
+                        </td>
                         <td className="p-2">
                           <div className="flex items-center gap-2">
                             <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
