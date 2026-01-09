@@ -31,11 +31,17 @@ class UserBase(BaseModel):
     phone: Optional[str] = None
 
 class UserCreate(UserBase):
-    password: str
+  password: str
+
+class UserUpdate(BaseModel):
+  name: Optional[str] = None
+  email: Optional[str] = None
+  phone: Optional[str] = None
+  password: Optional[str] = None
 
 class User(UserBase):
-    id: str
-    created_at: datetime
+  id: str
+  created_at: datetime
 
 class UserLogin(BaseModel):
     email: str

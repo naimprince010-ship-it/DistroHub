@@ -65,6 +65,54 @@ class SupabaseDatabase:
         result = self.client.table("users").insert(user_data).execute()
         return result.data[0] if result.data else user_data
     
+    def update_user(self, user_id: str, data: dict) -> Optional[dict]:
+        """Update user information"""
+        try:
+            update_data = {}
+            
+            if "name" in data and data["name"] is not None:
+                update_data["name"] = data["name"]
+            
+            if "email" in data and data["email"] is not None:
+                update_data["email"] = data["email"]
+            
+            if "phone" in data:
+                update_data["phone"] = data["phone"] if data["phone"] else None
+            
+            if "password" in data and data["password"]:
+                update_data["password_hash"] = self.hash_password(data["password"])
+            
+            if not update_data:
+                return None
+            
+            result = self.client.table("users").update(update_data).eq("id", user_id).execute()
+            return result.data[0] if result.data else None
+        except Exception as e:
+            print(f"[DB] Error updating user {user_id}: {e}")
+            raise
+    
+    def delete_user(self, user_id: str) -> bool:
+        """Delete a user and clear assigned_to references in sales"""
+        try:
+            # Step 1: Clear assigned_to references in sales table
+            self.client.table("sales").update({
+                "assigned_to": None,
+                "assigned_to_name": None
+            }).eq("assigned_to", user_id).execute()
+            
+            # Step 2: Clear collected_by references in payments table
+            self.client.table("payments").update({
+                "collected_by": None,
+                "collected_by_name": None
+            }).eq("collected_by", user_id).execute()
+            
+            # Step 3: Delete the user
+            result = self.client.table("users").delete().eq("id", user_id).execute()
+            return len(result.data) > 0
+        except Exception as e:
+            print(f"[DB] Error deleting user {user_id}: {e}")
+            raise
+    
     def get_products(self) -> List[dict]:
         result = self.client.table("products").select("*").execute()
         return result.data or []

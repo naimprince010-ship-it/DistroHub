@@ -12,7 +12,7 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 from app.models import (
-    UserCreate, User, UserLogin, Token, UserRole,
+    UserCreate, UserUpdate, User, UserLogin, Token, UserRole,
     ProductCreate, Product, ProductBatchCreate, ProductBatch,
     RetailerCreate, Retailer,
     PurchaseCreate, Purchase,
@@ -306,6 +306,121 @@ async def get_users(current_user: dict = Depends(get_current_user)):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get users: {str(e)}"
+        )
+
+@app.post("/api/users", response_model=User, status_code=status.HTTP_201_CREATED)
+async def create_user(user_data: UserCreate, current_user: dict = Depends(get_current_user)):
+    """Create a new user (sales rep)"""
+    try:
+        # Check if email already exists
+        existing_users = db.get_users()
+        if any(u.get("email") == user_data.email for u in existing_users):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="User with this email already exists"
+            )
+        
+        # Create user with sales_rep role
+        user = db.create_user(
+            email=user_data.email,
+            name=user_data.name,
+            password=user_data.password,
+            role=UserRole.SALES_REP,
+            phone=user_data.phone
+        )
+        return User(**user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = str(e)
+        error_type = type(e).__name__
+        print(f"[API] Error creating user: {error_type}: {error_msg}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create user: {error_msg}"
+        )
+
+@app.put("/api/users/{user_id}", response_model=User)
+async def update_user(
+    user_id: str,
+    user_data: UserUpdate,
+    current_user: dict = Depends(get_current_user)
+):
+    """Update user information"""
+    try:
+        # Verify user exists
+        existing_user = db.get_user_by_id(user_id)
+        if not existing_user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Check if email is being changed and if it conflicts
+        if user_data.email and user_data.email != existing_user.get("email"):
+            existing_users = db.get_users()
+            if any(u.get("email") == user_data.email and u.get("id") != user_id for u in existing_users):
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="User with this email already exists"
+                )
+        
+        # Prepare update data
+        update_data = {}
+        if user_data.name is not None:
+            update_data["name"] = user_data.name
+        if user_data.email is not None:
+            update_data["email"] = user_data.email
+        if user_data.phone is not None:
+            update_data["phone"] = user_data.phone
+        if user_data.password is not None:
+            update_data["password"] = user_data.password
+        
+        # Update user
+        updated_user = db.update_user(user_id, update_data)
+        if not updated_user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return User(**updated_user)
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = str(e)
+        error_type = type(e).__name__
+        print(f"[API] Error updating user: {error_type}: {error_msg}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update user: {error_msg}"
+        )
+
+@app.delete("/api/users/{user_id}")
+async def delete_user(user_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a user (sales rep)"""
+    try:
+        # Verify user exists
+        existing_user = db.get_user_by_id(user_id)
+        if not existing_user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Prevent deleting admin users
+        if existing_user.get("role") == "admin":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Cannot delete admin users"
+            )
+        
+        # Delete user (will automatically clear assigned_to references)
+        db.delete_user(user_id)
+        
+        return {
+            "message": "User deleted successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = str(e)
+        error_type = type(e).__name__
+        print(f"[API] Error deleting user: {error_type}: {error_msg}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete user: {error_msg}"
         )
 
 @app.get("/api/auth/me", response_model=User)
