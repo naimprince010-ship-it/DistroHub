@@ -8,13 +8,13 @@ import {
   CheckCircle,
   Clock,
   XCircle,
-  Edit,
   Trash2,
   FileCheck,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { formatDateBD } from '@/lib/utils';
 import { BulkChallanPrint } from '@/components/print/BulkChallanPrint';
+import { ReconciliationModal } from '@/components/reconciliation/RouteReconciliation';
 
 interface Route {
   id: string;
@@ -241,6 +241,10 @@ export function Routes() {
           route={selectedRoute}
           onClose={() => setSelectedRoute(null)}
           onRefresh={fetchRoutes}
+          onBulkPrint={() => {
+            setSelectedRoute(null);
+            setBulkPrintRoute(selectedRoute);
+          }}
         />
       )}
 

@@ -5,6 +5,8 @@ import api from '@/lib/api';
 interface Route {
   id: string;
   route_number: string;
+  assigned_to?: string;
+  assigned_to_name?: string;
   sales?: any[];
   route_sales?: any[];
 }

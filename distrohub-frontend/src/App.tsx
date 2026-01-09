@@ -9,7 +9,7 @@ import { Purchase } from '@/pages/Purchase';
 import { Inventory } from '@/pages/Inventory';
 import { Sales } from '@/pages/Sales';
 import { SalesReturns } from '@/pages/SalesReturns';
-import { Routes } from '@/pages/Routes';
+import { Routes as RoutesPage } from '@/pages/Routes';
 import { Accountability } from '@/pages/Accountability';
 import { Payments } from '@/pages/Payments';
 import { Receivables } from '@/pages/Receivables';
@@ -53,7 +53,7 @@ function App() {
                 <Route path="inventory" element={<Inventory />} />
                 <Route path="sales" element={<Sales />} />
                 <Route path="sales-returns" element={<SalesReturns />} />
-                <Route path="routes" element={<Routes />} />
+                <Route path="routes" element={<RoutesPage />} />
                 <Route path="accountability" element={<Accountability />} />
                 <Route path="payments" element={<Payments />} />
                 <Route path="receivables" element={<Receivables />} />
