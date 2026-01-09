@@ -862,7 +862,7 @@ function EditSaleModal({
             </label>
             <select
               value={formData.delivery_status}
-              onChange={(e) => setFormData({ ...formData, delivery_status: e.target.value })}
+              onChange={(e) => setFormData({ ...formData, delivery_status: e.target.value as 'pending' | 'delivered' | 'partially_delivered' | 'returned' })}
               className="input-field"
             >
               <option value="pending">Pending</option>
