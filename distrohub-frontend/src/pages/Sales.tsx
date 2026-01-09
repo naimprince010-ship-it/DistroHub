@@ -1165,7 +1165,13 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
               className="input-field"
               disabled={loadingSalesReps}
             >
-              <option value="">{loadingSalesReps ? 'Loading SRs...' : 'Select SR/Delivery Man (Optional)'}</option>
+              <option value="">
+                {loadingSalesReps 
+                  ? 'Loading SRs...' 
+                  : salesReps.length === 0 
+                    ? 'No SR found - Add SR users first' 
+                    : 'Select SR/Delivery Man (Optional)'}
+              </option>
               {salesReps.map((rep) => (
                 <option key={rep.id} value={rep.id}>
                   {rep.name}
