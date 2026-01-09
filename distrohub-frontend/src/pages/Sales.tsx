@@ -715,10 +715,37 @@ function EditSaleModal({
 }) {
   const [formData, setFormData] = useState({
     paid_amount: order.paid_amount,
-    delivery_status: 'pending',
+    delivery_status: order.delivery_status || 'pending',
+    assigned_to: order.assigned_to || '',
     notes: '',
   });
+  const [salesReps, setSalesReps] = useState<Array<{ id: string; name: string }>>([]);
+  const [loadingSalesReps, setLoadingSalesReps] = useState(true);
   const [loading, setLoading] = useState(false);
+
+  // Fetch sales reps on mount
+  useEffect(() => {
+    const fetchSalesReps = async () => {
+      try {
+        setLoadingSalesReps(true);
+        const usersRes = await api.get('/api/users');
+        if (usersRes.data) {
+          const reps = usersRes.data
+            .filter((u: any) => u.role === 'sales_rep')
+            .map((u: any) => ({
+              id: u.id,
+              name: u.name
+            }));
+          setSalesReps(reps);
+        }
+      } catch (error: any) {
+        console.error('[EditSaleModal] Error fetching sales reps:', error);
+      } finally {
+        setLoadingSalesReps(false);
+      }
+    };
+    fetchSalesReps();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -734,6 +761,14 @@ function EditSaleModal({
         updatePayload.delivery_status = formData.delivery_status;
       }
 
+      // Update assigned_to (can be set or cleared)
+      if (formData.assigned_to) {
+        updatePayload.assigned_to = formData.assigned_to;
+      } else {
+        // If empty string, set to null to clear the assignment
+        updatePayload.assigned_to = null;
+      }
+
       if (formData.notes) {
         updatePayload.notes = formData.notes;
       }
@@ -742,11 +777,11 @@ function EditSaleModal({
       await api.put(`/api/sales/${order.id}`, updatePayload);
       console.log('[EditSaleModal] Sale updated successfully');
 
-      alert('Payment updated successfully!');
+      alert('Order updated successfully!');
       onSave();
     } catch (error: any) {
       console.error('[EditSaleModal] Error updating sale:', error);
-      alert(`Failed to update payment: ${error.response?.data?.detail || error.message}`);
+      alert(`Failed to update order: ${error.response?.data?.detail || error.message}`);
     } finally {
       setLoading(false);
     }
@@ -762,7 +797,7 @@ function EditSaleModal({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
         <div className="p-3 border-b border-slate-200">
-          <h2 className="text-xl font-semibold text-slate-900">Update Payment</h2>
+          <h2 className="text-xl font-semibold text-slate-900">Edit Order</h2>
           <p className="text-slate-500">{order.order_number} - {order.retailer_name}</p>
         </div>
 
@@ -839,6 +874,28 @@ function EditSaleModal({
 
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">
+              কালেক্টর (Assigned To)
+            </label>
+            <select
+              value={formData.assigned_to}
+              onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
+              className="input-field"
+              disabled={loadingSalesReps}
+            >
+              <option value="">{loadingSalesReps ? 'Loading SRs...' : 'None (Clear Assignment)'}</option>
+              {salesReps.map((rep) => (
+                <option key={rep.id} value={rep.id}>
+                  {rep.name}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-500 mt-1">
+              Select SR/delivery man responsible for collecting payment. Select "None" to clear assignment.
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 mb-1">
               Notes (Optional)
             </label>
             <textarea
@@ -864,7 +921,7 @@ function EditSaleModal({
               className="btn-primary flex items-center gap-2"
               disabled={loading}
             >
-              {loading ? 'Updating...' : 'Update Payment'}
+              {loading ? 'Updating...' : 'Update Order'}
             </button>
           </div>
         </form>
