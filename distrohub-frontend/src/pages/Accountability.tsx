@@ -122,6 +122,57 @@ export function Accountability() {
                   </div>
                 </div>
 
+                {/* SR Ledger Summary */}
+                <div className="bg-white rounded-xl shadow-sm mb-3">
+                  <div className="p-3 border-b border-slate-200">
+                    <h3 className="font-semibold text-slate-900">SR Individual Ledger</h3>
+                  </div>
+                  <div className="p-3 grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="bg-blue-50 rounded-lg p-3">
+                      <p className="text-xs text-slate-500 mb-1">Total Goods Taken</p>
+                      <p className="text-lg font-bold text-blue-600">
+                        ৳ {accountability.total_expected_cash.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {accountability.active_routes_count} routes
+                      </p>
+                    </div>
+                    <div className="bg-orange-50 rounded-lg p-3">
+                      <p className="text-xs text-slate-500 mb-1">Total Returns</p>
+                      <p className="text-lg font-bold text-orange-600">
+                        ৳ {accountability.reconciliations.reduce((sum: number, rec: any) => 
+                          sum + (rec.total_returns_amount || 0), 0
+                        ).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="bg-green-50 rounded-lg p-3">
+                      <p className="text-xs text-slate-500 mb-1">Total Collected</p>
+                      <p className="text-lg font-bold text-green-600">
+                        ৳ {accountability.reconciliations.reduce((sum: number, rec: any) => 
+                          sum + (rec.total_collected_cash || 0), 0
+                        ).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className={`rounded-lg p-3 ${
+                      accountability.current_cash_holding > 0 
+                        ? 'bg-red-50' 
+                        : 'bg-green-50'
+                    }`}>
+                      <p className="text-xs text-slate-500 mb-1">Current Outstanding</p>
+                      <p className={`text-lg font-bold ${
+                        accountability.current_cash_holding > 0 
+                          ? 'text-red-600' 
+                          : 'text-green-600'
+                      }`}>
+                        ৳ {accountability.current_cash_holding.toLocaleString()}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {accountability.current_cash_holding > 0 ? 'Not collected' : 'All cleared'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Active Routes */}
                 {accountability.routes.length > 0 && (
                   <div className="bg-white rounded-xl shadow-sm mb-3">

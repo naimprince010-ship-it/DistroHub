@@ -164,94 +164,168 @@ export function ReconciliationModal({ route, onClose, onSuccess }: Reconciliatio
         </div>
 
         <form onSubmit={handleSubmit} className="p-3">
-          <div className="space-y-4">
-            {sales.map((sale: any) => {
-              const routeSale = routeSales.find((rs: any) => rs.sale_id === sale.id);
-              const previousDue = routeSale?.previous_due || 0;
-              const currentBill = sale.total_amount || 0;
-              const totalOutstanding = previousDue + currentBill;
-              const collected = collectedCash[sale.id] || 0;
+          {/* Quick Reconciliation Table */}
+          <div className="mb-4">
+            <h3 className="font-semibold text-slate-900 mb-2">Quick Reconciliation Table</h3>
+            <div className="overflow-x-auto border border-slate-200 rounded-lg">
+              <table className="w-full">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="text-left p-2 font-semibold text-slate-700">Invoice #</th>
+                    <th className="text-left p-2 font-semibold text-slate-700">Retailer</th>
+                    <th className="text-right p-2 font-semibold text-slate-700">Previous Due</th>
+                    <th className="text-right p-2 font-semibold text-slate-700">Current Bill</th>
+                    <th className="text-right p-2 font-semibold text-slate-700">Total Outstanding</th>
+                    <th className="text-right p-2 font-semibold text-slate-700">Collected Amount</th>
+                    <th className="text-right p-2 font-semibold text-slate-700">Return Qty</th>
+                    <th className="text-right p-2 font-semibold text-slate-700">Remaining Due</th>
+                    <th className="text-center p-2 font-semibold text-slate-700">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {sales.map((sale: any) => {
+                    const routeSale = routeSales.find((rs: any) => rs.sale_id === sale.id);
+                    const previousDue = routeSale?.previous_due || 0;
+                    const currentBill = sale.total_amount || 0;
+                    const totalOutstanding = previousDue + currentBill;
+                    const collected = collectedCash[sale.id] || 0;
+                    
+                    // Calculate total returned amount for this sale
+                    let saleReturnAmount = 0;
+                    sale.items?.forEach((item: any) => {
+                      const key = `${sale.id}_${item.id}`;
+                      const returned = returnedItems[key];
+                      if (returned && returned.quantity_returned > 0) {
+                        const unitPrice = item.unit_price || 0;
+                        const discount = item.discount || 0;
+                        const itemSubtotal = unitPrice * item.quantity;
+                        const itemDiscountAmount = (itemSubtotal * discount) / 100;
+                        const itemTotal = itemSubtotal - itemDiscountAmount;
+                        const unitPriceAfterDiscount = itemTotal / item.quantity;
+                        saleReturnAmount += unitPriceAfterDiscount * returned.quantity_returned;
+                      }
+                    });
+                    
+                    const remainingDue = totalOutstanding - collected - saleReturnAmount;
+                    
+                    // Calculate total return qty
+                    const totalReturnQty = sale.items?.reduce((sum: number, item: any) => {
+                      const key = `${sale.id}_${item.id}`;
+                      const returned = returnedItems[key];
+                      return sum + (returned?.quantity_returned || 0);
+                    }, 0) || 0;
+                    
+                    // Status color
+                    let statusColor = 'bg-green-100 text-green-700';
+                    let statusLabel = 'Paid';
+                    if (remainingDue > 0.01) {
+                      if (collected === 0 && totalReturnQty === 0) {
+                        statusColor = 'bg-red-100 text-red-700';
+                        statusLabel = 'Unpaid';
+                      } else {
+                        statusColor = 'bg-yellow-100 text-yellow-700';
+                        statusLabel = 'Partial';
+                      }
+                    }
 
-              return (
-                <div key={sale.id} className="border border-slate-200 rounded-lg p-3">
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <p className="font-medium text-slate-900">{sale.invoice_number}</p>
-                      <p className="text-sm text-slate-600">{sale.retailer_name}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-slate-500">Previous Due</p>
-                      <p className="font-medium">৳{previousDue.toLocaleString()}</p>
-                      <p className="text-xs text-slate-500 mt-1">Current Bill</p>
-                      <p className="font-medium">৳{currentBill.toLocaleString()}</p>
-                      <p className="text-xs text-slate-500 mt-1 font-semibold">Total Outstanding</p>
-                      <p className="font-bold text-red-600">৳{totalOutstanding.toLocaleString()}</p>
-                    </div>
-                  </div>
+                    return (
+                      <tr key={sale.id} className="hover:bg-slate-50">
+                        <td className="p-2 font-medium text-primary-600">{sale.invoice_number}</td>
+                        <td className="p-2 text-slate-900">{sale.retailer_name}</td>
+                        <td className="p-2 text-right text-slate-700">৳{previousDue.toLocaleString()}</td>
+                        <td className="p-2 text-right text-blue-600">৳{currentBill.toLocaleString()}</td>
+                        <td className="p-2 text-right font-bold text-slate-900">৳{totalOutstanding.toLocaleString()}</td>
+                        <td className="p-2">
+                          <input
+                            type="number"
+                            value={collected}
+                            onChange={(e) => setCollectedCash(prev => ({
+                              ...prev,
+                              [sale.id]: Math.max(0, parseFloat(e.target.value) || 0)
+                            }))}
+                            className="w-32 input-field text-right"
+                            min={0}
+                            step="0.01"
+                            placeholder="0"
+                          />
+                        </td>
+                        <td className="p-2 text-right">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // Toggle return items view for this sale
+                              const returnModal = document.getElementById(`return-modal-${sale.id}`);
+                              if (returnModal) {
+                                returnModal.classList.toggle('hidden');
+                              }
+                            }}
+                            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                          >
+                            {totalReturnQty > 0 ? `${totalReturnQty} items` : 'Add Returns'}
+                          </button>
+                        </td>
+                        <td className={`p-2 text-right font-bold ${
+                          remainingDue > 0.01 ? 'text-red-600' : 'text-green-600'
+                        }`}>
+                          ৳{remainingDue.toFixed(2)}
+                        </td>
+                        <td className="p-2 text-center">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${statusColor}`}>
+                            {statusLabel}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
 
-                  <div className="mb-3">
-                    <label className="block text-sm font-medium text-slate-700 mb-1">
-                      Collected Cash (৳)
-                    </label>
-                    <input
-                      type="number"
-                      value={collected}
-                      onChange={(e) => setCollectedCash(prev => ({
-                        ...prev,
-                        [sale.id]: Math.max(0, parseFloat(e.target.value) || 0)
-                      }))}
-                      className="input-field"
-                      min={0}
-                      max={totalOutstanding}
-                      step="0.01"
-                    />
-                    <p className="text-xs text-slate-500 mt-1">
-                      Expected: ৳{totalOutstanding.toLocaleString()}
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">
-                      Returned Items
-                    </label>
-                    <div className="space-y-2">
-                      {sale.items?.map((item: any) => {
-                        const key = `${sale.id}_${item.id}`;
-                        const returned = returnedItems[key];
-                        const returnedQty = returned?.quantity_returned || 0;
-                        const maxReturnable = item.quantity;
-
-                        return (
-                          <div key={item.id} className="flex items-center gap-2 p-2 bg-slate-50 rounded">
-                            <div className="flex-1">
-                              <p className="text-sm font-medium">{item.product_name}</p>
-                              <p className="text-xs text-slate-500">
-                                Qty: {item.quantity} | Price: ৳{item.unit_price}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="number"
-                                value={returnedQty}
-                                onChange={(e) => {
-                                  const qty = Math.max(0, Math.min(maxReturnable, parseInt(e.target.value) || 0));
-                                  handleReturnChange(sale.id, item.id, qty);
-                                }}
-                                className="w-20 input-field"
-                                min={0}
-                                max={maxReturnable}
-                                placeholder="0"
-                              />
-                              <span className="text-xs text-slate-500">/ {maxReturnable}</span>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
+          {/* Return Items Details (Collapsible) */}
+          <div className="space-y-3">
+            <h3 className="font-semibold text-slate-900">Return Items Details</h3>
+            {sales.map((sale: any) => (
+              <div key={sale.id} id={`return-modal-${sale.id}`} className="hidden border border-slate-200 rounded-lg p-3">
+                <div className="mb-2">
+                  <p className="font-medium text-slate-900">{sale.invoice_number} - {sale.retailer_name}</p>
                 </div>
-              );
-            })}
+                <div className="space-y-2">
+                  {sale.items?.map((item: any) => {
+                    const key = `${sale.id}_${item.id}`;
+                    const returned = returnedItems[key];
+                    const returnedQty = returned?.quantity_returned || 0;
+                    const maxReturnable = item.quantity;
+
+                    return (
+                      <div key={item.id} className="flex items-center gap-2 p-2 bg-slate-50 rounded">
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">{item.product_name}</p>
+                          <p className="text-xs text-slate-500">
+                            Qty: {item.quantity} | Price: ৳{item.unit_price}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="number"
+                            value={returnedQty}
+                            onChange={(e) => {
+                              const qty = Math.max(0, Math.min(maxReturnable, parseInt(e.target.value) || 0));
+                              handleReturnChange(sale.id, item.id, qty);
+                            }}
+                            className="w-20 input-field"
+                            min={0}
+                            max={maxReturnable}
+                            placeholder="0"
+                          />
+                          <span className="text-xs text-slate-500">/ {maxReturnable}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
 
           {/* Summary */}

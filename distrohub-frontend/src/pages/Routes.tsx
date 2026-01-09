@@ -15,6 +15,7 @@ import api from '@/lib/api';
 import { formatDateBD } from '@/lib/utils';
 import { BulkChallanPrint } from '@/components/print/BulkChallanPrint';
 import { ReconciliationModal } from '@/components/reconciliation/RouteReconciliation';
+import { LoadSheet } from '@/components/routes/LoadSheet';
 
 interface Route {
   id: string;
@@ -177,6 +178,13 @@ export function Routes() {
                         <td className="p-2">
                           <div className="flex items-center justify-center gap-1">
                             <button
+                              onClick={() => setLoadSheetRoute(route)}
+                              className="px-2 py-1 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
+                              title="Load Sheet"
+                            >
+                              Load Sheet
+                            </button>
+                            <button
                               onClick={() => setSelectedRoute(route)}
                               className="p-1 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
                               title="View Details"
@@ -265,6 +273,14 @@ export function Routes() {
         <BulkChallanPrint
           route={bulkPrintRoute}
           onClose={() => setBulkPrintRoute(null)}
+        />
+      )}
+
+      {/* Load Sheet Modal */}
+      {loadSheetRoute && (
+        <LoadSheet
+          route={loadSheetRoute}
+          onClose={() => setLoadSheetRoute(null)}
         />
       )}
     </div>
