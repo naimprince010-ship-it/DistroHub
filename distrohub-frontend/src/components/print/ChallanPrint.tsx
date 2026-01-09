@@ -10,6 +10,7 @@ interface ChallanItem {
   bonus_qty?: number;
   discount?: number;
   discount_amount?: number;
+  returned_qty?: number;
 }
 
 interface ChallanData {
@@ -37,6 +38,7 @@ interface ChallanData {
   route_code?: string;
   sr_name?: string;
   sr_id?: string;
+  sr_phone?: string;
 }
 
 interface ChallanPrintProps {
@@ -463,10 +465,20 @@ export function ChallanPrint({ data, onClose }: ChallanPrintProps) {
           <style>{`
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap');
             .challan-container { 
-              max-width: 800px; 
+              max-width: 210mm; 
+              width: 100%;
               margin: 0 auto; 
-              padding: 40px; 
+              padding: 15mm; 
               font-family: 'Inter', 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+              background: white;
+              border: 1px solid #e5e7eb;
+              box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+              display: flex;
+              flex-direction: column;
+              min-height: 100%;
+            }
+            .challan-content {
+              flex: 1;
             }
             .header { 
               text-align: center; 
@@ -699,6 +711,7 @@ export function ChallanPrint({ data, onClose }: ChallanPrintProps) {
             }
           `}</style>
           <div className="challan-container">
+            <div className="challan-content">
             {/* Invoice Header with Meta Info Top-Right */}
             <div className="invoice-header">
               <div>
@@ -742,59 +755,72 @@ export function ChallanPrint({ data, onClose }: ChallanPrintProps) {
                   {data.route_code && <p><span className="label">Route Code:</span><span className="value">{data.route_code}</span></p>}
                   {data.sr_name && <p><span className="label">SR Name:</span><span className="value">{data.sr_name}</span></p>}
                   {data.sr_id && <p><span className="label">SR ID:</span><span className="value">{data.sr_id}</span></p>}
+                  {data.sr_phone && <p><span className="label">SR Phone:</span><span className="value">{data.sr_phone}</span></p>}
                 </div>
               </div>
             </div>
 
             {/* Product Table with Square Format */}
-            <table>
-              <thead>
-                <tr>
-                  <th style={{ width: '5%' }}>S/N</th>
-                  <th style={{ width: '30%' }}>Product Name</th>
-                  <th style={{ width: '12%' }}>Pack Size</th>
-                  <th className="text-right" style={{ width: '12%' }}>Unit Price</th>
-                  <th className="text-center" style={{ width: '10%' }}>Qty</th>
-                  <th className="text-center" style={{ width: '10%' }}>Bonus Qty</th>
-                  <th className="text-right" style={{ width: '11%' }}>Discount</th>
-                  <th className="text-right" style={{ width: '10%' }}>Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.items.map((item, index) => {
-                  const unitPrice = item.unit_price || 0;
-                  const discount = item.discount || 0;
-                  const discountAmount = item.discount_amount || (unitPrice * item.qty * discount / 100);
-                  const amount = (unitPrice * item.qty) - discountAmount;
-                  return (
-                    <tr key={index}>
-                      <td>{index + 1}</td>
-                      <td>{item.product}</td>
-                      <td>{item.pack_size || item.unit || 'N/A'}</td>
-                      <td className="text-right">{unitPrice > 0 ? unitPrice.toFixed(2) : '-'}</td>
-                      <td className="text-center" style={{ fontWeight: 600 }}>{item.qty}</td>
-                      <td className="text-center">{item.bonus_qty || '-'}</td>
-                      <td className="text-right">{discountAmount > 0 ? discountAmount.toFixed(2) : '-'}</td>
-                      <td className="text-right" style={{ fontWeight: 600 }}>{amount > 0 ? amount.toFixed(2) : '-'}</td>
+            {(() => {
+              const hasReturns = data.items.some(item => (item.returned_qty || 0) > 0);
+              return (
+                <table>
+                  <thead>
+                    <tr>
+                      <th style={{ width: '4%' }}>S/N</th>
+                      <th style={{ width: '25%' }}>Product Name</th>
+                      <th style={{ width: '10%' }}>Pack Size</th>
+                      <th className="text-right" style={{ width: '10%' }}>Unit Price</th>
+                      <th className="text-center" style={{ width: '8%' }}>Qty</th>
+                      {hasReturns && <th className="text-center" style={{ width: '8%' }}>Returned Qty</th>}
+                      <th className="text-center" style={{ width: '8%' }}>Bonus Qty</th>
+                      <th className="text-right" style={{ width: '9%' }}>Discount</th>
+                      <th className="text-right" style={{ width: '8%' }}>Amount</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {data.items.map((item, index) => {
+                      const unitPrice = item.unit_price || 0;
+                      const discount = item.discount || 0;
+                      const discountAmount = item.discount_amount || (unitPrice * item.qty * discount / 100);
+                      const amount = (unitPrice * item.qty) - discountAmount;
+                      const returnedQty = item.returned_qty || 0;
+                      return (
+                        <tr key={index}>
+                          <td>{index + 1}</td>
+                          <td>{item.product}</td>
+                          <td>{item.pack_size || item.unit || 'N/A'}</td>
+                          <td className="text-right">{unitPrice > 0 ? unitPrice.toFixed(2) : '-'}</td>
+                          <td className="text-center" style={{ fontWeight: 600 }}>{item.qty}</td>
+                          {hasReturns && (
+                            <td className="text-center" style={{ fontWeight: 600, color: returnedQty > 0 ? '#dc2626' : '#6b7280' }}>
+                              {returnedQty > 0 ? returnedQty : '-'}
+                            </td>
+                          )}
+                          <td className="text-center">{item.bonus_qty || '-'}</td>
+                          <td className="text-right">{discountAmount > 0 ? discountAmount.toFixed(2) : '-'}</td>
+                          <td className="text-right" style={{ fontWeight: 600 }}>{amount > 0 ? amount.toFixed(2) : '-'}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              );
+            })()}
 
             {/* Payment & Status Summary */}
             <div className="payment-summary">
               <div className="payment-summary-row">
                 <span>Total Amount:</span>
-                <span style={{ fontWeight: 600 }}>৳{totalAmount.toFixed(2)}</span>
+                <span style={{ fontWeight: 700, fontSize: '18px' }}>৳{totalAmount.toFixed(2)}</span>
               </div>
               <div className="payment-summary-row">
                 <span>Paid Amount:</span>
-                <span style={{ fontWeight: 600 }}>৳{paidAmount.toFixed(2)}</span>
+                <span style={{ fontWeight: 700, fontSize: '18px' }}>৳{paidAmount.toFixed(2)}</span>
               </div>
               <div className="payment-summary-row">
                 <span>Due Amount:</span>
-                <span style={{ fontWeight: 600, color: dueAmount > 0 ? '#dc2626' : '#16a34a' }}>
+                <span style={{ fontWeight: 700, fontSize: '18px', color: dueAmount > 0 ? '#dc2626' : '#16a34a' }}>
                   ৳{dueAmount.toFixed(2)}
                 </span>
               </div>
@@ -817,7 +843,9 @@ export function ChallanPrint({ data, onClose }: ChallanPrintProps) {
 
             {/* Disclaimer */}
             <div className="disclaimer">
-              ⚠️ Dokane pora o idurer katan mal ferot neya hoy na
+              ⚠️ দোকানে পোড়া ও ইদুরে কাটা মাল ফেরত নেয়া হয় না
+            </div>
+
             </div>
 
             {/* Three-Column Signature Layout */}

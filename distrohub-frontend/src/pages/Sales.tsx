@@ -130,6 +130,8 @@ export function Sales() {
               price: item.unit_price || 0,
             })),
             delivery_status: sale.delivery_status || 'pending',
+            assigned_to: sale.assigned_to || undefined,
+            assigned_to_name: sale.assigned_to_name || undefined,
           };
         });
         setOrders(mappedOrders);
@@ -494,39 +496,75 @@ export function Sales() {
 
       {/* Print Challan Modal */}
       {printChallanOrder && (
-        <ChallanPrint
-          data={{
-            challan_number: `CH-${printChallanOrder.order_number.replace('ORD-', '')}`,
-            order_number: printChallanOrder.order_number,
-            date: printChallanOrder.order_date,
-            delivery_date: printChallanOrder.delivery_date,
-            retailer_name: printChallanOrder.retailer_name,
-            retailer_id: printChallanOrder.id,
-            items: printChallanOrder.items.map(item => ({
-              product: item.product,
-              qty: item.qty,
-              unit: 'Pcs',
-              pack_size: 'Pcs',
-              unit_price: item.price,
-              bonus_qty: 0,
-              discount: 0,
-              discount_amount: 0
-            })),
-            total_items: printChallanOrder.items.length,
-            total_amount: printChallanOrder.total_amount,
-            paid_amount: printChallanOrder.paid_amount,
-            due_amount: printChallanOrder.total_amount - printChallanOrder.paid_amount,
-            payment_status: printChallanOrder.payment_status,
-            challan_type: 'Normal',
-            delivery_status: printChallanOrder.delivery_status,
-            distributor_name: 'DistroHub',
-            route_name: 'Main Route',
-            sr_name: 'Sales Representative',
-          }}
+        <ChallanPrintWrapper 
+          order={printChallanOrder}
           onClose={() => setPrintChallanOrder(null)}
         />
       )}
     </div>
+  );
+}
+
+function ChallanPrintWrapper({ 
+  order, 
+  onClose 
+}: { 
+  order: SalesOrder; 
+  onClose: () => void;
+}) {
+  const [srPhone, setSrPhone] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchSrPhone = async () => {
+      if (order.assigned_to) {
+        try {
+          const usersRes = await api.get('/api/users');
+          const sr = usersRes.data?.find((u: any) => u.id === order.assigned_to);
+          if (sr?.phone) {
+            setSrPhone(sr.phone);
+          }
+        } catch (error) {
+          console.error('[ChallanPrintWrapper] Error fetching SR phone:', error);
+        }
+      }
+    };
+    fetchSrPhone();
+  }, [order.assigned_to]);
+
+  return (
+    <ChallanPrint
+      data={{
+        challan_number: `CH-${order.order_number.replace('ORD-', '')}`,
+        order_number: order.order_number,
+        date: order.order_date,
+        delivery_date: order.delivery_date,
+        retailer_name: order.retailer_name,
+        retailer_id: order.id,
+        items: order.items.map(item => ({
+          product: item.product,
+          qty: item.qty,
+          unit: 'Pcs',
+          pack_size: 'Pcs',
+          unit_price: item.price,
+          bonus_qty: 0,
+          discount: 0,
+          discount_amount: 0
+        })),
+        total_items: order.items.length,
+        total_amount: order.total_amount,
+        paid_amount: order.paid_amount,
+        due_amount: order.total_amount - order.paid_amount,
+        payment_status: order.payment_status,
+        challan_type: 'Normal',
+        delivery_status: order.delivery_status,
+        distributor_name: 'DistroHub',
+        route_name: 'Main Route',
+        sr_name: order.assigned_to_name || 'Sales Representative',
+        sr_id: order.assigned_to,
+        sr_phone: srPhone || undefined,
+      }}
+      onClose={onClose}
+    />
   );
 }
 
