@@ -428,14 +428,6 @@ export function ChallanPrint({ data, onClose }: ChallanPrintProps) {
     minute: '2-digit',
     second: '2-digit'
   });
-      case 'partially_delivered':
-        return 'Partially Delivered';
-      case 'returned':
-        return 'Returned';
-      default:
-        return 'Pending';
-    }
-  };
 
   const getPaymentStatusBadge = (status: string) => {
     switch (status.toLowerCase()) {
