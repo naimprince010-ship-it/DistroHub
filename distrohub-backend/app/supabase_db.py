@@ -571,11 +571,28 @@ class SupabaseDatabase:
         return None
     
     def delete_sale(self, sale_id: str) -> bool:
-        """Delete a sale and its items"""
+        """Delete a sale and its related data (returns, return items, sale items, sale)"""
         try:
-            # First delete sale items
+            # Step 1: Get all sale_items for this sale
+            sale_items_result = self.client.table("sale_items").select("id").eq("sale_id", sale_id).execute()
+            sale_item_ids = [item["id"] for item in sale_items_result.data] if sale_items_result.data else []
+            
+            # Step 2: Delete sales_return_items that reference these sale_items
+            if sale_item_ids:
+                for sale_item_id in sale_item_ids:
+                    # Delete return items that reference this sale_item
+                    self.client.table("sales_return_items").delete().eq("sale_item_id", sale_item_id).execute()
+            
+            # Step 3: Delete sales_returns for this sale (if any remain)
+            self.client.table("sales_returns").delete().eq("sale_id", sale_id).execute()
+            
+            # Step 4: Delete sale_items
             self.client.table("sale_items").delete().eq("sale_id", sale_id).execute()
-            # Then delete the sale
+            
+            # Step 5: Delete payments for this sale
+            self.client.table("payments").delete().eq("sale_id", sale_id).execute()
+            
+            # Step 6: Finally delete the sale
             result = self.client.table("sales").delete().eq("id", sale_id).execute()
             return len(result.data) > 0
         except Exception as e:
