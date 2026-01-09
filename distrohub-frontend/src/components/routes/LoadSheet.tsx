@@ -138,7 +138,7 @@ export function LoadSheet({ route, onClose }: LoadSheetProps) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {Object.values(salesByRetailer).map((retailerGroup: any, groupIndex: number) => (
+                  {Object.values(salesByRetailer).map((retailerGroup: any) => (
                     <React.Fragment key={retailerGroup.retailer_id}>
                       {retailerGroup.sales.map((sale: any, index: number) => {
                         const routeSale = routeSales.find((rs: any) => rs.sale_id === sale.id);
