@@ -1038,6 +1038,16 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
         }
       } catch (error: any) {
         console.error('[AddOrderModal] Error fetching data:', error);
+        console.error('[AddOrderModal] Error details:', {
+          message: error?.message,
+          status: error?.response?.status,
+          data: error?.response?.data,
+          url: error?.config?.url
+        });
+        
+        // Show user-friendly error message
+        const errorMsg = error?.response?.data?.detail || error?.message || 'Failed to load data';
+        alert(`Error loading dropdown data: ${errorMsg}\n\nPlease check:\n1. Backend is running\n2. API URL is correct\n3. You are logged in`);
       } finally {
         setLoadingRetailers(false);
         setLoadingProducts(false);
@@ -1119,7 +1129,13 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
                 required
                 disabled={loadingRetailers}
               >
-                <option value="">{loadingRetailers ? 'Loading retailers...' : 'Select Retailer'}</option>
+                <option value="">
+                  {loadingRetailers 
+                    ? 'Loading retailers...' 
+                    : retailers.length === 0 
+                      ? 'No retailers found - Add retailers first' 
+                      : 'Select Retailer'}
+                </option>
                 {retailers.map((retailer) => (
                   <option key={retailer.id} value={retailer.shop_name}>
                     {retailer.shop_name} ({retailer.name})
