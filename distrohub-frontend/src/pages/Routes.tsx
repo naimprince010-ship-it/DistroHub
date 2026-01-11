@@ -745,7 +745,7 @@ function RouteDetailsModal({
                 // #endregion
                 
                 onRefresh();
-                setSelectedRoute(null); // Close modal after update
+                onClose(); // Close modal after update
               } catch (error: any) {
                 // #region agent log
                 fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', {

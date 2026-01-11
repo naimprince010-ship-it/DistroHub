@@ -1808,12 +1808,95 @@ async def update_route(
 ):
     """Update route (status, notes, etc.)"""
     try:
+        # #region agent log
+        import json
+        from datetime import datetime
+        log_data = {
+            "location": "main.py:update_route:entry",
+            "message": "Route update endpoint called",
+            "data": {
+                "route_id": route_id,
+                "update_data": route_update.model_dump(exclude_unset=True)
+            },
+            "timestamp": int(datetime.now().timestamp() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "D"
+        }
+        try:
+            with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except: pass
+        # #endregion
+        
         route = db.update_route(route_id, route_update.model_dump(exclude_unset=True))
+        
+        # #region agent log
+        log_data = {
+            "location": "main.py:update_route:after_db_update",
+            "message": "Route updated in database",
+            "data": {
+                "route_id": route_id,
+                "route_found": route is not None,
+                "route_status": route.get("status") if route else None
+            },
+            "timestamp": int(datetime.now().timestamp() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "D"
+        }
+        try:
+            with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except: pass
+        # #endregion
+        
         if not route:
             raise HTTPException(status_code=404, detail="Route not found")
         return Route(**route)
     except ValueError as e:
+        # #region agent log
+        log_data = {
+            "location": "main.py:update_route:value_error",
+            "message": "ValueError in route update",
+            "data": {
+                "route_id": route_id,
+                "error": str(e)
+            },
+            "timestamp": int(datetime.now().timestamp() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "D"
+        }
+        try:
+            with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except: pass
+        # #endregion
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        # #region agent log
+        log_data = {
+            "location": "main.py:update_route:exception",
+            "message": "Unexpected error in route update",
+            "data": {
+                "route_id": route_id,
+                "error": str(e),
+                "error_type": type(e).__name__
+            },
+            "timestamp": int(datetime.now().timestamp() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "D"
+        }
+        try:
+            with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except: pass
+        # #endregion
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Failed to update route: {str(e)}")
 
 @app.post("/api/routes/{route_id}/sales", response_model=RouteWithSales)
 async def add_sales_to_route(
