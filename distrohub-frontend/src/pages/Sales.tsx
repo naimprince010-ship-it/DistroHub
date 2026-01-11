@@ -1215,7 +1215,7 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
                         </div>
                       </div>
             {formData.items.map((item, index) => (
-              <div key={index} className="grid grid-cols-4 gap-2 mb-1">
+              <div key={index} className="grid grid-cols-5 gap-2 mb-1 items-center">
                 <div className="col-span-2">
                   <select
                     value={item.product}
@@ -1265,6 +1265,17 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
                   className="input-field"
                   required
                 />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newItems = formData.items.filter((_, i) => i !== index);
+                    setFormData({ ...formData, items: newItems });
+                  }}
+                  className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors flex items-center justify-center"
+                  title="Delete item"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             ))}
           </div>
