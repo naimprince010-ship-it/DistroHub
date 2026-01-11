@@ -861,6 +861,19 @@ class SupabaseDatabase:
                     return_items_by_sale[sale_id].append(ret_item)
         
         # Build sales report with return data
+        # For sales in routes, use route's SR (Route SR overrides Sales SR)
+        # Get route info for sales that have route_id
+        route_ids = set(sale.get("route_id") for sale in sales if sale.get("route_id"))
+        routes_map = {}
+        if route_ids:
+            for route_id in route_ids:
+                route = self.get_route(route_id)
+                if route:
+                    routes_map[route_id] = {
+                        "assigned_to": route.get("assigned_to"),
+                        "assigned_to_name": route.get("assigned_to_name")
+                    }
+        
         sales_report = []
         total_gross = 0.0
         total_returned_items = 0
@@ -869,6 +882,17 @@ class SupabaseDatabase:
             sale_id = sale["id"]
             sale["payment_status"] = PaymentStatus(sale["payment_status"]) if sale.get("payment_status") else PaymentStatus.DUE
             sale["status"] = OrderStatus(sale["status"]) if sale.get("status") else OrderStatus.PENDING
+            
+            # If sale is in a route, use route's SR for reporting (Route SR overrides Sales SR)
+            route_id = sale.get("route_id")
+            if route_id and route_id in routes_map:
+                route_info = routes_map[route_id]
+                sale["effective_assigned_to"] = route_info["assigned_to"]  # Route's SR
+                sale["effective_assigned_to_name"] = route_info["assigned_to_name"]
+            else:
+                # Sale not in route, use sale's SR
+                sale["effective_assigned_to"] = sale.get("assigned_to")
+                sale["effective_assigned_to_name"] = sale.get("assigned_to_name")
             
             # Get sale items
             items_result = self.client.table("sale_items").select("*").eq("sale_id", sale_id).execute()
@@ -1001,8 +1025,8 @@ class SupabaseDatabase:
             sr_name = user["name"]
             
             # Get all sales assigned to this SR
-            # Note: After Route SR override implementation, sales.assigned_to should already match route SR
-            # But we also check routes to ensure completeness
+            # After Route SR override implementation, sales.assigned_to should already match route SR
+            # But we also check routes to ensure completeness (handles edge cases)
             sales_query = self.client.table("sales").select("*").eq("assigned_to", sr_id)
             if from_date:
                 sales_query = sales_query.gte("created_at", from_date)
@@ -1014,7 +1038,7 @@ class SupabaseDatabase:
             assigned_sales = sales_result.data or []
             
             # Also include sales from routes assigned to this SR (Route SR is source of truth)
-            # This ensures we catch all sales that belong to this SR's routes
+            # This ensures we catch all sales that belong to this SR's routes, even if sales.assigned_to wasn't updated
             routes_result = self.client.table("routes").select("id").eq("assigned_to", sr_id).execute()
             route_ids = [r["id"] for r in (routes_result.data or [])]
             

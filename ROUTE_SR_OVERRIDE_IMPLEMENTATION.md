@@ -114,7 +114,61 @@ def remove_sale_from_route(self, route_id: str, sale_id: str) -> dict:
 
 ---
 
-#### Change #4: `get_collection_report()` - Use Route SR (Line 999-1042)
+#### Change #4: `get_sales_report()` - Add Effective SR Field (Line 863-930)
+
+**Before:**
+```python
+for sale in sales:
+    sale_id = sale["id"]
+    sale["payment_status"] = PaymentStatus(sale["payment_status"]) if sale.get("payment_status") else PaymentStatus.DUE
+    sale["status"] = OrderStatus(sale["status"]) if sale.get("status") else OrderStatus.PENDING
+    
+    # Get sale items
+    items_result = self.client.table("sale_items").select("*").eq("sale_id", sale_id).execute()
+    sale["items"] = items_result.data or []
+```
+
+**After:**
+```python
+# For sales in routes, use route's SR (Route SR overrides Sales SR)
+# Get route info for sales that have route_id
+route_ids = set(sale.get("route_id") for sale in sales if sale.get("route_id"))
+routes_map = {}
+if route_ids:
+    for route_id in route_ids:
+        route = self.get_route(route_id)
+        if route:
+            routes_map[route_id] = {
+                "assigned_to": route.get("assigned_to"),
+                "assigned_to_name": route.get("assigned_to_name")
+            }
+
+for sale in sales:
+    sale_id = sale["id"]
+    sale["payment_status"] = PaymentStatus(sale["payment_status"]) if sale.get("payment_status") else PaymentStatus.DUE
+    sale["status"] = OrderStatus(sale["status"]) if sale.get("status") else OrderStatus.PENDING
+    
+    # If sale is in a route, use route's SR for reporting (Route SR overrides Sales SR)
+    route_id = sale.get("route_id")
+    if route_id and route_id in routes_map:
+        route_info = routes_map[route_id]
+        sale["effective_assigned_to"] = route_info["assigned_to"]  # Route's SR
+        sale["effective_assigned_to_name"] = route_info["assigned_to_name"]
+    else:
+        # Sale not in route, use sale's SR
+        sale["effective_assigned_to"] = sale.get("assigned_to")
+        sale["effective_assigned_to_name"] = sale.get("assigned_to_name")
+    
+    # Get sale items
+    items_result = self.client.table("sale_items").select("*").eq("sale_id", sale_id).execute()
+    sale["items"] = items_result.data or []
+```
+
+**Lines Changed:** ~20 lines
+
+---
+
+#### Change #5: `get_collection_report()` - Use Route SR (Line 999-1042)
 
 **Before:**
 ```python
@@ -365,13 +419,14 @@ const hasMultipleAssignedTo = assignedToSet.size > 1;
 | `supabase_db.py` | `create_route()` | 3 | Override sales.assigned_to |
 | `supabase_db.py` | `add_sales_to_route()` | 12 | Override + guard for completed/reconciled |
 | `supabase_db.py` | `remove_sale_from_route()` | 5 | Guard for completed/reconciled |
+| `supabase_db.py` | `get_sales_report()` | 20 | Add effective_assigned_to field (route SR when in route) |
 | `supabase_db.py` | `get_collection_report()` | 25 | Use route SR for completeness |
 | `Sales.tsx` | `SalesOrder` interface | 1 | Add route_id field |
 | `Sales.tsx` | `fetchSales()` mapping | 1 | Map route_id from backend |
 | `Sales.tsx` | `ChallanPrintWrapper` | 25 | Use route SR when route_id exists |
 | `Routes.tsx` | `CreateRouteModal` | 15 | Warning for multiple assigned_to |
 
-**Total:** ~97 lines changed across 2 files
+**Total:** ~117 lines changed across 2 files
 
 ---
 
