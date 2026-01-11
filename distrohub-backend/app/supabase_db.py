@@ -2501,16 +2501,23 @@ class SupabaseDatabase:
         # Get all payments collected by this SR for sales in their routes
         payments_collected = []
         if route_sale_ids:
-            payments_result = self.client.table("payments").select("*").eq("collected_by", user_id).execute()
-            all_payments = payments_result.data or []
-            # Filter payments for sales in this SR's routes
-            payments_collected = [p for p in all_payments if p.get("sale_id") in route_sale_ids]
+            try:
+                payments_result = self.client.table("payments").select("*").eq("collected_by", user_id).execute()
+                all_payments = payments_result.data or []
+                # Filter payments for sales in this SR's routes
+                payments_collected = [p for p in all_payments if p.get("sale_id") and p.get("sale_id") in route_sale_ids]
+                print(f"[DB] get_sr_accountability: Found {len(payments_collected)} payments for SR {user_id} in routes (total payments: {len(all_payments)}, route_sale_ids: {len(route_sale_ids)})")
+            except Exception as e:
+                print(f"[DB] Error fetching payments for SR accountability: {e}")
+                payments_collected = []
         
         # Calculate totals from reconciliations AND individual payments
         total_collected_from_recons = sum(float(r.get("total_collected_cash", 0)) for r in reconciliations)
         total_collected_from_payments = sum(float(p.get("amount", 0)) for p in payments_collected)
         total_collected = total_collected_from_recons + total_collected_from_payments
         total_returns = sum(float(r.get("total_returns_amount", 0)) for r in reconciliations)
+        
+        print(f"[DB] get_sr_accountability: SR {user_id} - Total collected from recons: {total_collected_from_recons}, from payments: {total_collected_from_payments}, total: {total_collected}")
         
         return {
             "user_id": user_id,
