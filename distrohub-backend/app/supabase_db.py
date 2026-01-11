@@ -2232,20 +2232,58 @@ class SupabaseDatabase:
         if route.get("status") == "reconciled":
             raise ValueError("Cannot modify reconciled route")
     
+    def _validate_route_status_transition(self, current_status: str, new_status: str) -> None:
+        """
+        Validate route status transition follows correct flow:
+        pending → in_progress → completed → reconciled
+        
+        Raises ValueError if transition is invalid.
+        """
+        valid_transitions = {
+            "pending": ["in_progress"],
+            "in_progress": ["completed"],
+            "completed": ["reconciled"],
+            "reconciled": []  # No transitions allowed from reconciled (immutable)
+        }
+        
+        if current_status not in valid_transitions:
+            raise ValueError(f"Invalid current route status: {current_status}")
+        
+        if new_status not in valid_transitions:
+            raise ValueError(f"Invalid route status: {new_status}")
+        
+        allowed_next_statuses = valid_transitions[current_status]
+        if new_status not in allowed_next_statuses:
+            raise ValueError(
+                f"Cannot transition route from '{current_status}' to '{new_status}'. "
+                f"Valid next statuses: {', '.join(allowed_next_statuses) if allowed_next_statuses else 'none (route is reconciled)'}"
+            )
+    
     def update_route(self, route_id: str, data: dict) -> Optional[dict]:
         """Update route (status, notes, etc.)"""
         # Check if route is reconciled (immutable)
         route = self.get_route(route_id)
-        if route:
-            self._check_route_not_reconciled(route)
+        if not route:
+            return None
+        
+        self._check_route_not_reconciled(route)
         
         update_data = {}
         
         if "status" in data:
-            update_data["status"] = data["status"]
-            if data["status"] == "completed":
+            current_status = route.get("status", "pending")
+            new_status = data["status"]
+            
+            # Validate status transition
+            if current_status != new_status:
+                self._validate_route_status_transition(current_status, new_status)
+            
+            update_data["status"] = new_status
+            if new_status == "completed":
                 update_data["completed_at"] = datetime.now().isoformat()
-            elif data["status"] == "reconciled":
+            elif new_status == "reconciled":
+                # Note: reconciled status should be set by reconciliation, not manually
+                # But we allow it here for flexibility
                 update_data["reconciled_at"] = datetime.now().isoformat()
         
         if "notes" in data:
