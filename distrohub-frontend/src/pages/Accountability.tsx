@@ -134,7 +134,7 @@ export function Accountability() {
                         ৳ {accountability.total_expected_cash.toLocaleString()}
                       </p>
                       <p className="text-xs text-slate-500 mt-1">
-                        {accountability.active_routes_count} routes
+                        {accountability.routes.length} routes
                       </p>
                     </div>
                     <div className="bg-orange-50 rounded-lg p-3">

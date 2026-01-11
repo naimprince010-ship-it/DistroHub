@@ -1337,6 +1337,18 @@ class SupabaseDatabase:
             collected_user = self.get_user_by_id(data["collected_by"])
             if collected_user:
                 collected_by_name = collected_user.get("name")
+                # Update SR cash holding when payment is collected
+                # Note: This adds to cash holding. Reconciliation will adjust it later.
+                try:
+                    self.update_sr_cash_holding(
+                        data["collected_by"], 
+                        data["amount"], 
+                        "payment_collection", 
+                        data.get("sale_id"),
+                        f"Payment collected for {retailer['name']}"
+                    )
+                except Exception as e:
+                    print(f"[DB] Warning: Failed to update SR cash holding: {e}")
         
         payment_data = {
             "retailer_id": data["retailer_id"],
@@ -2451,16 +2463,19 @@ class SupabaseDatabase:
         if not user:
             return None
         
-        # Get active routes
-        active_routes = self.get_routes(assigned_to=user_id, status="in_progress")
-        active_routes.extend(self.get_routes(assigned_to=user_id, status="completed"))
+        # Get all routes for this SR (including reconciled ones)
+        all_routes = self.get_routes(assigned_to=user_id)
         
-        # Get pending reconciliations
+        # Separate routes by status
+        active_routes = [r for r in all_routes if r.get("status") in ["pending", "in_progress", "completed"]]
+        reconciled_routes = [r for r in all_routes if r.get("status") == "reconciled"]
+        
+        # Get pending reconciliations (completed routes not yet reconciled)
         pending_routes = [r for r in active_routes if r.get("status") == "completed"]
         
-        # Calculate total expected cash
+        # Calculate total expected cash from all routes (including reconciled)
         total_expected = 0.0
-        for route in active_routes:
+        for route in all_routes:
             route_details = self.get_route(route["id"])
             if route_details:
                 for sale in route_details.get("sales", []):
@@ -2468,11 +2483,15 @@ class SupabaseDatabase:
                     current_bill = float(sale.get("total_amount", 0))
                     total_expected += previous_due + current_bill
         
-        # Get reconciliations
+        # Get all reconciliations for this SR's routes
         reconciliations = []
-        for route in active_routes:
+        for route in all_routes:
             route_recons = self.get_route_reconciliations(route_id=route["id"])
             reconciliations.extend(route_recons)
+        
+        # Calculate totals from reconciliations
+        total_collected = sum(float(r.get("total_collected_cash", 0)) for r in reconciliations)
+        total_returns = sum(float(r.get("total_returns_amount", 0)) for r in reconciliations)
         
         return {
             "user_id": user_id,
@@ -2481,6 +2500,6 @@ class SupabaseDatabase:
             "active_routes_count": len(active_routes),
             "pending_reconciliation_count": len(pending_routes),
             "total_expected_cash": total_expected,
-            "routes": active_routes,
+            "routes": all_routes,  # Include all routes (active + reconciled)
             "reconciliations": reconciliations
         }
