@@ -1348,8 +1348,9 @@ class SupabaseDatabase:
             collected_user = self.get_user_by_id(data["collected_by"])
             if collected_user:
                 collected_by_name = collected_user.get("name")
-                # Note: Cash holding is updated during reconciliation, not individual payments
-                # Individual payments are just records. Reconciliation is the source of truth.
+                # IMPORTANT: Cash holding is updated during reconciliation, NOT during individual payments
+                # Individual payments are just records. Reconciliation is the source of truth for SR cash holdings.
+                # DO NOT call update_sr_cash_holding() here - it should only be called during reconciliation.
         
         payment_data = {
             "retailer_id": data["retailer_id"],
@@ -2450,9 +2451,22 @@ class SupabaseDatabase:
             }
             self.client.table("route_reconciliation_items").insert(item_record).execute()
         
-        # Update SR cash holding
+        # Update SR cash holding (ONLY place where cash holding is updated)
+        # This ensures payments during delivery do NOT update cash holding
         if route.get("assigned_to"):
-            self.update_sr_cash_holding(route["assigned_to"], total_collected, "reconciliation", reconciliation_id)
+            # Add discrepancy note if there's a discrepancy
+            notes_with_discrepancy = data.get("notes") or ""
+            if abs(discrepancy) > 0.01:  # If there's a significant discrepancy
+                discrepancy_note = f"Discrepancy: ৳{discrepancy:.2f} (Expected: ৳{total_expected:.2f}, Collected: ৳{total_collected:.2f}, Returns: ৳{total_returns:.2f})"
+                notes_with_discrepancy = f"{notes_with_discrepancy}\n{discrepancy_note}".strip()
+            
+            self.update_sr_cash_holding(
+                route["assigned_to"], 
+                total_collected,  # Amount added to SR's cash holding
+                "reconciliation", 
+                reconciliation_id,
+                notes=notes_with_discrepancy or f"Route reconciliation: Collected ৳{total_collected:.2f}"
+            )
         
         # Update route status
         self.client.table("routes").update({
@@ -2493,25 +2507,32 @@ class SupabaseDatabase:
         return reconciliations
     
     def update_sr_cash_holding(self, user_id: str, amount: float, source: str, reference_id: Optional[str] = None, notes: Optional[str] = None) -> dict:
-        """Update SR cash holding (add to historical and update current)"""
-        # Get current holding
+        """
+        Update SR cash holding (add to historical and update current)
+        
+        This function should ONLY be called during reconciliation.
+        Individual payments during delivery do NOT update cash holdings.
+        """
+        # Get current holding (before update)
         user = self.get_user_by_id(user_id)
         if not user:
             raise ValueError("User not found")
         
-        current_holding = float(user.get("current_cash_holding", 0))
-        new_holding = current_holding + amount
+        before_balance = float(user.get("current_cash_holding", 0))
+        after_balance = before_balance + amount
         
         # Update users.current_cash_holding
-        self.client.table("users").update({"current_cash_holding": new_holding}).eq("id", user_id).execute()
+        self.client.table("users").update({"current_cash_holding": after_balance}).eq("id", user_id).execute()
         
-        # Create historical record
+        # Create historical audit trail record with before/after balance
         holding_record = {
             "user_id": user_id,
-            "amount": amount,
-            "source": source,
-            "reference_id": reference_id,
-            "notes": notes
+            "amount": amount,  # Change amount (positive = added, negative = deducted)
+            "before_balance": before_balance,  # Balance before this transaction
+            "after_balance": after_balance,  # Balance after this transaction
+            "source": source,  # 'reconciliation', 'manual_adjustment', 'initial'
+            "reference_id": reference_id,  # route_reconciliation_id or NULL
+            "notes": notes or f"Cash holding updated from {source}"
         }
         
         result = self.client.table("sr_cash_holdings").insert(holding_record).execute()
