@@ -1312,7 +1312,7 @@ function CollectionModal({
 }) {
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
-  const [collectedBy, setCollectedBy] = useState('');
+  const [collectedBy, setCollectedBy] = useState(order.assigned_to || ''); // Default to order's assigned_to
   const [notes, setNotes] = useState('');
   const [salesReps, setSalesReps] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(false);
