@@ -1337,18 +1337,8 @@ class SupabaseDatabase:
             collected_user = self.get_user_by_id(data["collected_by"])
             if collected_user:
                 collected_by_name = collected_user.get("name")
-                # Update SR cash holding when payment is collected
-                # Note: This adds to cash holding. Reconciliation will adjust it later.
-                try:
-                    self.update_sr_cash_holding(
-                        data["collected_by"], 
-                        data["amount"], 
-                        "payment_collection", 
-                        data.get("sale_id"),
-                        f"Payment collected for {retailer['name']}"
-                    )
-                except Exception as e:
-                    print(f"[DB] Warning: Failed to update SR cash holding: {e}")
+                # Note: Cash holding is updated during reconciliation, not individual payments
+                # Individual payments are just records. Reconciliation is the source of truth.
         
         payment_data = {
             "retailer_id": data["retailer_id"],
