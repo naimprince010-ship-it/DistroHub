@@ -709,6 +709,12 @@ function RouteDetailsModal({
         <div className="p-3 border-t border-slate-200 flex justify-end gap-2">
           <button
             onClick={async () => {
+              console.log('[RouteDetailsModal] Mark as Completed clicked', {
+                routeId: routeDetails.id,
+                currentStatus: routeDetails.status,
+                routeNumber: routeDetails.route_number
+              });
+              
               try {
                 // #region agent log
                 fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', {
@@ -726,7 +732,12 @@ function RouteDetailsModal({
                 }).catch(() => {});
                 // #endregion
                 
+                console.log('[RouteDetailsModal] Sending PUT request to:', `/api/routes/${routeDetails.id}`);
+                console.log('[RouteDetailsModal] Request payload:', { status: 'completed' });
+                
                 const response = await api.put(`/api/routes/${routeDetails.id}`, { status: 'completed' });
+                
+                console.log('[RouteDetailsModal] Route update successful:', response.data);
                 
                 // #region agent log
                 fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', {
@@ -744,9 +755,23 @@ function RouteDetailsModal({
                 }).catch(() => {});
                 // #endregion
                 
+                console.log('[RouteDetailsModal] Refreshing routes list and closing modal');
                 onRefresh();
                 onClose(); // Close modal after update
               } catch (error: any) {
+                console.error('[RouteDetailsModal] Error updating route status:', error);
+                console.error('[RouteDetailsModal] Error details:', {
+                  message: error?.message,
+                  status: error?.response?.status,
+                  statusText: error?.response?.statusText,
+                  data: error?.response?.data,
+                  config: {
+                    url: error?.config?.url,
+                    method: error?.config?.method,
+                    baseURL: error?.config?.baseURL
+                  }
+                });
+                
                 // #region agent log
                 fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', {
                   method: 'POST',
@@ -757,6 +782,7 @@ function RouteDetailsModal({
                     data: {
                       routeId: routeDetails.id,
                       error: error?.message,
+                      status: error?.response?.status,
                       response: error?.response?.data
                     },
                     timestamp: Date.now(),
@@ -767,8 +793,8 @@ function RouteDetailsModal({
                 }).catch(() => {});
                 // #endregion
                 
-                console.error('[RouteDetailsModal] Error updating route status:', error);
-                alert(`Failed to update route status: ${error?.response?.data?.detail || error?.message || 'Unknown error'}`);
+                const errorMessage = error?.response?.data?.detail || error?.message || 'Unknown error';
+                alert(`Failed to update route status: ${errorMessage}`);
               }
             }}
             className="btn-secondary"
