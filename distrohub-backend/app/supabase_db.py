@@ -1374,6 +1374,8 @@ class SupabaseDatabase:
         self.update_retailer_due(data["retailer_id"], -data["amount"])
         
         # DATA ATTACHMENT FIX: Get route_id from sale if sale is in a route
+        # Note: Payments created before 2026-01-13 may have route_id = NULL and need backfill
+        # See: 20260113000001_backfill_payment_route_id.sql
         route_id = None
         if data.get("sale_id"):
             sale = self.get_sale(data["sale_id"])
