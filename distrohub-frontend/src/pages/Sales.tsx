@@ -117,6 +117,7 @@ export function Sales() {
           return {
             id: sale.id || '',
             order_number: sale.invoice_number || '',
+            retailer_id: sale.retailer_id || '',
             retailer_name: sale.retailer_name || '',
             order_date: orderDate,
             delivery_date: deliveryDate,
@@ -1362,6 +1363,14 @@ function CollectionModal({
 
     setLoading(true);
     try {
+      // Ensure retailer_id is available (it should be on the order object)
+      if (!order.retailer_id) {
+        console.error('[CollectionModal] Order missing retailer_id:', order);
+        alert('Error: Order retailer information is missing. Please refresh the page and try again.');
+        setLoading(false);
+        return;
+      }
+      
       // Create payment record
       const paymentPayload = {
         retailer_id: order.retailer_id,
@@ -1371,6 +1380,8 @@ function CollectionModal({
         collected_by: collectedBy,
         notes: notes || undefined
       };
+      
+      console.log('[CollectionModal] Payment payload:', paymentPayload);
       
       await api.post('/api/payments', paymentPayload);
       
