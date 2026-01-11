@@ -1373,9 +1373,14 @@ class SupabaseDatabase:
         
         self.update_retailer_due(data["retailer_id"], -data["amount"])
         
+        # DATA ATTACHMENT FIX: Get route_id from sale if sale is in a route
+        route_id = None
         if data.get("sale_id"):
             sale = self.get_sale(data["sale_id"])
             if sale:
+                # Get route_id from sale (if sale is in a route)
+                route_id = sale.get("route_id")
+                
                 # Get current values as floats to ensure proper calculation
                 current_paid = float(sale.get("paid_amount", 0))
                 current_due = float(sale.get("due_amount", 0))
@@ -1393,6 +1398,8 @@ class SupabaseDatabase:
                 }
                 
                 print(f"[DB] Updating sale {data['sale_id']}: paid={current_paid} -> {new_paid}, due={current_due} -> {new_due}, status={payment_status}")
+                if route_id:
+                    print(f"[DB] Payment is for sale in route: {route_id}")
                 
                 # DO NOT update delivery_status automatically - admin will update manually
                 result = self.client.table("sales").update(update_data).eq("id", data["sale_id"]).execute()
@@ -1415,6 +1422,7 @@ class SupabaseDatabase:
             "retailer_id": data["retailer_id"],
             "retailer_name": retailer["name"],
             "sale_id": data.get("sale_id"),
+            "route_id": route_id,  # DATA ATTACHMENT FIX: Set route_id from sale.route_id
             "amount": data["amount"],
             "payment_method": data["payment_method"],
             "notes": data.get("notes"),
