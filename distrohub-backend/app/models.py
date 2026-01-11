@@ -645,6 +645,7 @@ class SrAccountability(BaseModel):
     user_id: str
     user_name: str
     current_cash_holding: float
+    current_outstanding: float  # LOGIC FIX: Actual outstanding = total_expected - total_collected - total_returns
     active_routes_count: int
     pending_reconciliation_count: int
     total_expected_cash: float  # Sum of all outstanding in active routes

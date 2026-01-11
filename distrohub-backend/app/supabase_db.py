@@ -2644,29 +2644,56 @@ class SupabaseDatabase:
         # Get pending reconciliations (completed routes not yet reconciled)
         pending_routes = [r for r in active_routes if r.get("status") == "completed"]
         
-        # Calculate total expected cash from all routes (including reconciled)
+        # PERFORMANCE FIX: Batch fetch all data instead of N+1 queries
+        route_ids = [r["id"] for r in all_routes]
         total_expected = 0.0
-        for route in all_routes:
-            route_details = self.get_route(route["id"])
-            if route_details:
-                for sale in route_details.get("sales", []):
-                    previous_due = float(sale.get("previous_due", 0))
-                    current_bill = float(sale.get("total_amount", 0))
+        route_sale_ids = set()
+        
+        if route_ids:
+            # Fetch all route_sales in ONE query (instead of N queries per route)
+            route_sales_result = self.client.table("route_sales").select("route_id,sale_id,previous_due").in_("route_id", route_ids).execute()
+            route_sales_data = route_sales_result.data or []
+            
+            # Build map: (route_id, sale_id) -> previous_due
+            route_sales_map = {(rs["route_id"], rs["sale_id"]): float(rs.get("previous_due", 0)) for rs in route_sales_data}
+            
+            # Get all unique sale IDs
+            sale_ids = list(set(rs["sale_id"] for rs in route_sales_data))
+            route_sale_ids = set(sale_ids)  # For payments lookup
+            
+            if sale_ids:
+                # Fetch all sales in ONE query (instead of M queries per sale)
+                sales_result = self.client.table("sales").select("id,total_amount").in_("id", sale_ids).execute()
+                sales_map = {s["id"]: float(s.get("total_amount", 0)) for s in (sales_result.data or [])}
+                
+                # Calculate total_expected using route_sales map
+                for (route_id, sale_id), previous_due in route_sales_map.items():
+                    current_bill = sales_map.get(sale_id, 0)
                     total_expected += previous_due + current_bill
         
         # Get all reconciliations for this SR's routes
+        # PERFORMANCE FIX: Batch fetch reconciliations instead of N+1 queries
         reconciliations = []
-        for route in all_routes:
-            route_recons = self.get_route_reconciliations(route_id=route["id"])
-            reconciliations.extend(route_recons)
         
-        # Get payments collected by this SR (for sales in their routes)
-        route_sale_ids = set()
-        for route in all_routes:
-            route_details = self.get_route(route["id"])
-            if route_details:
-                for sale in route_details.get("sales", []):
-                    route_sale_ids.add(sale.get("id"))
+        if route_ids:
+            # Fetch all reconciliations in ONE query (instead of N queries per route)
+            reconciliations_result = self.client.table("route_reconciliations").select("*").in_("route_id", route_ids).order("reconciled_at", desc=True).execute()
+            reconciliations = reconciliations_result.data or []
+            
+            # Fetch all reconciliation items in ONE query (instead of N queries per reconciliation)
+            reconciliation_ids = [r["id"] for r in reconciliations]
+            if reconciliation_ids:
+                items_result = self.client.table("route_reconciliation_items").select("*").in_("reconciliation_id", reconciliation_ids).execute()
+                items_map = {}
+                for item in (items_result.data or []):
+                    rec_id = item["reconciliation_id"]
+                    if rec_id not in items_map:
+                        items_map[rec_id] = []
+                    items_map[rec_id].append(item)
+                
+                # Attach items to reconciliations
+                for rec in reconciliations:
+                    rec["items"] = items_map.get(rec["id"], [])
         
         # Get all payments collected by this SR (for sales in their routes OR any sales assigned to them)
         payments_collected = []
@@ -2693,17 +2720,34 @@ class SupabaseDatabase:
                 payments_collected = []
         
         # Calculate totals from reconciliations AND individual payments
+        # 
+        # DOUBLE-COUNT SAFETY: Reconciliation total_collected_cash is manual input during reconciliation
+        # Individual payments are separate records collected during delivery
+        # 
+        # These should NOT overlap:
+        # - Reconciliation records the TOTAL collected during reconciliation (manual entry)
+        # - Individual payments are records of payments made during delivery
+        # 
+        # If reconciliation includes existing payments in its total, this would double-count
+        # Current assumption: Reconciliation total is independent of individual payment records
+        #
         total_collected_from_recons = sum(float(r.get("total_collected_cash", 0)) for r in reconciliations)
         total_collected_from_payments = sum(float(p.get("amount", 0)) for p in payments_collected)
         total_collected = total_collected_from_recons + total_collected_from_payments
         total_returns = sum(float(r.get("total_returns_amount", 0)) for r in reconciliations)
         
+        # LOGIC FIX: Calculate actual current outstanding (not cash holding)
+        # Current Outstanding = Total Expected - Total Collected - Total Returns
+        current_outstanding = total_expected - total_collected - total_returns
+        
         print(f"[DB] get_sr_accountability: SR {user_id} - Total collected from recons: {total_collected_from_recons}, from payments: {total_collected_from_payments}, total: {total_collected}")
+        print(f"[DB] get_sr_accountability: SR {user_id} - Total expected: {total_expected}, Total collected: {total_collected}, Total returns: {total_returns}, Current outstanding: {current_outstanding}")
         
         return {
             "user_id": user_id,
             "user_name": user.get("name"),
             "current_cash_holding": float(user.get("current_cash_holding", 0)),
+            "current_outstanding": current_outstanding,  # LOGIC FIX: Actual outstanding amount
             "active_routes_count": len(active_routes),
             "pending_reconciliation_count": len(pending_routes),
             "total_expected_cash": total_expected,

@@ -7,6 +7,7 @@ interface SrAccountability {
   user_id: string;
   user_name: string;
   current_cash_holding: number;
+  current_outstanding: number;  // LOGIC FIX: Actual outstanding amount
   active_routes_count: number;
   pending_reconciliation_count: number;
   total_expected_cash: number;
@@ -154,20 +155,20 @@ export function Accountability() {
                       </p>
                     </div>
                     <div className={`rounded-lg p-3 ${
-                      accountability.current_cash_holding > 0 
+                      accountability.current_outstanding > 0 
                         ? 'bg-red-50' 
                         : 'bg-green-50'
                     }`}>
                       <p className="text-xs text-slate-500 mb-1">Current Outstanding</p>
                       <p className={`text-lg font-bold ${
-                        accountability.current_cash_holding > 0 
+                        accountability.current_outstanding > 0 
                           ? 'text-red-600' 
                           : 'text-green-600'
                       }`}>
-                        ৳ {accountability.current_cash_holding.toLocaleString()}
+                        ৳ {accountability.current_outstanding.toLocaleString()}
                       </p>
                       <p className="text-xs text-slate-500 mt-1">
-                        {accountability.current_cash_holding > 0 ? 'Not collected' : 'All cleared'}
+                        {accountability.current_outstanding > 0 ? 'Amount due from retailers' : 'All cleared'}
                       </p>
                     </div>
                   </div>
