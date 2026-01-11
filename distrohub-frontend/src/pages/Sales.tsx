@@ -1362,7 +1362,35 @@ function CollectionModal({
       onSuccess();
     } catch (error: any) {
       console.error('[CollectionModal] Error recording payment:', error);
-      alert(`Failed to record payment: ${error.response?.data?.detail || error.message}`);
+      console.error('[CollectionModal] Error details:', {
+        message: error?.message,
+        status: error?.response?.status,
+        data: error?.response?.data,
+        code: error?.code
+      });
+      
+      // Extract error message properly
+      let errorMessage = 'Failed to record payment';
+      
+      if (error?.code === 'ERR_NETWORK' || error?.message?.includes('Cannot connect')) {
+        errorMessage = 'Backend server is not responding. Please check:\n1. Backend is deployed on Render\n2. Backend service is running\n3. Try refreshing the page';
+      } else if (error?.response?.data) {
+        // Handle different error response formats
+        const errorData = error.response.data;
+        if (typeof errorData === 'string') {
+          errorMessage = errorData;
+        } else if (errorData.detail) {
+          errorMessage = typeof errorData.detail === 'string' ? errorData.detail : JSON.stringify(errorData.detail);
+        } else if (errorData.message) {
+          errorMessage = typeof errorData.message === 'string' ? errorData.message : JSON.stringify(errorData.message);
+        } else {
+          errorMessage = JSON.stringify(errorData);
+        }
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      alert(`Failed to record payment: ${errorMessage}`);
     } finally {
       setLoading(false);
     }

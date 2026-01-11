@@ -1096,6 +1096,16 @@ async def create_payment(payment_data: PaymentCreate, current_user: dict = Depen
         return Payment(**payment)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[API] Error creating payment: {e}")
+        import traceback
+        traceback.print_exc()
+        error_msg = str(e)
+        error_type = type(e).__name__
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create payment: {error_type}: {error_msg}"
+        )
 
 @app.get("/api/inventory", response_model=List[InventoryItem])
 async def get_inventory(current_user: dict = Depends(get_current_user)):
