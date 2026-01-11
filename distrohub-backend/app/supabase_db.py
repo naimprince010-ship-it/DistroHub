@@ -2441,14 +2441,18 @@ class SupabaseDatabase:
     
     def remove_sale_from_route(self, route_id: str, sale_id: str) -> dict:
         """Remove a sale from route"""
-        # Check if route is immutable (completed or reconciled)
         route = self.get_route(route_id)
         if not route:
             raise ValueError("Route not found")
         
+        # Sales can only be removed when route status is 'pending'
+        # Once route moves to 'in_progress', it becomes immutable
         route_status = route.get("status")
-        if route_status in ["completed", "reconciled"]:
-            raise ValueError(f"Cannot remove sales from route with status '{route_status}'. Route is immutable.")
+        if route_status != "pending":
+            raise ValueError(
+                f"Cannot remove sales from route with status '{route_status}'. "
+                f"Sales can only be removed when route status is 'pending'."
+            )
         
         self._check_route_not_reconciled(route)
         

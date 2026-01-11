@@ -142,6 +142,60 @@ class TestRouteSROverride:
                 assert update_data["assigned_to"] == route_sr_id, "sales.assigned_to should match route's SR"
                 assert update_data["assigned_to_name"] == route_sr_name, "sales.assigned_to_name should match route's SR name"
     
+    def test_add_sales_to_pending_route_succeeds(self, mock_db):
+        """Test that adding sales to pending route succeeds"""
+        route_id = "route-123"
+        
+        # Mock pending route
+        mock_db.get_route = Mock(return_value={
+            "id": route_id,
+            "assigned_to": "sr-123",
+            "assigned_to_name": "SR Name",
+            "status": "pending",
+            "sales": []
+        })
+        
+        # Mock sale
+        mock_db.get_sale = Mock(return_value={
+            "id": "sale-1",
+            "retailer_id": "retailer-1",
+            "total_amount": 1000,
+            "due_amount": 500
+        })
+        
+        # Mock previous due
+        mock_db.calculate_previous_due = Mock(return_value=0.0)
+        
+        # Mock route_sales check (sale not in route)
+        mock_db.client.table.return_value.select.return_value.eq.return_value.eq.return_value.execute.return_value.data = []
+        
+        # Mock route_sales insert
+        mock_db.client.table.return_value.insert.return_value.execute.return_value.data = [{}]
+        
+        # Mock sales update
+        mock_update = Mock()
+        mock_update.eq.return_value.execute.return_value.data = [{}]
+        mock_db.client.table.return_value.update.return_value = mock_update
+        
+        # Execute - should not raise
+        result = mock_db.add_sales_to_route(route_id, ["sale-1"])
+        assert result is not None
+    
+    def test_add_sales_to_in_progress_route_fails(self, mock_db):
+        """Test that adding sales to in_progress route fails"""
+        route_id = "route-123"
+        
+        # Mock in_progress route
+        mock_db.get_route = Mock(return_value={
+            "id": route_id,
+            "assigned_to": "sr-123",
+            "status": "in_progress"
+        })
+        
+        # Execute and expect error
+        with pytest.raises(ValueError, match="Cannot add sales to route with status 'in_progress'"):
+            mock_db.add_sales_to_route(route_id, ["sale-1"])
+    
     def test_add_sales_to_completed_route_fails(self, mock_db):
         """Test that adding sales to completed route fails"""
         route_id = "route-123"
@@ -171,6 +225,47 @@ class TestRouteSROverride:
         # Execute and expect error
         with pytest.raises(ValueError, match="Cannot add sales to route with status 'reconciled'"):
             mock_db.add_sales_to_route(route_id, ["sale-1"])
+    
+    def test_remove_sale_from_pending_route_succeeds(self, mock_db):
+        """Test that removing sales from pending route succeeds"""
+        route_id = "route-123"
+        sale_id = "sale-1"
+        
+        # Mock pending route
+        mock_db.get_route = Mock(return_value={
+            "id": route_id,
+            "assigned_to": "sr-123",
+            "status": "pending",
+            "sales": []
+        })
+        
+        # Mock route_sales delete
+        mock_db.client.table.return_value.delete.return_value.eq.return_value.eq.return_value.execute.return_value.data = []
+        
+        # Mock sales update
+        mock_update = Mock()
+        mock_update.eq.return_value.execute.return_value.data = [{}]
+        mock_db.client.table.return_value.update.return_value = mock_update
+        
+        # Execute - should not raise
+        result = mock_db.remove_sale_from_route(route_id, sale_id)
+        assert result is not None
+    
+    def test_remove_sale_from_in_progress_route_fails(self, mock_db):
+        """Test that removing sales from in_progress route fails"""
+        route_id = "route-123"
+        sale_id = "sale-1"
+        
+        # Mock in_progress route
+        mock_db.get_route = Mock(return_value={
+            "id": route_id,
+            "assigned_to": "sr-123",
+            "status": "in_progress"
+        })
+        
+        # Execute and expect error
+        with pytest.raises(ValueError, match="Cannot remove sales from route with status 'in_progress'"):
+            mock_db.remove_sale_from_route(route_id, sale_id)
     
     def test_remove_sale_from_completed_route_fails(self, mock_db):
         """Test that removing sales from completed route fails"""
