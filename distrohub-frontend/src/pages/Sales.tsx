@@ -11,6 +11,8 @@ import {
   XCircle,
   Edit,
   Trash2,
+  Search,
+  ChevronDown,
 } from 'lucide-react';
 import { ChallanPrint } from '@/components/print/ChallanPrint';
 import { BarcodeScanButton } from '@/components/BarcodeScanner';
@@ -987,6 +989,8 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
   const [loadingRetailers, setLoadingRetailers] = useState(true);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadingSalesReps, setLoadingSalesReps] = useState(true);
+  const [retailerSearchTerm, setRetailerSearchTerm] = useState('');
+  const [showRetailerDropdown, setShowRetailerDropdown] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Fetch retailers and products on mount
@@ -1059,6 +1063,19 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
 
     fetchData();
   }, []);
+
+  // Close retailer dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (showRetailerDropdown && !target.closest('.retailer-dropdown-container')) {
+        setShowRetailerDropdown(false);
+        setRetailerSearchTerm('');
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showRetailerDropdown]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
