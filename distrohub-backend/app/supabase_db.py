@@ -2707,6 +2707,7 @@ class SupabaseDatabase:
         
         # Get all payments collected by this SR (for sales in their routes)
         # DOUBLE-COUNT SAFEGUARD: Group payments by route to detect which routes have payments
+        # FALLBACK: If payment.route_id is NULL, resolve via sale.route_id (for legacy payments)
         payments_collected = []
         payments_by_route = {}  # route_id -> list of payments
         if route_sale_ids:
@@ -2729,10 +2730,18 @@ class SupabaseDatabase:
                         # Note: If a sale is in multiple routes (shouldn't happen), last route wins
                     
                     # Group payments by route
+                    # FALLBACK: If payment.route_id is NULL, use sale.route_id from map
                     for payment in payments_collected:
                         sale_id = payment.get("sale_id")
-                        route_id = sale_to_route_map.get(sale_id)
+                        # Primary: Use payment.route_id if set
+                        # Fallback: Use sale.route_id from route_sales_map (for legacy payments)
+                        route_id = payment.get("route_id") or sale_to_route_map.get(sale_id)
+                        
                         if route_id:
+                            # If payment.route_id was NULL but we resolved it, log for backfill
+                            if not payment.get("route_id") and sale_id in sale_to_route_map:
+                                print(f"[DB] FALLBACK: Payment {payment.get('id')} had NULL route_id, resolved via sale.route_id = {route_id}")
+                            
                             if route_id not in payments_by_route:
                                 payments_by_route[route_id] = []
                             payments_by_route[route_id].append(payment)
@@ -2794,3 +2803,135 @@ class SupabaseDatabase:
             "routes": all_routes,  # Include all routes (active + reconciled)
             "reconciliations": reconciliations
         }
+    
+    def backfill_payment_route_id(self, dry_run: bool = True) -> dict:
+        """
+        ONE-TIME BACKFILL: Update payments.route_id from sales.route_id for historical payments.
+        
+        This fixes payments created before 2026-01-13 that have route_id = NULL.
+        New payments already have route_id set correctly via create_payment().
+        
+        Args:
+            dry_run: If True, only returns preview without updating (default: True for safety)
+        
+        Returns:
+            dict with statistics about the backfill operation
+        """
+        try:
+            # Step 1: Find payments that need backfill
+            # Get all payments with NULL route_id where sale has route_id
+            payments_to_fix_result = self.client.table("payments").select("id,sale_id,route_id").is_("route_id", "null").execute()
+            payments_to_fix = payments_to_fix_result.data or []
+            
+            if not payments_to_fix:
+                return {
+                    "status": "success",
+                    "dry_run": dry_run,
+                    "payments_found": 0,
+                    "payments_updated": 0,
+                    "message": "No payments need backfill (all payments already have route_id or sales not in routes)"
+                }
+            
+            # Get sale_ids to check
+            sale_ids = [p["sale_id"] for p in payments_to_fix if p.get("sale_id")]
+            if not sale_ids:
+                return {
+                    "status": "success",
+                    "dry_run": dry_run,
+                    "payments_found": len(payments_to_fix),
+                    "payments_updated": 0,
+                    "message": "No payments with sale_id found"
+                }
+            
+            # Batch fetch sales to get route_id
+            sales_result = self.client.table("sales").select("id,route_id").in_("id", sale_ids).execute()
+            sales_map = {s["id"]: s.get("route_id") for s in (sales_result.data or []) if s.get("route_id")}
+            
+            # Filter payments where sale has route_id
+            payments_to_update = []
+            for payment in payments_to_fix:
+                sale_id = payment.get("sale_id")
+                if sale_id and sale_id in sales_map:
+                    route_id = sales_map[sale_id]
+                    if route_id:  # Sale is in a route
+                        payments_to_update.append({
+                            "payment_id": payment["id"],
+                            "sale_id": sale_id,
+                            "route_id": route_id
+                        })
+            
+            if not payments_to_update:
+                return {
+                    "status": "success",
+                    "dry_run": dry_run,
+                    "payments_found": len(payments_to_fix),
+                    "payments_updated": 0,
+                    "message": "No payments need backfill (sales not in routes)"
+                }
+            
+            # Step 2: Perform update (if not dry_run)
+            updated_count = 0
+            if not dry_run:
+                # Batch update payments
+                for payment_info in payments_to_update:
+                    try:
+                        self.client.table("payments").update({
+                            "route_id": payment_info["route_id"]
+                        }).eq("id", payment_info["payment_id"]).execute()
+                        updated_count += 1
+                    except Exception as e:
+                        print(f"[DB] Error updating payment {payment_info['payment_id']}: {e}")
+                        continue
+            
+            # Step 3: Verification - check for any mismatches
+            verification_result = self.client.table("payments").select("id,sale_id,route_id").in_("id", [p["payment_id"] for p in payments_to_update]).execute()
+            updated_payments = verification_result.data or []
+            
+            mismatches = []
+            if updated_payments:
+                # Re-fetch sales to verify
+                updated_sale_ids = [p["sale_id"] for p in updated_payments if p.get("sale_id")]
+                if updated_sale_ids:
+                    updated_sales_result = self.client.table("sales").select("id,route_id").in_("id", updated_sale_ids).execute()
+                    updated_sales_map = {s["id"]: s.get("route_id") for s in (updated_sales_result.data or [])}
+                    
+                    for payment in updated_payments:
+                        sale_id = payment.get("sale_id")
+                        payment_route_id = payment.get("route_id")
+                        sale_route_id = updated_sales_map.get(sale_id)
+                        
+                        if sale_route_id and payment_route_id != sale_route_id:
+                            mismatches.append({
+                                "payment_id": payment["id"],
+                                "sale_id": sale_id,
+                                "payment_route_id": payment_route_id,
+                                "sale_route_id": sale_route_id
+                            })
+            
+            result = {
+                "status": "success",
+                "dry_run": dry_run,
+                "payments_found": len(payments_to_fix),
+                "payments_needing_backfill": len(payments_to_update),
+                "payments_updated": updated_count if not dry_run else 0,
+                "mismatches_found": len(mismatches),
+                "mismatches": mismatches if mismatches else None,
+                "message": f"{'Preview' if dry_run else 'Updated'} {len(payments_to_update)} payments" + 
+                          (f", {len(mismatches)} mismatches found" if mismatches else "")
+            }
+            
+            print(f"[DB] backfill_payment_route_id: {result['message']}")
+            return result
+            
+        except Exception as e:
+            error_msg = str(e)
+            error_type = type(e).__name__
+            print(f"[DB] Error in backfill_payment_route_id: {error_type}: {error_msg}")
+            import traceback
+            traceback.print_exc()
+            return {
+                "status": "error",
+                "dry_run": dry_run,
+                "error": error_msg,
+                "error_type": error_type
+            }

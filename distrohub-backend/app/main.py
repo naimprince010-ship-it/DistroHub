@@ -1960,3 +1960,39 @@ async def get_sr_accountability(
     if not accountability:
         raise HTTPException(status_code=404, detail="User not found or not an SR")
     return SrAccountability(**accountability)
+
+@app.post("/api/admin/backfill-payment-route-id")
+async def backfill_payment_route_id(
+    dry_run: bool = True,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    ONE-TIME ADMIN ENDPOINT: Backfill payments.route_id from sales.route_id
+    
+    This fixes historical payments created before 2026-01-13 that have route_id = NULL.
+    New payments already have route_id set correctly via create_payment().
+    
+    Args:
+        dry_run: If True, only previews changes without updating (default: True for safety)
+    
+    Returns:
+        dict with backfill statistics
+    """
+    # Check if user is admin
+    if current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    
+    try:
+        result = db.backfill_payment_route_id(dry_run=dry_run)
+        return result
+    except Exception as e:
+        error_msg = str(e)
+        error_type = type(e).__name__
+        print(f"[API] Error in backfill_payment_route_id: {error_type}: {error_msg}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Backfill failed: {error_msg}"
+        )
