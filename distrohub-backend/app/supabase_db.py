@@ -2695,8 +2695,10 @@ class SupabaseDatabase:
                 for rec in reconciliations:
                     rec["items"] = items_map.get(rec["id"], [])
         
-        # Get all payments collected by this SR (for sales in their routes OR any sales assigned to them)
+        # Get all payments collected by this SR (for sales in their routes)
+        # DOUBLE-COUNT SAFEGUARD: Group payments by route to detect which routes have payments
         payments_collected = []
+        payments_by_route = {}  # route_id -> list of payments
         if route_sale_ids:
             try:
                 # Get payments collected by this SR
@@ -2706,10 +2708,30 @@ class SupabaseDatabase:
                 # Filter payments for sales in this SR's routes
                 payments_collected = [p for p in all_payments if p.get("sale_id") and p.get("sale_id") in route_sale_ids]
                 
+                # Build map: route_id -> list of payments for that route
+                # Use route_sales_map to get route_id for each sale (already fetched above)
+                if payments_collected and route_sales_map:
+                    # Build sale_id -> route_id map from route_sales_map
+                    sale_to_route_map = {}
+                    for (route_id, sale_id), _ in route_sales_map.items():
+                        if sale_id not in sale_to_route_map:
+                            sale_to_route_map[sale_id] = route_id
+                        # Note: If a sale is in multiple routes (shouldn't happen), last route wins
+                    
+                    # Group payments by route
+                    for payment in payments_collected:
+                        sale_id = payment.get("sale_id")
+                        route_id = sale_to_route_map.get(sale_id)
+                        if route_id:
+                            if route_id not in payments_by_route:
+                                payments_by_route[route_id] = []
+                            payments_by_route[route_id].append(payment)
+                
                 print(f"[DB] get_sr_accountability: SR {user_id}")
                 print(f"[DB]   - Route sale IDs: {list(route_sale_ids)[:5]}..." if len(route_sale_ids) > 5 else f"[DB]   - Route sale IDs: {list(route_sale_ids)}")
                 print(f"[DB]   - Total payments collected by SR: {len(all_payments)}")
                 print(f"[DB]   - Payments for route sales: {len(payments_collected)}")
+                print(f"[DB]   - Routes with payments: {list(payments_by_route.keys())}")
                 if all_payments:
                     for p in all_payments[:3]:  # Show first 3 payments for debugging
                         print(f"[DB]     Payment: sale_id={p.get('sale_id')}, amount={p.get('amount')}, collected_by={p.get('collected_by')}, in_route={p.get('sale_id') in route_sale_ids if p.get('sale_id') else False}")
@@ -2718,20 +2740,26 @@ class SupabaseDatabase:
                 import traceback
                 traceback.print_exc()
                 payments_collected = []
+                payments_by_route = {}
         
         # Calculate totals from reconciliations AND individual payments
         # 
-        # DOUBLE-COUNT SAFETY: Reconciliation total_collected_cash is manual input during reconciliation
-        # Individual payments are separate records collected during delivery
-        # 
-        # These should NOT overlap:
-        # - Reconciliation records the TOTAL collected during reconciliation (manual entry)
-        # - Individual payments are records of payments made during delivery
-        # 
-        # If reconciliation includes existing payments in its total, this would double-count
-        # Current assumption: Reconciliation total is independent of individual payment records
+        # DOUBLE-COUNT SAFEGUARD: If a route has payment records, exclude reconciliation.total_collected_cash for that route
+        # Logic:
+        # - If route has payments: Use payments only (payments are source of truth for actual collection)
+        # - If route has no payments but has reconciliation: Use reconciliation.total_collected_cash (manual entry)
+        # - This prevents double-counting when reconciliation includes payments that are already recorded
         #
-        total_collected_from_recons = sum(float(r.get("total_collected_cash", 0)) for r in reconciliations)
+        total_collected_from_recons = 0.0
+        for rec in reconciliations:
+            route_id = rec.get("route_id")
+            # Only count reconciliation total if route has NO payments
+            if route_id not in payments_by_route:
+                total_collected_from_recons += float(rec.get("total_collected_cash", 0))
+            else:
+                # Route has payments - exclude reconciliation total to prevent double-counting
+                print(f"[DB] DOUBLE-COUNT SAFEGUARD: Route {route_id} has {len(payments_by_route[route_id])} payments - excluding reconciliation.total_collected_cash={rec.get('total_collected_cash', 0)}")
+        
         total_collected_from_payments = sum(float(p.get("amount", 0)) for p in payments_collected)
         total_collected = total_collected_from_recons + total_collected_from_payments
         total_returns = sum(float(r.get("total_returns_amount", 0)) for r in reconciliations)
@@ -2740,8 +2768,10 @@ class SupabaseDatabase:
         # Current Outstanding = Total Expected - Total Collected - Total Returns
         current_outstanding = total_expected - total_collected - total_returns
         
-        print(f"[DB] get_sr_accountability: SR {user_id} - Total collected from recons: {total_collected_from_recons}, from payments: {total_collected_from_payments}, total: {total_collected}")
+        print(f"[DB] get_sr_accountability: SR {user_id} - Total collected from recons (after safeguard): {total_collected_from_recons}, from payments: {total_collected_from_payments}, total: {total_collected}")
         print(f"[DB] get_sr_accountability: SR {user_id} - Total expected: {total_expected}, Total collected: {total_collected}, Total returns: {total_returns}, Current outstanding: {current_outstanding}")
+        if payments_by_route:
+            print(f"[DB] DOUBLE-COUNT SAFEGUARD: {len(payments_by_route)} routes have payments - reconciliation totals excluded for those routes")
         
         return {
             "user_id": user_id,
