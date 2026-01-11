@@ -1317,19 +1317,30 @@ class SupabaseDatabase:
         if data.get("sale_id"):
             sale = self.get_sale(data["sale_id"])
             if sale:
-                new_paid = sale["paid_amount"] + data["amount"]
-                new_due = sale["due_amount"] - data["amount"]
-                payment_status = "paid" if new_due <= 0 else "partial"
+                # Get current values as floats to ensure proper calculation
+                current_paid = float(sale.get("paid_amount", 0))
+                current_due = float(sale.get("due_amount", 0))
+                payment_amount = float(data["amount"])
+                
+                new_paid = current_paid + payment_amount
+                new_due = max(0, current_due - payment_amount)  # Ensure non-negative
+                payment_status = "paid" if new_due <= 0.01 else "partial"  # Use small threshold for float comparison
                 
                 # Update payment amounts only (delivery_status will be updated manually by admin)
                 update_data = {
                     "paid_amount": new_paid,
-                    "due_amount": max(0, new_due),  # Ensure non-negative
+                    "due_amount": new_due,
                     "payment_status": payment_status
                 }
                 
+                print(f"[DB] Updating sale {data['sale_id']}: paid={current_paid} -> {new_paid}, due={current_due} -> {new_due}, status={payment_status}")
+                
                 # DO NOT update delivery_status automatically - admin will update manually
-                self.client.table("sales").update(update_data).eq("id", data["sale_id"]).execute()
+                result = self.client.table("sales").update(update_data).eq("id", data["sale_id"]).execute()
+                if not result.data:
+                    print(f"[DB] Warning: Sale update returned no data for sale_id={data['sale_id']}")
+                else:
+                    print(f"[DB] Sale updated successfully: {result.data[0].get('invoice_number')}")
         
         # Get collected_by user name if collected_by is provided
         collected_by_name = None
@@ -2479,8 +2490,26 @@ class SupabaseDatabase:
             route_recons = self.get_route_reconciliations(route_id=route["id"])
             reconciliations.extend(route_recons)
         
-        # Calculate totals from reconciliations
-        total_collected = sum(float(r.get("total_collected_cash", 0)) for r in reconciliations)
+        # Get payments collected by this SR (for sales in their routes)
+        route_sale_ids = set()
+        for route in all_routes:
+            route_details = self.get_route(route["id"])
+            if route_details:
+                for sale in route_details.get("sales", []):
+                    route_sale_ids.add(sale.get("id"))
+        
+        # Get all payments collected by this SR for sales in their routes
+        payments_collected = []
+        if route_sale_ids:
+            payments_result = self.client.table("payments").select("*").eq("collected_by", user_id).execute()
+            all_payments = payments_result.data or []
+            # Filter payments for sales in this SR's routes
+            payments_collected = [p for p in all_payments if p.get("sale_id") in route_sale_ids]
+        
+        # Calculate totals from reconciliations AND individual payments
+        total_collected_from_recons = sum(float(r.get("total_collected_cash", 0)) for r in reconciliations)
+        total_collected_from_payments = sum(float(p.get("amount", 0)) for p in payments_collected)
+        total_collected = total_collected_from_recons + total_collected_from_payments
         total_returns = sum(float(r.get("total_returns_amount", 0)) for r in reconciliations)
         
         return {
