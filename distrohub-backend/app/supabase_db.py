@@ -1378,10 +1378,46 @@ class SupabaseDatabase:
         # See: 20260113000001_backfill_payment_route_id.sql
         route_id = None
         if data.get("sale_id"):
+            # #region agent log
+            log_data = {
+                "location": "supabase_db.py:create_payment:fetching_sale",
+                "message": "Fetching sale to get route_id",
+                "data": {"sale_id": data.get("sale_id")},
+                "timestamp": int(datetime.now().timestamp() * 1000),
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "A"
+            }
+            try:
+                with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                    f.write(json.dumps(log_data) + "\n")
+            except: pass
+            # #endregion
+            
             sale = self.get_sale(data["sale_id"])
             if sale:
                 # Get route_id from sale (if sale is in a route)
                 route_id = sale.get("route_id")
+                
+                # #region agent log
+                log_data = {
+                    "location": "supabase_db.py:create_payment:sale_route_id",
+                    "message": "Sale route_id retrieved",
+                    "data": {
+                        "sale_id": data.get("sale_id"),
+                        "sale_route_id": route_id,
+                        "sale_assigned_to": sale.get("assigned_to")
+                    },
+                    "timestamp": int(datetime.now().timestamp() * 1000),
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "A"
+                }
+                try:
+                    with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                        f.write(json.dumps(log_data) + "\n")
+                except: pass
+                # #endregion
                 
                 # Get current values as floats to ensure proper calculation
                 current_paid = float(sale.get("paid_amount", 0))
@@ -1420,6 +1456,28 @@ class SupabaseDatabase:
                 # Individual payments are just records. Reconciliation is the source of truth for SR cash holdings.
                 # DO NOT call update_sr_cash_holding() here - it should only be called during reconciliation.
         
+        # #region agent log
+        import json
+        log_data = {
+            "location": "supabase_db.py:create_payment:before_insert",
+            "message": "Creating payment with route_id",
+            "data": {
+                "sale_id": data.get("sale_id"),
+                "route_id": route_id,
+                "collected_by": data.get("collected_by"),
+                "amount": data.get("amount")
+            },
+            "timestamp": int(datetime.now().timestamp() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "A"
+        }
+        try:
+            with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except: pass
+        # #endregion
+        
         payment_data = {
             "retailer_id": data["retailer_id"],
             "retailer_name": retailer["name"],
@@ -1432,7 +1490,31 @@ class SupabaseDatabase:
             "collected_by_name": collected_by_name
         }
         result = self.client.table("payments").insert(payment_data).execute()
-        return result.data[0] if result.data else payment_data
+        
+        # #region agent log
+        inserted_payment = result.data[0] if result.data else payment_data
+        log_data = {
+            "location": "supabase_db.py:create_payment:after_insert",
+            "message": "Payment created",
+            "data": {
+                "payment_id": inserted_payment.get("id"),
+                "sale_id": inserted_payment.get("sale_id"),
+                "route_id": inserted_payment.get("route_id"),
+                "collected_by": inserted_payment.get("collected_by"),
+                "amount": inserted_payment.get("amount")
+            },
+            "timestamp": int(datetime.now().timestamp() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "A"
+        }
+        try:
+            with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except: pass
+        # #endregion
+        
+        return inserted_payment
     
     def get_inventory(self) -> List[InventoryItem]:
         inventory = []
@@ -2712,12 +2794,85 @@ class SupabaseDatabase:
         payments_by_route = {}  # route_id -> list of payments
         if route_sale_ids:
             try:
+                # #region agent log
+                log_data = {
+                    "location": "supabase_db.py:get_sr_accountability:before_payment_fetch",
+                    "message": "Fetching payments for SR",
+                    "data": {
+                        "user_id": user_id,
+                        "route_sale_ids_count": len(route_sale_ids),
+                        "route_sale_ids_sample": list(route_sale_ids)[:5] if len(route_sale_ids) > 5 else list(route_sale_ids)
+                    },
+                    "timestamp": int(datetime.now().timestamp() * 1000),
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "B"
+                }
+                try:
+                    with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                        f.write(json.dumps(log_data) + "\n")
+                except: pass
+                # #endregion
+                
                 # Get payments collected by this SR
                 payments_result = self.client.table("payments").select("*").eq("collected_by", user_id).execute()
                 all_payments = payments_result.data or []
                 
+                # #region agent log
+                log_data = {
+                    "location": "supabase_db.py:get_sr_accountability:after_payment_fetch",
+                    "message": "Payments fetched",
+                    "data": {
+                        "total_payments_fetched": len(all_payments),
+                        "payments_sample": [
+                            {
+                                "id": p.get("id"),
+                                "sale_id": p.get("sale_id"),
+                                "route_id": p.get("route_id"),
+                                "collected_by": p.get("collected_by"),
+                                "amount": p.get("amount")
+                            } for p in all_payments[:3]
+                        ]
+                    },
+                    "timestamp": int(datetime.now().timestamp() * 1000),
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "B"
+                }
+                try:
+                    with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                        f.write(json.dumps(log_data) + "\n")
+                except: pass
+                # #endregion
+                
                 # Filter payments for sales in this SR's routes
                 payments_collected = [p for p in all_payments if p.get("sale_id") and p.get("sale_id") in route_sale_ids]
+                
+                # #region agent log
+                log_data = {
+                    "location": "supabase_db.py:get_sr_accountability:after_filter",
+                    "message": "Payments filtered for route sales",
+                    "data": {
+                        "payments_collected_count": len(payments_collected),
+                        "payments_collected": [
+                            {
+                                "id": p.get("id"),
+                                "sale_id": p.get("sale_id"),
+                                "route_id": p.get("route_id"),
+                                "amount": p.get("amount")
+                            } for p in payments_collected[:5]
+                        ]
+                    },
+                    "timestamp": int(datetime.now().timestamp() * 1000),
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "B"
+                }
+                try:
+                    with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                        f.write(json.dumps(log_data) + "\n")
+                except: pass
+                # #endregion
                 
                 # Build map: route_id -> list of payments for that route
                 # Use route_sales_map to get route_id for each sale (already fetched above)
@@ -2736,6 +2891,29 @@ class SupabaseDatabase:
                         # Primary: Use payment.route_id if set
                         # Fallback: Use sale.route_id from route_sales_map (for legacy payments)
                         route_id = payment.get("route_id") or sale_to_route_map.get(sale_id)
+                        
+                        # #region agent log
+                        log_data = {
+                            "location": "supabase_db.py:get_sr_accountability:grouping_payment",
+                            "message": "Grouping payment by route",
+                            "data": {
+                                "payment_id": payment.get("id"),
+                                "sale_id": sale_id,
+                                "payment_route_id": payment.get("route_id"),
+                                "resolved_route_id": route_id,
+                                "sale_in_map": sale_id in sale_to_route_map,
+                                "used_fallback": not payment.get("route_id") and sale_id in sale_to_route_map
+                            },
+                            "timestamp": int(datetime.now().timestamp() * 1000),
+                            "sessionId": "debug-session",
+                            "runId": "run1",
+                            "hypothesisId": "C"
+                        }
+                        try:
+                            with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                                f.write(json.dumps(log_data) + "\n")
+                        except: pass
+                        # #endregion
                         
                         if route_id:
                             # If payment.route_id was NULL but we resolved it, log for backfill
@@ -2786,6 +2964,32 @@ class SupabaseDatabase:
         # LOGIC FIX: Calculate actual current outstanding (not cash holding)
         # Current Outstanding = Total Expected - Total Collected - Total Returns
         current_outstanding = total_expected - total_collected - total_returns
+        
+        # #region agent log
+        log_data = {
+            "location": "supabase_db.py:get_sr_accountability:final_calculation",
+            "message": "Final SR Accountability calculation",
+            "data": {
+                "user_id": user_id,
+                "total_expected": total_expected,
+                "total_collected_from_recons": total_collected_from_recons,
+                "total_collected_from_payments": total_collected_from_payments,
+                "total_collected": total_collected,
+                "total_returns": total_returns,
+                "current_outstanding": current_outstanding,
+                "payments_collected_count": len(payments_collected),
+                "routes_with_payments": list(payments_by_route.keys())
+            },
+            "timestamp": int(datetime.now().timestamp() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "D"
+        }
+        try:
+            with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except: pass
+        # #endregion
         
         print(f"[DB] get_sr_accountability: SR {user_id} - Total collected from recons (after safeguard): {total_collected_from_recons}, from payments: {total_collected_from_payments}, total: {total_collected}")
         print(f"[DB] get_sr_accountability: SR {user_id} - Total expected: {total_expected}, Total collected: {total_collected}, Total returns: {total_returns}, Current outstanding: {current_outstanding}")
