@@ -2498,17 +2498,28 @@ class SupabaseDatabase:
                 for sale in route_details.get("sales", []):
                     route_sale_ids.add(sale.get("id"))
         
-        # Get all payments collected by this SR for sales in their routes
+        # Get all payments collected by this SR (for sales in their routes OR any sales assigned to them)
         payments_collected = []
         if route_sale_ids:
             try:
+                # Get payments collected by this SR
                 payments_result = self.client.table("payments").select("*").eq("collected_by", user_id).execute()
                 all_payments = payments_result.data or []
+                
                 # Filter payments for sales in this SR's routes
                 payments_collected = [p for p in all_payments if p.get("sale_id") and p.get("sale_id") in route_sale_ids]
-                print(f"[DB] get_sr_accountability: Found {len(payments_collected)} payments for SR {user_id} in routes (total payments: {len(all_payments)}, route_sale_ids: {len(route_sale_ids)})")
+                
+                print(f"[DB] get_sr_accountability: SR {user_id}")
+                print(f"[DB]   - Route sale IDs: {list(route_sale_ids)[:5]}..." if len(route_sale_ids) > 5 else f"[DB]   - Route sale IDs: {list(route_sale_ids)}")
+                print(f"[DB]   - Total payments collected by SR: {len(all_payments)}")
+                print(f"[DB]   - Payments for route sales: {len(payments_collected)}")
+                if all_payments:
+                    for p in all_payments[:3]:  # Show first 3 payments for debugging
+                        print(f"[DB]     Payment: sale_id={p.get('sale_id')}, amount={p.get('amount')}, collected_by={p.get('collected_by')}, in_route={p.get('sale_id') in route_sale_ids if p.get('sale_id') else False}")
             except Exception as e:
                 print(f"[DB] Error fetching payments for SR accountability: {e}")
+                import traceback
+                traceback.print_exc()
                 payments_collected = []
         
         # Calculate totals from reconciliations AND individual payments
