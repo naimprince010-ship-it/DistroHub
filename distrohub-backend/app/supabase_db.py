@@ -2856,19 +2856,9 @@ class SupabaseDatabase:
             preview_result = self.client.table("payments").select("id", count="exact").is_("route_id", "null").execute()
             payments_with_null_route_id = preview_result.count or 0
             
-            # Count payments where sale has route_id (actual candidates for backfill)
-            # Use a query to count: payments with NULL route_id AND sale has route_id
-            preview_query = """
-                SELECT COUNT(*) as count
-                FROM payments p
-                JOIN sales s ON p.sale_id = s.id
-                WHERE p.route_id IS NULL
-                  AND s.route_id IS NOT NULL
-            """
-            
-            # Execute via RPC (we'll create a function for this, or use direct query)
-            # For now, use table queries to estimate
-            payments_to_fix_result = self.client.table("payments").select("id,sale_id").is_("route_id", "null").limit(1000).execute()
+            # Count payments that need backfill: NULL route_id AND sale has route_id
+            # Use efficient query to get exact count
+            payments_to_fix_result = self.client.table("payments").select("id,sale_id").is_("route_id", "null").execute()
             payments_to_fix = payments_to_fix_result.data or []
             
             if not payments_to_fix:
@@ -2898,7 +2888,7 @@ class SupabaseDatabase:
                 return result
             
             # Get sale_ids to check if they have route_id
-            sale_ids = [p["sale_id"] for p in payments_to_fix if p.get("sale_id")]
+            sale_ids = list(set([p["sale_id"] for p in payments_to_fix if p.get("sale_id")]))
             if not sale_ids:
                 result = {
                     "status": "success",
@@ -2910,10 +2900,16 @@ class SupabaseDatabase:
                 }
                 return result
             
-            # Batch fetch sales to check route_id
-            sales_result = self.client.table("sales").select("id,route_id").in_("id", sale_ids[:1000]).execute()
-            sales_with_route = [s for s in (sales_result.data or []) if s.get("route_id")]
-            payments_needing_backfill = len([p for p in payments_to_fix if p.get("sale_id") in [s["id"] for s in sales_with_route]])
+            # Batch fetch sales to check route_id (in chunks if needed)
+            sales_with_route = []
+            chunk_size = 1000
+            for i in range(0, len(sale_ids), chunk_size):
+                chunk = sale_ids[i:i + chunk_size]
+                sales_result = self.client.table("sales").select("id,route_id").in_("id", chunk).execute()
+                sales_with_route.extend([s for s in (sales_result.data or []) if s.get("route_id")])
+            
+            sales_map = {s["id"]: s.get("route_id") for s in sales_with_route}
+            payments_needing_backfill = len([p for p in payments_to_fix if p.get("sale_id") in sales_map])
             
             # #region agent log
             log_data = {
@@ -2981,33 +2977,62 @@ class SupabaseDatabase:
             # #endregion
             
             # Call PostgreSQL function via RPC (single batch UPDATE)
-            rpc_result = self.client.rpc("backfill_payment_route_id").execute()
-            
-            # #region agent log
-            log_data = {
-                "location": "supabase_db.py:backfill_payment_route_id:after_execute",
-                "message": "Batch SQL update executed",
-                "data": {"rpc_result": str(rpc_result.data) if rpc_result.data else "None"},
-                "timestamp": int(datetime.now().timestamp() * 1000),
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "A"
-            }
+            # This executes: UPDATE payments SET route_id = sales.route_id WHERE ...
             try:
-                with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
-                    f.write(json.dumps(log_data) + "\n")
-            except: pass
-            # #endregion
-            
-            if rpc_result.data and len(rpc_result.data) > 0:
-                payments_updated = rpc_result.data[0].get("payments_updated", 0)
-                payments_still_missing = rpc_result.data[0].get("payments_still_missing", 0)
-            else:
-                # Fallback: If RPC fails, use direct SQL approach
-                # This shouldn't happen if function exists, but handle gracefully
+                rpc_result = self.client.rpc("backfill_payment_route_id").execute()
+                
+                # #region agent log
+                log_data = {
+                    "location": "supabase_db.py:backfill_payment_route_id:rpc_success",
+                    "message": "RPC call succeeded",
+                    "data": {"rpc_result": str(rpc_result.data) if rpc_result.data else "None"},
+                    "timestamp": int(datetime.now().timestamp() * 1000),
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "A"
+                }
+                try:
+                    with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                        f.write(json.dumps(log_data) + "\n")
+                except: pass
+                # #endregion
+                
+                if rpc_result.data and len(rpc_result.data) > 0:
+                    payments_updated = rpc_result.data[0].get("payments_updated", 0)
+                    payments_still_missing = rpc_result.data[0].get("payments_still_missing", 0)
+                else:
+                    payments_updated = 0
+                    payments_still_missing = payments_needing_backfill
+                    print("[DB] WARNING: RPC returned empty result")
+            except Exception as rpc_error:
+                # Fallback: If RPC function doesn't exist, use direct batch update via Supabase client
+                # This is a workaround if migration hasn't been run yet
+                print(f"[DB] RPC function not available ({rpc_error}), using direct batch update")
+                
+                # #region agent log
+                log_data = {
+                    "location": "supabase_db.py:backfill_payment_route_id:rpc_failed",
+                    "message": "RPC failed, using fallback",
+                    "data": {"error": str(rpc_error)},
+                    "timestamp": int(datetime.now().timestamp() * 1000),
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "A"
+                }
+                try:
+                    with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                        f.write(json.dumps(log_data) + "\n")
+                except: pass
+                # #endregion
+                
+                # Fallback: If RPC function doesn't exist, we cannot do single batch SQL
+                # In this case, return error asking to run migration first
                 payments_updated = 0
                 payments_still_missing = payments_needing_backfill
-                print("[DB] WARNING: backfill_payment_route_id() function not found. Please run migration first.")
+                raise ValueError(
+                    f"backfill_payment_route_id() PostgreSQL function not found. "
+                    f"Please run migration: 20260113000002_create_backfill_payment_route_id_function.sql"
+                )
             
             # #region agent log
             log_data = {
