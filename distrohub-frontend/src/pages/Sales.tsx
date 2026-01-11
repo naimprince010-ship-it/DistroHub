@@ -1158,28 +1158,81 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
 
         <form onSubmit={handleSubmit} className="p-3 space-y-2">
           <div className="grid grid-cols-2 gap-2">
-            <div>
+            <div className="relative retailer-dropdown-container">
               <label className="block text-sm font-medium text-slate-700 mb-1">Retailer</label>
-              <select
-                value={formData.retailer_name}
-                onChange={(e) => setFormData({ ...formData, retailer_name: e.target.value })}
-                className="input-field"
-                required
-                disabled={loadingRetailers}
-              >
-                <option value="">
-                  {loadingRetailers 
-                    ? 'Loading retailers...' 
-                    : retailers.length === 0 
-                      ? 'No retailers found - Add retailers first' 
-                      : 'Select Retailer'}
-                </option>
-                {retailers.map((retailer) => (
-                  <option key={retailer.id} value={retailer.shop_name}>
-                    {retailer.shop_name} ({retailer.name})
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <div
+                  onClick={() => !loadingRetailers && setShowRetailerDropdown(!showRetailerDropdown)}
+                  className="input-field flex items-center justify-between cursor-pointer"
+                >
+                  <span className={formData.retailer_name ? 'text-slate-900' : 'text-slate-400'}>
+                    {formData.retailer_name || (loadingRetailers ? 'Loading retailers...' : retailers.length === 0 ? 'No retailers found - Add retailers first' : 'Select Retailer')}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showRetailerDropdown ? 'rotate-180' : ''}`} />
+                </div>
+                {showRetailerDropdown && !loadingRetailers && (
+                  <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-hidden">
+                    <div className="p-2 border-b border-slate-200">
+                      <div className="relative">
+                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="খুঁজুন... (Search)"
+                          value={retailerSearchTerm}
+                          onChange={(e) => setRetailerSearchTerm(e.target.value)}
+                          className="w-full pl-8 pr-2 py-1.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto">
+                      {retailers
+                        .filter((retailer) => {
+                          const searchLower = retailerSearchTerm.toLowerCase();
+                          return (
+                            retailer.name.toLowerCase().includes(searchLower) ||
+                            retailer.shop_name.toLowerCase().includes(searchLower)
+                          );
+                        })
+                        .map((retailer) => (
+                          <div
+                            key={retailer.id}
+                            onClick={() => {
+                              setFormData({ ...formData, retailer_name: retailer.shop_name || retailer.name });
+                              setShowRetailerDropdown(false);
+                              setRetailerSearchTerm('');
+                            }}
+                            className={`px-3 py-2 cursor-pointer hover:bg-primary-50 transition-colors ${
+                              formData.retailer_name === (retailer.shop_name || retailer.name)
+                                ? 'bg-primary-50 text-primary-700'
+                                : 'text-slate-900'
+                            }`}
+                          >
+                            {retailer.shop_name} ({retailer.name})
+                          </div>
+                        ))}
+                      {retailers.filter((retailer) => {
+                        const searchLower = retailerSearchTerm.toLowerCase();
+                        return (
+                          retailer.name.toLowerCase().includes(searchLower) ||
+                          retailer.shop_name.toLowerCase().includes(searchLower)
+                        );
+                      }).length === 0 && (
+                        <div className="px-3 py-2 text-sm text-slate-500 text-center">
+                          No retailers found
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+              {formData.retailer_name && (
+                <input
+                  type="hidden"
+                  value={formData.retailer_name}
+                  required
+                />
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Delivery Date</label>
