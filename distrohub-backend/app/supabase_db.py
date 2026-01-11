@@ -2227,8 +2227,18 @@ class SupabaseDatabase:
         
         return route
     
+    def _check_route_not_reconciled(self, route: dict) -> None:
+        """Raise ValueError if route is reconciled (immutable)"""
+        if route.get("status") == "reconciled":
+            raise ValueError("Cannot modify reconciled route")
+    
     def update_route(self, route_id: str, data: dict) -> Optional[dict]:
         """Update route (status, notes, etc.)"""
+        # Check if route is reconciled (immutable)
+        route = self.get_route(route_id)
+        if route:
+            self._check_route_not_reconciled(route)
+        
         update_data = {}
         
         if "status" in data:
@@ -2311,6 +2321,12 @@ class SupabaseDatabase:
     
     def remove_sale_from_route(self, route_id: str, sale_id: str) -> dict:
         """Remove a sale from route"""
+        # Check if route is reconciled (immutable)
+        route = self.get_route(route_id)
+        if not route:
+            raise ValueError("Route not found")
+        self._check_route_not_reconciled(route)
+        
         # Remove from route_sales
         self.client.table("route_sales").delete().eq("route_id", route_id).eq("sale_id", sale_id).execute()
         
@@ -2333,6 +2349,11 @@ class SupabaseDatabase:
     def delete_route(self, route_id: str) -> bool:
         """Delete a route (cascades to route_sales, clears sales.route_id)"""
         try:
+            # Check if route is reconciled (immutable)
+            route = self.get_route(route_id)
+            if route:
+                self._check_route_not_reconciled(route)
+            
             # Clear sales.route_id for all sales in this route
             self.client.table("sales").update({"route_id": None}).eq("route_id", route_id).execute()
             
