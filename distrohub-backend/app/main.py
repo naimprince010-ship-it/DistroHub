@@ -1807,10 +1807,13 @@ async def update_route(
     current_user: dict = Depends(get_current_user)
 ):
     """Update route (status, notes, etc.)"""
-    route = db.update_route(route_id, route_update.model_dump(exclude_unset=True))
-    if not route:
-        raise HTTPException(status_code=404, detail="Route not found")
-    return Route(**route)
+    try:
+        route = db.update_route(route_id, route_update.model_dump(exclude_unset=True))
+        if not route:
+            raise HTTPException(status_code=404, detail="Route not found")
+        return Route(**route)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.post("/api/routes/{route_id}/sales", response_model=RouteWithSales)
 async def add_sales_to_route(
@@ -1834,18 +1837,24 @@ async def remove_sale_from_route(
     current_user: dict = Depends(get_current_user)
 ):
     """Remove a sale from route"""
-    route = db.remove_sale_from_route(route_id, sale_id)
-    if not route:
-        raise HTTPException(status_code=404, detail="Route not found")
-    return RouteWithSales(**route)
+    try:
+        route = db.remove_sale_from_route(route_id, sale_id)
+        if not route:
+            raise HTTPException(status_code=404, detail="Route not found")
+        return RouteWithSales(**route)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.delete("/api/routes/{route_id}")
 async def delete_route(route_id: str, current_user: dict = Depends(get_current_user)):
     """Delete a route"""
-    success = db.delete_route(route_id)
-    if not success:
-        raise HTTPException(status_code=404, detail="Route not found")
-    return {"message": "Route deleted successfully"}
+    try:
+        success = db.delete_route(route_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Route not found")
+        return {"message": "Route deleted successfully"}
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/api/retailers/{retailer_id}/previous-due")
 async def get_retailer_previous_due(
