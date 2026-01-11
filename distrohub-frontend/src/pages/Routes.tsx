@@ -42,6 +42,7 @@ interface SalesOrder {
   total_amount: number;
   due_amount: number;
   payment_status: 'unpaid' | 'partial' | 'paid';
+  assigned_to?: string; // Include for auto-suggest in route creation
 }
 
 const statusConfig = {
