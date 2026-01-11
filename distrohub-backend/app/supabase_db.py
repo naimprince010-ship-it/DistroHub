@@ -2393,33 +2393,159 @@ class SupabaseDatabase:
         Validate route status transition follows correct flow:
         pending → in_progress → completed → reconciled
         
+        Allows direct transition from pending → completed for convenience.
+        
         Raises ValueError if transition is invalid.
         """
         valid_transitions = {
-            "pending": ["in_progress"],
+            "pending": ["in_progress", "completed"],  # Allow direct pending → completed
             "in_progress": ["completed"],
             "completed": ["reconciled"],
             "reconciled": []  # No transitions allowed from reconciled (immutable)
         }
         
+        # #region agent log
+        import json
+        log_data = {
+            "location": "supabase_db.py:_validate_route_status_transition:entry",
+            "message": "Validating route status transition",
+            "data": {
+                "current_status": current_status,
+                "new_status": new_status,
+                "allowed_transitions": valid_transitions.get(current_status, [])
+            },
+            "timestamp": int(datetime.now().timestamp() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "A"
+        }
+        try:
+            with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except: pass
+        # #endregion
+        
         if current_status not in valid_transitions:
+            # #region agent log
+            log_data = {
+                "location": "supabase_db.py:_validate_route_status_transition:error",
+                "message": "Invalid current status",
+                "data": {"current_status": current_status},
+                "timestamp": int(datetime.now().timestamp() * 1000),
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "A"
+            }
+            try:
+                with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                    f.write(json.dumps(log_data) + "\n")
+            except: pass
+            # #endregion
             raise ValueError(f"Invalid current route status: {current_status}")
         
         if new_status not in valid_transitions:
+            # #region agent log
+            log_data = {
+                "location": "supabase_db.py:_validate_route_status_transition:error",
+                "message": "Invalid new status",
+                "data": {"new_status": new_status},
+                "timestamp": int(datetime.now().timestamp() * 1000),
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "A"
+            }
+            try:
+                with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                    f.write(json.dumps(log_data) + "\n")
+            except: pass
+            # #endregion
             raise ValueError(f"Invalid route status: {new_status}")
         
         allowed_next_statuses = valid_transitions[current_status]
         if new_status not in allowed_next_statuses:
+            # #region agent log
+            log_data = {
+                "location": "supabase_db.py:_validate_route_status_transition:error",
+                "message": "Transition not allowed",
+                "data": {
+                    "current_status": current_status,
+                    "new_status": new_status,
+                    "allowed_next_statuses": allowed_next_statuses
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000),
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "A"
+            }
+            try:
+                with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                    f.write(json.dumps(log_data) + "\n")
+            except: pass
+            # #endregion
             raise ValueError(
                 f"Cannot transition route from '{current_status}' to '{new_status}'. "
                 f"Valid next statuses: {', '.join(allowed_next_statuses) if allowed_next_statuses else 'none (route is reconciled)'}"
             )
+        
+        # #region agent log
+        log_data = {
+            "location": "supabase_db.py:_validate_route_status_transition:success",
+            "message": "Transition validated successfully",
+            "data": {
+                "current_status": current_status,
+                "new_status": new_status
+            },
+            "timestamp": int(datetime.now().timestamp() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "A"
+        }
+        try:
+            with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except: pass
+        # #endregion
     
     def update_route(self, route_id: str, data: dict) -> Optional[dict]:
         """Update route (status, notes, etc.)"""
+        # #region agent log
+        import json
+        log_data = {
+            "location": "supabase_db.py:update_route:entry",
+            "message": "Updating route",
+            "data": {
+                "route_id": route_id,
+                "update_data": data
+            },
+            "timestamp": int(datetime.now().timestamp() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "B"
+        }
+        try:
+            with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except: pass
+        # #endregion
+        
         # Check if route is reconciled (immutable)
         route = self.get_route(route_id)
         if not route:
+            # #region agent log
+            log_data = {
+                "location": "supabase_db.py:update_route:route_not_found",
+                "message": "Route not found",
+                "data": {"route_id": route_id},
+                "timestamp": int(datetime.now().timestamp() * 1000),
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "B"
+            }
+            try:
+                with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                    f.write(json.dumps(log_data) + "\n")
+            except: pass
+            # #endregion
             return None
         
         self._check_route_not_reconciled(route)
@@ -2429,6 +2555,25 @@ class SupabaseDatabase:
         if "status" in data:
             current_status = route.get("status", "pending")
             new_status = data["status"]
+            
+            # #region agent log
+            log_data = {
+                "location": "supabase_db.py:update_route:status_change",
+                "message": "Status change requested",
+                "data": {
+                    "current_status": current_status,
+                    "new_status": new_status
+                },
+                "timestamp": int(datetime.now().timestamp() * 1000),
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "B"
+            }
+            try:
+                with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                    f.write(json.dumps(log_data) + "\n")
+            except: pass
+            # #endregion
             
             # Validate status transition
             if current_status != new_status:
@@ -2446,9 +2591,60 @@ class SupabaseDatabase:
             update_data["notes"] = data["notes"]
         
         if not update_data:
+            # #region agent log
+            log_data = {
+                "location": "supabase_db.py:update_route:no_updates",
+                "message": "No updates to apply",
+                "data": {},
+                "timestamp": int(datetime.now().timestamp() * 1000),
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "B"
+            }
+            try:
+                with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                    f.write(json.dumps(log_data) + "\n")
+            except: pass
+            # #endregion
             return None
         
+        # #region agent log
+        log_data = {
+            "location": "supabase_db.py:update_route:before_db_update",
+            "message": "Updating route in database",
+            "data": {"update_data": update_data},
+            "timestamp": int(datetime.now().timestamp() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "B"
+        }
+        try:
+            with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except: pass
+        # #endregion
+        
         result = self.client.table("routes").update(update_data).eq("id", route_id).execute()
+        
+        # #region agent log
+        log_data = {
+            "location": "supabase_db.py:update_route:after_db_update",
+            "message": "Route updated in database",
+            "data": {
+                "success": result.data is not None and len(result.data) > 0,
+                "updated_route": result.data[0] if result.data else None
+            },
+            "timestamp": int(datetime.now().timestamp() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "B"
+        }
+        try:
+            with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except: pass
+        # #endregion
+        
         return result.data[0] if result.data else None
     
     def add_sales_to_route(self, route_id: str, sale_ids: List[str]) -> dict:

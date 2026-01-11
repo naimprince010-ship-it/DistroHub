@@ -710,10 +710,65 @@ function RouteDetailsModal({
           <button
             onClick={async () => {
               try {
-                await api.put(`/api/routes/${routeDetails.id}`, { status: 'completed' });
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    location: 'Routes.tsx:MarkAsCompleted:click',
+                    message: 'Mark as Completed button clicked',
+                    data: { routeId: routeDetails.id, currentStatus: routeDetails.status },
+                    timestamp: Date.now(),
+                    sessionId: 'debug-session',
+                    runId: 'run1',
+                    hypothesisId: 'C'
+                  })
+                }).catch(() => {});
+                // #endregion
+                
+                const response = await api.put(`/api/routes/${routeDetails.id}`, { status: 'completed' });
+                
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    location: 'Routes.tsx:MarkAsCompleted:success',
+                    message: 'Route status updated successfully',
+                    data: { routeId: routeDetails.id, response: response.data },
+                    timestamp: Date.now(),
+                    sessionId: 'debug-session',
+                    runId: 'run1',
+                    hypothesisId: 'C'
+                  })
+                }).catch(() => {});
+                // #endregion
+                
                 onRefresh();
-              } catch (error) {
+                setSelectedRoute(null); // Close modal after update
+              } catch (error: any) {
+                // #region agent log
+                fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    location: 'Routes.tsx:MarkAsCompleted:error',
+                    message: 'Error updating route status',
+                    data: {
+                      routeId: routeDetails.id,
+                      error: error?.message,
+                      response: error?.response?.data
+                    },
+                    timestamp: Date.now(),
+                    sessionId: 'debug-session',
+                    runId: 'run1',
+                    hypothesisId: 'C'
+                  })
+                }).catch(() => {});
+                // #endregion
+                
                 console.error('[RouteDetailsModal] Error updating route status:', error);
+                alert(`Failed to update route status: ${error?.response?.data?.detail || error?.message || 'Unknown error'}`);
               }
             }}
             className="btn-secondary"
