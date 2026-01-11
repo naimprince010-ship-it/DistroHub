@@ -973,7 +973,7 @@ function EditSaleModal({
   );
 }
 
-function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (order: SalesOrder) => void }) {
+function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (order: SalesOrder) => void | Promise<void> }) {
   const [formData, setFormData] = useState({
     retailer_name: '',
     delivery_date: '',
@@ -986,6 +986,7 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
   const [loadingRetailers, setLoadingRetailers] = useState(true);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [loadingSalesReps, setLoadingSalesReps] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Fetch retailers and products on mount
   useEffect(() => {
@@ -1058,22 +1059,41 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
     fetchData();
   }, []);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const total = formData.items.reduce((sum, item) => sum + item.qty * item.price, 0);
-    onSave({
-      id: '',
-      order_number: `ORD-${Date.now()}`,
-      retailer_name: formData.retailer_name,
-      order_date: new Date().toISOString().split('T')[0],
-      delivery_date: formData.delivery_date,
-      status: 'pending',
-      payment_status: 'unpaid',
-      total_amount: total,
-      paid_amount: 0,
-      items: formData.items,
-      assigned_to: formData.assigned_to || undefined,
-    });
+    
+    // Prevent double submission
+    if (isSubmitting) {
+      console.warn('[AddOrderModal] Form submission already in progress, ignoring duplicate click');
+      return;
+    }
+    
+    setIsSubmitting(true);
+    
+    try {
+      const total = formData.items.reduce((sum, item) => sum + item.qty * item.price, 0);
+      const orderData = {
+        id: '',
+        order_number: `ORD-${Date.now()}`,
+        retailer_name: formData.retailer_name,
+        order_date: new Date().toISOString().split('T')[0],
+        delivery_date: formData.delivery_date,
+        status: 'pending' as const,
+        payment_status: 'unpaid' as const,
+        total_amount: total,
+        paid_amount: 0,
+        items: formData.items,
+        assigned_to: formData.assigned_to || undefined,
+      };
+      
+      // Wait for onSave to complete (it's async)
+      await onSave(orderData);
+    } catch (error) {
+      console.error('[AddOrderModal] Error in handleSubmit:', error);
+      // Don't close modal on error, let user retry
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const addItem = () => {
@@ -1258,11 +1278,20 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="btn-secondary">
+            <button 
+              type="button" 
+              onClick={onClose} 
+              className="btn-secondary"
+              disabled={isSubmitting}
+            >
               Cancel
             </button>
-            <button type="submit" className="btn-primary">
-              Create Order
+            <button 
+              type="submit" 
+              className="btn-primary"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Creating...' : 'Create Order'}
             </button>
           </div>
         </form>
