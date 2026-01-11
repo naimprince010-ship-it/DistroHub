@@ -332,6 +332,7 @@ function CreateRouteModal({ onClose, onSave }: { onClose: () => void; onSave: ()
               total_amount: s.total_amount,
               due_amount: s.due_amount,
               payment_status: s.payment_status,
+              assigned_to: s.assigned_to || undefined, // Include assigned_to for auto-suggest
             }));
           setAvailableSales(available);
         }
@@ -345,7 +346,7 @@ function CreateRouteModal({ onClose, onSave }: { onClose: () => void; onSave: ()
     fetchData();
   }, []);
 
-  // Fetch previous due when retailer is selected
+  // Fetch previous due when retailer is selected AND auto-suggest SR from selected sales
   useEffect(() => {
     const fetchPreviousDue = async () => {
       const retailerIds = new Set(
@@ -366,6 +367,25 @@ function CreateRouteModal({ onClose, onSave }: { onClose: () => void; onSave: ()
       }
       setPreviousDueMap(dueMap);
     };
+
+    // Auto-suggest SR from selected sales (if all selected sales have the same assigned_to)
+    if (formData.sale_ids.length > 0 && !formData.assigned_to) {
+      const selectedSales = formData.sale_ids
+        .map(saleId => availableSales.find(s => s.id === saleId))
+        .filter(Boolean) as typeof availableSales;
+      
+      if (selectedSales.length > 0) {
+        const assignedToSet = new Set(
+          selectedSales.map(s => s.assigned_to).filter(Boolean) as string[]
+        );
+        
+        // If all selected sales have the same assigned_to, auto-fill it
+        if (assignedToSet.size === 1) {
+          const suggestedSrId = Array.from(assignedToSet)[0];
+          setFormData(prev => ({ ...prev, assigned_to: suggestedSrId }));
+        }
+      }
+    }
 
     if (formData.sale_ids.length > 0) {
       fetchPreviousDue();
