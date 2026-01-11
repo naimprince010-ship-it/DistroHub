@@ -370,7 +370,8 @@ function CreateRouteModal({ onClose, onSave }: { onClose: () => void; onSave: ()
     };
 
     // Auto-suggest SR from selected sales (if all selected sales have the same assigned_to)
-    if (formData.sale_ids.length > 0 && !formData.assigned_to) {
+    // Also check for multiple assigned_to values to show warning
+    if (formData.sale_ids.length > 0) {
       const selectedSales = formData.sale_ids
         .map(saleId => availableSales.find(s => s.id === saleId))
         .filter(Boolean) as typeof availableSales;
@@ -381,9 +382,14 @@ function CreateRouteModal({ onClose, onSave }: { onClose: () => void; onSave: ()
         );
         
         // If all selected sales have the same assigned_to, auto-fill it
-        if (assignedToSet.size === 1) {
+        if (assignedToSet.size === 1 && !formData.assigned_to) {
           const suggestedSrId = Array.from(assignedToSet)[0];
           setFormData(prev => ({ ...prev, assigned_to: suggestedSrId }));
+        }
+        
+        // Show warning if multiple assigned_to values exist (Route SR will override)
+        if (assignedToSet.size > 1) {
+          // Warning will be shown in UI below
         }
       }
     }
@@ -392,6 +398,15 @@ function CreateRouteModal({ onClose, onSave }: { onClose: () => void; onSave: ()
       fetchPreviousDue();
     }
   }, [formData.sale_ids, availableSales]);
+
+  // Check if selected sales have multiple assigned_to values
+  const selectedSales = formData.sale_ids
+    .map(saleId => availableSales.find(s => s.id === saleId))
+    .filter(Boolean) as typeof availableSales;
+  const assignedToSet = new Set(
+    selectedSales.map(s => s.assigned_to).filter(Boolean) as string[]
+  );
+  const hasMultipleAssignedTo = assignedToSet.size > 1;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -448,23 +463,28 @@ function CreateRouteModal({ onClose, onSave }: { onClose: () => void; onSave: ()
         <form onSubmit={handleSubmit} className="p-3 space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                SR/Delivery Man <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={formData.assigned_to}
-                onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
-                className="input-field"
-                required
-                disabled={loadingReps}
-              >
-                <option value="">{loadingReps ? 'Loading SRs...' : 'Select SR'}</option>
-                {salesReps.map((rep) => (
-                  <option key={rep.id} value={rep.id}>
-                    {rep.name}
-                  </option>
-                ))}
-              </select>
+                <label className="block text-sm font-medium text-slate-700 mb-1">
+                  SR/Delivery Man <span className="text-red-500">*</span>
+                </label>
+                {hasMultipleAssignedTo && (
+                  <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+                    ⚠️ <strong>Warning:</strong> Selected sales have different SR assignments. Route SR will override Sales SR for all included orders.
+                  </div>
+                )}
+                <select
+                  value={formData.assigned_to}
+                  onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
+                  className="input-field"
+                  required
+                  disabled={loadingReps}
+                >
+                  <option value="">{loadingReps ? 'Loading SRs...' : 'Select SR'}</option>
+                  {salesReps.map((rep) => (
+                    <option key={rep.id} value={rep.id}>
+                      {rep.name}
+                    </option>
+                  ))}
+                </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">

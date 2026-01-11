@@ -1001,6 +1001,8 @@ class SupabaseDatabase:
             sr_name = user["name"]
             
             # Get all sales assigned to this SR
+            # Note: After Route SR override implementation, sales.assigned_to should already match route SR
+            # But we also check routes to ensure completeness
             sales_query = self.client.table("sales").select("*").eq("assigned_to", sr_id)
             if from_date:
                 sales_query = sales_query.gte("created_at", from_date)
@@ -1010,6 +1012,32 @@ class SupabaseDatabase:
             
             sales_result = sales_query.execute()
             assigned_sales = sales_result.data or []
+            
+            # Also include sales from routes assigned to this SR (Route SR is source of truth)
+            # This ensures we catch all sales that belong to this SR's routes
+            routes_result = self.client.table("routes").select("id").eq("assigned_to", sr_id).execute()
+            route_ids = [r["id"] for r in (routes_result.data or [])]
+            
+            if route_ids:
+                # Get all sales in these routes
+                for route_id in route_ids:
+                    route_sales_result = self.client.table("route_sales").select("sale_id").eq("route_id", route_id).execute()
+                    route_sale_ids = [rs["sale_id"] for rs in (route_sales_result.data or [])]
+                    
+                    # Fetch these sales and add to assigned_sales if not already included
+                    for sale_id in route_sale_ids:
+                        if not any(s.get("id") == sale_id for s in assigned_sales):
+                            sale = self.get_sale(sale_id)
+                            if sale:
+                                # Apply date filters
+                                sale_date = sale.get("created_at", "")
+                                if from_date and sale_date < from_date:
+                                    continue
+                                if to_date:
+                                    end_datetime = datetime.fromisoformat(to_date.replace('Z', '+00:00')) + timedelta(days=1)
+                                    if sale_date >= end_datetime.isoformat():
+                                        continue
+                                assigned_sales.append(sale)
             
             # Calculate totals
             total_orders_assigned = len(assigned_sales)
@@ -2179,8 +2207,12 @@ class SupabaseDatabase:
             }
             self.client.table("route_sales").insert(route_sale_data).execute()
             
-            # Update sale.route_id
-            self.client.table("sales").update({"route_id": route_id}).eq("id", rs_data["sale_id"]).execute()
+            # Update sale.route_id AND override sales.assigned_to to match route (Route SR overrides Sales SR)
+            self.client.table("sales").update({
+                "route_id": route_id,
+                "assigned_to": data["assigned_to"],  # Route's SR
+                "assigned_to_name": assigned_user.get("name")  # Route's SR name
+            }).eq("id", rs_data["sale_id"]).execute()
         
         # Fetch complete route with sales
         return self.get_route(route_id)
@@ -2302,6 +2334,17 @@ class SupabaseDatabase:
         if not route:
             raise ValueError("Route not found")
         
+        # Check if route is immutable (completed or reconciled)
+        route_status = route.get("status")
+        if route_status in ["completed", "reconciled"]:
+            raise ValueError(f"Cannot add sales to route with status '{route_status}'. Route is immutable.")
+        
+        self._check_route_not_reconciled(route)
+        
+        # Get route's SR info for override
+        route_sr_id = route.get("assigned_to")
+        route_sr_name = route.get("assigned_to_name")
+        
         # Calculate previous due for new sales
         route_sales_data = []
         retailer_previous_due = {}
@@ -2344,7 +2387,14 @@ class SupabaseDatabase:
                 "previous_due": rs_data["previous_due"]
             }
             self.client.table("route_sales").insert(route_sale_data).execute()
-            self.client.table("sales").update({"route_id": route_id}).eq("id", rs_data["sale_id"]).execute()
+            
+            # Update sale.route_id AND override sales.assigned_to to match route (Route SR overrides Sales SR)
+            update_data = {"route_id": route_id}
+            if route_sr_id:
+                update_data["assigned_to"] = route_sr_id
+                update_data["assigned_to_name"] = route_sr_name
+            
+            self.client.table("sales").update(update_data).eq("id", rs_data["sale_id"]).execute()
         
         # Update route totals
         route = self.get_route(route_id)
@@ -2360,10 +2410,15 @@ class SupabaseDatabase:
     
     def remove_sale_from_route(self, route_id: str, sale_id: str) -> dict:
         """Remove a sale from route"""
-        # Check if route is reconciled (immutable)
+        # Check if route is immutable (completed or reconciled)
         route = self.get_route(route_id)
         if not route:
             raise ValueError("Route not found")
+        
+        route_status = route.get("status")
+        if route_status in ["completed", "reconciled"]:
+            raise ValueError(f"Cannot remove sales from route with status '{route_status}'. Route is immutable.")
+        
         self._check_route_not_reconciled(route)
         
         # Remove from route_sales

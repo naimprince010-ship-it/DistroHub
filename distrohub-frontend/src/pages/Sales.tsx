@@ -43,6 +43,7 @@ interface SalesOrder {
   delivery_status?: 'pending' | 'delivered' | 'partially_delivered' | 'returned';
   assigned_to?: string;
   assigned_to_name?: string;
+  route_id?: string;  // Route ID if sale is in a route
   payments?: Payment[];
 }
 
@@ -135,6 +136,7 @@ export function Sales() {
             delivery_status: sale.delivery_status || 'pending',
             assigned_to: sale.assigned_to || undefined,
             assigned_to_name: sale.assigned_to_name || undefined,
+            route_id: sale.route_id || undefined,
           };
         });
         setOrders(mappedOrders);
@@ -516,15 +518,44 @@ function ChallanPrintWrapper({
   onClose: () => void;
 }) {
   const [srPhone, setSrPhone] = useState<string | null>(null);
+  const [srName, setSrName] = useState<string | null>(null);
+  const [srId, setSrId] = useState<string | null>(null);
   const [returnItems, setReturnItems] = useState<Array<{sale_item_id: string; quantity_returned: number; product_name: string}>>([]);
 
   useEffect(() => {
     const fetchData = async () => {
+      // Priority: If sale is in a route, use route's SR. Otherwise use sale's SR.
+      let targetSrId: string | null = null;
+      let targetSrName: string | null = null;
+      
+      if (order.route_id) {
+        // Sale is in a route - fetch route to get route's SR
+        try {
+          const routeRes = await api.get(`/api/routes/${order.route_id}`);
+          if (routeRes.data) {
+            targetSrId = routeRes.data.assigned_to || null;
+            targetSrName = routeRes.data.assigned_to_name || null;
+          }
+        } catch (error) {
+          console.error('[ChallanPrintWrapper] Error fetching route:', error);
+          // Fallback to sale's SR if route fetch fails
+          targetSrId = order.assigned_to || null;
+          targetSrName = order.assigned_to_name || null;
+        }
+      } else {
+        // Sale not in route - use sale's SR
+        targetSrId = order.assigned_to || null;
+        targetSrName = order.assigned_to_name || null;
+      }
+      
+      setSrId(targetSrId);
+      setSrName(targetSrName);
+      
       // Fetch SR phone
-      if (order.assigned_to) {
+      if (targetSrId) {
         try {
           const usersRes = await api.get('/api/users');
-          const sr = usersRes.data?.find((u: any) => u.id === order.assigned_to);
+          const sr = usersRes.data?.find((u: any) => u.id === targetSrId);
           if (sr?.phone) {
             setSrPhone(sr.phone);
           }
@@ -557,7 +588,7 @@ function ChallanPrintWrapper({
       }
     };
     fetchData();
-  }, [order.assigned_to, order.id]);
+  }, [order.assigned_to, order.route_id, order.id]);
 
   // Create a map of product name to returned quantity
   const returnsByProduct = new Map<string, number>();
@@ -595,8 +626,8 @@ function ChallanPrintWrapper({
         delivery_status: order.delivery_status,
         distributor_name: 'DistroHub',
         route_name: 'Main Route',
-        sr_name: order.assigned_to_name || 'Sales Representative',
-        sr_id: order.assigned_to,
+        sr_name: srName || order.assigned_to_name || 'Sales Representative',
+        sr_id: srId || order.assigned_to,
         sr_phone: srPhone || undefined,
       }}
       onClose={onClose}
