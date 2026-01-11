@@ -1359,8 +1359,7 @@ function CollectionModal({
         alert(`Payment of ৳${paymentAmount.toLocaleString()} recorded. Invoice is now fully paid.`);
       }
       
-      // Refresh sales list to show updated payment status
-      fetchSales();
+      // onSuccess will trigger parent component to refresh
       onSuccess();
     } catch (error: any) {
       console.error('[CollectionModal] Error recording payment:', error);
