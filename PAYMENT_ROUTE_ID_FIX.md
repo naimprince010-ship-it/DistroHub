@@ -154,13 +154,14 @@ payment_data = {
 2. **Deploy Code:**
    - Deploy updated `create_payment()` function
 
-3. **Backfill (Optional):**
-   - Existing payments can be backfilled if needed:
+3. **Run Backfill (REQUIRED for historical payments):**
    ```sql
-   UPDATE payments p
-   SET route_id = s.route_id
-   FROM sales s
-   WHERE p.sale_id = s.id AND s.route_id IS NOT NULL;
+   -- Run: 20260113000001_backfill_payment_route_id.sql
+   -- This fixes historical payments created before 2026-01-13
+   -- New payments already have route_id set correctly via create_payment()
+   ```
+   
+   **Note:** Payments created before 2026-01-13 have `route_id = NULL` and need this one-time backfill to populate `route_id` from `sales.route_id`. After backfill, SR Accountability will show correct totals.
    ```
 
 ---
