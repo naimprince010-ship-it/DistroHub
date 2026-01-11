@@ -862,17 +862,18 @@ class SupabaseDatabase:
         
         # Build sales report with return data
         # For sales in routes, use route's SR (Route SR overrides Sales SR)
-        # Get route info for sales that have route_id
+        # Get route info for sales that have route_id (PERFORMANCE: Fetch all routes in ONE query)
         route_ids = set(sale.get("route_id") for sale in sales if sale.get("route_id"))
         routes_map = {}
         if route_ids:
-            for route_id in route_ids:
-                route = self.get_route(route_id)
-                if route:
-                    routes_map[route_id] = {
-                        "assigned_to": route.get("assigned_to"),
-                        "assigned_to_name": route.get("assigned_to_name")
-                    }
+            # Fetch all routes in a single query instead of N queries (N+1 problem fix)
+            route_ids_list = list(route_ids)
+            routes_result = self.client.table("routes").select("id,assigned_to,assigned_to_name").in_("id", route_ids_list).execute()
+            for route in (routes_result.data or []):
+                routes_map[route["id"]] = {
+                    "assigned_to": route.get("assigned_to"),
+                    "assigned_to_name": route.get("assigned_to_name")
+                }
         
         sales_report = []
         total_gross = 0.0
@@ -1039,29 +1040,35 @@ class SupabaseDatabase:
             
             # Also include sales from routes assigned to this SR (Route SR is source of truth)
             # This ensures we catch all sales that belong to this SR's routes, even if sales.assigned_to wasn't updated
+            # PERFORMANCE: Batch fetch routes, route_sales, and sales instead of nested loops
             routes_result = self.client.table("routes").select("id").eq("assigned_to", sr_id).execute()
             route_ids = [r["id"] for r in (routes_result.data or [])]
             
             if route_ids:
-                # Get all sales in these routes
-                for route_id in route_ids:
-                    route_sales_result = self.client.table("route_sales").select("sale_id").eq("route_id", route_id).execute()
-                    route_sale_ids = [rs["sale_id"] for rs in (route_sales_result.data or [])]
+                # Fetch all route_sales for these routes in ONE query (instead of N queries)
+                route_sales_result = self.client.table("route_sales").select("sale_id").in_("route_id", route_ids).execute()
+                route_sale_ids = [rs["sale_id"] for rs in (route_sales_result.data or [])]
+                
+                if route_sale_ids:
+                    # Fetch all sales in ONE query (instead of M queries)
+                    # Note: Supabase doesn't support IN with large lists directly, so we fetch all and filter
+                    # For better performance with large datasets, consider pagination or chunking
+                    all_sales_result = self.client.table("sales").select("*").in_("id", route_sale_ids).execute()
+                    route_sales = all_sales_result.data or []
                     
-                    # Fetch these sales and add to assigned_sales if not already included
-                    for sale_id in route_sale_ids:
+                    # Filter by date and add to assigned_sales if not already included
+                    for sale in route_sales:
+                        sale_id = sale.get("id")
                         if not any(s.get("id") == sale_id for s in assigned_sales):
-                            sale = self.get_sale(sale_id)
-                            if sale:
-                                # Apply date filters
-                                sale_date = sale.get("created_at", "")
-                                if from_date and sale_date < from_date:
+                            # Apply date filters
+                            sale_date = sale.get("created_at", "")
+                            if from_date and sale_date < from_date:
+                                continue
+                            if to_date:
+                                end_datetime = datetime.fromisoformat(to_date.replace('Z', '+00:00')) + timedelta(days=1)
+                                if sale_date >= end_datetime.isoformat():
                                     continue
-                                if to_date:
-                                    end_datetime = datetime.fromisoformat(to_date.replace('Z', '+00:00')) + timedelta(days=1)
-                                    if sale_date >= end_datetime.isoformat():
-                                        continue
-                                assigned_sales.append(sale)
+                            assigned_sales.append(sale)
             
             # Calculate totals
             total_orders_assigned = len(assigned_sales)
