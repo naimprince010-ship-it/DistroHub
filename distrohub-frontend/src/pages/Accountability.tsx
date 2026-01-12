@@ -20,6 +20,7 @@ interface SrAccountability {
 }
 
 export function Accountability() {
+  const navigate = useNavigate();
   const [salesReps, setSalesReps] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedSr, setSelectedSr] = useState<string>('');
   const [accountability, setAccountability] = useState<SrAccountability | null>(null);
@@ -196,7 +197,9 @@ export function Accountability() {
                     <div className="bg-green-50 rounded-lg p-3 relative">
                       <div className="flex items-start justify-between mb-1">
                         <p className="text-xs text-slate-500">Total Collected</p>
-                        <Info className="w-3 h-3 text-slate-400" title="Includes payments recorded during delivery and reconciliation totals (with double-count safeguard)" />
+                        <div title="Includes payments recorded during delivery and reconciliation totals (with double-count safeguard)">
+                          <Info className="w-3 h-3 text-slate-400" />
+                        </div>
                       </div>
                       <p className="text-lg font-bold text-green-600">
                         ৳ {accountability.total_collected.toLocaleString()}
