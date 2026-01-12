@@ -3200,6 +3200,8 @@ class SupabaseDatabase:
             "active_routes_count": len(active_routes),
             "pending_reconciliation_count": len(pending_routes),
             "total_expected_cash": total_expected,
+            "total_collected": total_collected,  # FRONTEND FIX: Return calculated total_collected (payments + reconciliations with safeguard)
+            "total_returns": total_returns,  # FRONTEND FIX: Return calculated total_returns
             "routes": all_routes,  # Include all routes (active + reconciled)
             "reconciliations": reconciliations
         }

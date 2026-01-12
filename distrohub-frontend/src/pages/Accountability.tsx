@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
+import { useNavigate } from 'react-router-dom';
+import { Info, AlertCircle } from 'lucide-react';
 import api from '@/lib/api';
 import { formatDateBD } from '@/lib/utils';
 
@@ -11,6 +13,8 @@ interface SrAccountability {
   active_routes_count: number;
   pending_reconciliation_count: number;
   total_expected_cash: number;
+  total_collected: number;  // FRONTEND FIX: Total collected from backend (payments + reconciliations with safeguard)
+  total_returns: number;  // FRONTEND FIX: Total returns from backend
   routes: any[];
   reconciliations: any[];
 }
@@ -48,8 +52,53 @@ export function Accountability() {
         try {
           setLoadingAccountability(true);
           const response = await api.get(`/api/users/${selectedSr}/accountability`);
+          
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              location: 'Accountability.tsx:fetchAccountability:response',
+              message: 'SR Accountability API response received',
+              data: {
+                user_id: response.data?.user_id,
+                total_collected: response.data?.total_collected,
+                current_outstanding: response.data?.current_outstanding,
+                total_expected_cash: response.data?.total_expected_cash,
+                total_returns: response.data?.total_returns,
+                pending_reconciliation_count: response.data?.pending_reconciliation_count
+              },
+              timestamp: Date.now(),
+              sessionId: 'debug-session',
+              runId: 'run1',
+              hypothesisId: 'E'
+            })
+          }).catch(() => {});
+          // #endregion
+          
+          console.log('[Accountability] API Response:', response.data);
           setAccountability(response.data);
-        } catch (error) {
+        } catch (error: any) {
+          // #region agent log
+          fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              location: 'Accountability.tsx:fetchAccountability:error',
+              message: 'Error fetching SR Accountability',
+              data: {
+                error: error?.message,
+                status: error?.response?.status,
+                data: error?.response?.data
+              },
+              timestamp: Date.now(),
+              sessionId: 'debug-session',
+              runId: 'run1',
+              hypothesisId: 'E'
+            })
+          }).catch(() => {});
+          // #endregion
+          
           console.error('[Accountability] Error fetching accountability:', error);
           setAccountability(null);
         } finally {
@@ -141,18 +190,33 @@ export function Accountability() {
                     <div className="bg-orange-50 rounded-lg p-3">
                       <p className="text-xs text-slate-500 mb-1">Total Returns</p>
                       <p className="text-lg font-bold text-orange-600">
-                        ৳ {accountability.reconciliations.reduce((sum: number, rec: any) => 
-                          sum + (rec.total_returns_amount || 0), 0
-                        ).toLocaleString()}
+                        ৳ {accountability.total_returns.toLocaleString()}
                       </p>
                     </div>
-                    <div className="bg-green-50 rounded-lg p-3">
-                      <p className="text-xs text-slate-500 mb-1">Total Collected</p>
+                    <div className="bg-green-50 rounded-lg p-3 relative">
+                      <div className="flex items-start justify-between mb-1">
+                        <p className="text-xs text-slate-500">Total Collected</p>
+                        <Info className="w-3 h-3 text-slate-400" title="Includes payments recorded during delivery and reconciliation totals (with double-count safeguard)" />
+                      </div>
                       <p className="text-lg font-bold text-green-600">
-                        ৳ {accountability.reconciliations.reduce((sum: number, rec: any) => 
-                          sum + (rec.total_collected_cash || 0), 0
-                        ).toLocaleString()}
+                        ৳ {accountability.total_collected.toLocaleString()}
                       </p>
+                      {accountability.pending_reconciliation_count > 0 && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <AlertCircle className="w-3 h-3 text-yellow-600" />
+                          <p className="text-xs text-yellow-700">
+                            {accountability.pending_reconciliation_count} route(s) pending reconciliation
+                          </p>
+                        </div>
+                      )}
+                      {accountability.pending_reconciliation_count > 0 && (
+                        <button
+                          onClick={() => navigate('/routes')}
+                          className="mt-2 text-xs text-primary-600 hover:text-primary-700 font-medium underline"
+                        >
+                          Reconcile Now →
+                        </button>
+                      )}
                     </div>
                     <div className={`rounded-lg p-3 ${
                       accountability.current_outstanding > 0 

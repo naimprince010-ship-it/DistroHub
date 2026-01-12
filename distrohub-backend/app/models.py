@@ -649,5 +649,7 @@ class SrAccountability(BaseModel):
     active_routes_count: int
     pending_reconciliation_count: int
     total_expected_cash: float  # Sum of all outstanding in active routes
+    total_collected: float  # FRONTEND FIX: Total collected (payments + reconciliations with double-count safeguard)
+    total_returns: float  # FRONTEND FIX: Total returns from all reconciliations
     routes: List[Route] = []
     reconciliations: List[RouteReconciliation] = []
