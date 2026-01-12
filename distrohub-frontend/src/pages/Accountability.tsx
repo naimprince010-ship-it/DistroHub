@@ -53,53 +53,9 @@ export function Accountability() {
         try {
           setLoadingAccountability(true);
           const response = await api.get(`/api/users/${selectedSr}/accountability`);
-          
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              location: 'Accountability.tsx:fetchAccountability:response',
-              message: 'SR Accountability API response received',
-              data: {
-                user_id: response.data?.user_id,
-                total_collected: response.data?.total_collected,
-                current_outstanding: response.data?.current_outstanding,
-                total_expected_cash: response.data?.total_expected_cash,
-                total_returns: response.data?.total_returns,
-                pending_reconciliation_count: response.data?.pending_reconciliation_count
-              },
-              timestamp: Date.now(),
-              sessionId: 'debug-session',
-              runId: 'run1',
-              hypothesisId: 'E'
-            })
-          }).catch(() => {});
-          // #endregion
-          
           console.log('[Accountability] API Response:', response.data);
           setAccountability(response.data);
         } catch (error: any) {
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              location: 'Accountability.tsx:fetchAccountability:error',
-              message: 'Error fetching SR Accountability',
-              data: {
-                error: error?.message,
-                status: error?.response?.status,
-                data: error?.response?.data
-              },
-              timestamp: Date.now(),
-              sessionId: 'debug-session',
-              runId: 'run1',
-              hypothesisId: 'E'
-            })
-          }).catch(() => {});
-          // #endregion
-          
           console.error('[Accountability] Error fetching accountability:', error);
           setAccountability(null);
         } finally {
