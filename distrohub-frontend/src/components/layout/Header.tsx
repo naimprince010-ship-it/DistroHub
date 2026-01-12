@@ -35,12 +35,17 @@ export function Header({ title }: HeaderProps) {
 
   return (
     <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-3">
+      {/* Left: Title and Online Badge - Perfectly Aligned */}
       <div className="flex items-center gap-3">
-        <h2 className="text-2xl font-semibold text-slate-900">{title}</h2>
-        <OnlineStatusBadge />
+        <h2 className="text-2xl font-semibold text-slate-900 leading-none">{title}</h2>
+        <div className="flex items-center">
+          <OnlineStatusBadge />
+        </div>
       </div>
 
-      <div className="flex items-center gap-2">
+      {/* Right: Search, Notification, User Profile */}
+      <div className="flex items-center gap-3">
+        {/* Search Bar - Moved to right, next to notification */}
         <div className="relative flex items-center">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
           <input
@@ -48,7 +53,7 @@ export function Header({ title }: HeaderProps) {
             placeholder={title === 'Products' ? 'পণ্য বা কোড দিয়ে খুঁজুন...' : 'Search...'}
             value={localSearch}
             onChange={(e) => handleSearchChange(e.target.value)}
-            className="h-10 pl-10 pr-8 bg-slate-100 border-0 rounded-lg w-48 md:w-64 lg:w-80 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white transition-all duration-200"
+            className="h-10 py-2.5 pl-10 pr-8 bg-slate-100 border border-slate-200 rounded-lg w-48 md:w-64 lg:w-80 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:bg-white focus:border-primary-500 transition-all duration-200"
           />
           {localSearch && (
             <button
@@ -61,11 +66,13 @@ export function Header({ title }: HeaderProps) {
           )}
         </div>
 
+        {/* Notification Bell */}
         <button className="relative h-10 w-10 flex items-center justify-center text-slate-600 hover:bg-slate-100 rounded-lg transition-all duration-200">
           <Bell className="w-5 h-5" />
           <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
         </button>
 
+        {/* User Profile */}
         <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
           <div className="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center">
             <User className="w-4 h-4 text-white" />

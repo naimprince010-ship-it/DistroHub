@@ -11,7 +11,7 @@ import {
   ShoppingCart,
   FolderOpen,
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, LabelList } from 'recharts';
 import api from '@/lib/api';
 
 const salesData = [
@@ -106,20 +106,25 @@ export function Dashboard() {
     fetchDashboardStats();
   }, []);
 
+  // Format currency with consistent font rendering
+  const formatCurrency = (amount: number): string => {
+    return `৳ ${amount.toLocaleString()}`;
+  };
+
   // Format stats for display
   const displayStats = stats ? [
     {
       title: 'Total Sales',
-      value: `৳ ${stats.total_sales.toLocaleString()}`,
-      change: stats.sales_this_month > 0 ? `+৳${stats.sales_this_month.toLocaleString()}` : '৳0',
+      value: formatCurrency(stats.total_sales),
+      change: stats.sales_this_month > 0 ? `+${formatCurrency(stats.sales_this_month)}` : formatCurrency(0),
       trend: 'up' as const,
       icon: TrendingUp,
       color: 'bg-green-500',
     },
     {
       title: 'Receivable',
-      value: `৳ ${stats.receivable_from_customers.toLocaleString()}`,
-      change: stats.collections_this_month > 0 ? `+৳${stats.collections_this_month.toLocaleString()}` : '৳0',
+      value: formatCurrency(stats.receivable_from_customers),
+      change: stats.collections_this_month > 0 ? `+${formatCurrency(stats.collections_this_month)}` : formatCurrency(0),
       trend: stats.receivable_from_customers > 0 ? 'down' as const : 'up' as const,
       icon: TrendingDown,
       color: 'bg-red-500',
@@ -158,7 +163,7 @@ export function Dashboard() {
     },
     {
       title: 'Payable to Suppliers',
-      value: `৳ ${stats.payable_to_supplier.toLocaleString()}`,
+      value: formatCurrency(stats.payable_to_supplier),
       change: 'Outstanding',
       trend: stats.payable_to_supplier > 0 ? 'down' as const : 'up' as const,
       icon: ShoppingCart,
@@ -189,31 +194,31 @@ export function Dashboard() {
             {error}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 mb-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
             {displayStats.map((stat) => (
               <div
                 key={stat.title}
-                className="bg-white rounded-xl p-3 shadow-sm card-hover"
+                className="bg-white rounded-xl p-4 shadow-sm card-hover"
               >
-                <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center justify-between mb-3">
                   <div className={`w-12 h-12 ${stat.color} rounded-xl flex items-center justify-center`}>
                     <stat.icon className="w-6 h-6 text-white" />
                   </div>
                   <span
-                    className={`flex items-center text-sm font-medium ${
+                    className={`flex items-center gap-1 text-sm font-medium ${
                       stat.trend === 'up' ? 'text-green-600' : 'text-red-600'
                     }`}
                   >
-                    {stat.change}
+                    <span>{stat.change}</span>
                     {stat.trend === 'up' ? (
-                      <ArrowUpRight className="w-4 h-4 ml-1" />
+                      <ArrowUpRight className="w-4 h-4 flex-shrink-0" />
                     ) : (
-                      <ArrowDownRight className="w-4 h-4 ml-1" />
+                      <ArrowDownRight className="w-4 h-4 flex-shrink-0" />
                     )}
                   </span>
                 </div>
-                <h3 className="text-2xl font-bold text-slate-900">{stat.value}</h3>
-                <p className="text-slate-500 text-sm">{stat.title}</p>
+                <h3 className="text-2xl font-bold text-slate-900 mb-1">{stat.value}</h3>
+                <p className="text-slate-600 text-sm font-medium">{stat.title}</p>
               </div>
             ))}
           </div>
@@ -225,24 +230,35 @@ export function Dashboard() {
           <div className="bg-white rounded-xl p-3 shadow-sm">
             <h3 className="text-lg font-semibold text-slate-900 mb-2">Sales & Collections</h3>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={salesData}>
+              <LineChart data={salesData} margin={{ left: 20, right: 10, top: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                 <XAxis dataKey="name" stroke="#64748B" />
                 <YAxis stroke="#64748B" />
                 <Tooltip />
+                <Legend 
+                  wrapperStyle={{ paddingTop: '10px' }}
+                  iconType="line"
+                  formatter={(value) => {
+                    if (value === 'sales') return 'Sales';
+                    if (value === 'collections') return 'Collections';
+                    return value;
+                  }}
+                />
                 <Line
                   type="monotone"
                   dataKey="sales"
-                  stroke="#4F46E5"
+                  name="sales"
+                  stroke="#10B981"
                   strokeWidth={2}
-                  dot={{ fill: '#4F46E5' }}
+                  dot={{ fill: '#10B981', r: 4 }}
                 />
                 <Line
                   type="monotone"
                   dataKey="collections"
-                  stroke="#10B981"
+                  name="collections"
+                  stroke="#8B5CF6"
                   strokeWidth={2}
-                  dot={{ fill: '#10B981' }}
+                  dot={{ fill: '#8B5CF6', r: 4 }}
                 />
               </LineChart>
             </ResponsiveContainer>
@@ -252,12 +268,27 @@ export function Dashboard() {
           <div className="bg-white rounded-xl p-3 shadow-sm">
             <h3 className="text-lg font-semibold text-slate-900 mb-2">Top Selling Products</h3>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={topProducts} layout="vertical">
+              <BarChart data={topProducts} layout="vertical" margin={{ left: 10, right: 30, top: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                 <XAxis type="number" stroke="#64748B" />
                 <YAxis dataKey="name" type="category" stroke="#64748B" width={100} />
-                <Tooltip />
-                <Bar dataKey="sales" fill="#4F46E5" radius={[0, 4, 4, 0]} />
+                <Tooltip 
+                  formatter={(value: number) => [`${value.toLocaleString()}`, 'Sales']}
+                  contentStyle={{ 
+                    backgroundColor: 'white', 
+                    border: '1px solid #E2E8F0',
+                    borderRadius: '8px',
+                    padding: '8px'
+                  }}
+                />
+                <Bar dataKey="sales" fill="#4F46E5" radius={[0, 4, 4, 0]}>
+                  <LabelList 
+                    dataKey="sales" 
+                    position="right" 
+                    formatter={(value: number) => value.toLocaleString()}
+                    style={{ fill: '#64748B', fontSize: '12px', fontWeight: '600' }}
+                  />
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -281,7 +312,7 @@ export function Dashboard() {
                     <p className="text-sm text-slate-500">{order.retailer}</p>
                   </div>
                   <div className="text-right">
-                    <p className="font-semibold text-slate-900">৳ {order.amount.toLocaleString()}</p>
+                    <p className="font-semibold text-slate-900">{formatCurrency(order.amount)}</p>
                     <span
                       className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${
                         order.status === 'delivered'
