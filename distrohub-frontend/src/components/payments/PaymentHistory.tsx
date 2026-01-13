@@ -16,10 +16,9 @@ interface Payment {
 
 interface PaymentHistoryProps {
   saleId: string;
-  onClose?: () => void;
 }
 
-export function PaymentHistory({ saleId, onClose }: PaymentHistoryProps) {
+export function PaymentHistory({ saleId }: PaymentHistoryProps) {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

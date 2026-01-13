@@ -11,7 +11,6 @@ import {
   Eye,
 } from 'lucide-react';
 import api from '@/lib/api';
-import { CollectionReport, CollectionReportSummary } from '@/types';
 
 interface Sale {
   id: string;

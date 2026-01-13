@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
-import { Info, AlertCircle, Wallet } from 'lucide-react';
+import { Info, AlertCircle, Wallet, History as HistoryIcon } from 'lucide-react';
 import api from '@/lib/api';
 import { formatDateBD } from '@/lib/utils';
 
@@ -318,7 +318,7 @@ export function Accountability() {
                         }}
                         className="mt-2 flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-800 font-medium"
                       >
-                        <History className="w-3 h-3" />
+                        <HistoryIcon className="w-3 h-3" />
                         View Payment History
                       </button>
                       {accountability.pending_reconciliation_count > 0 && (
