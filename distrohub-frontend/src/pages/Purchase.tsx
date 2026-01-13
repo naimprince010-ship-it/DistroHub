@@ -904,13 +904,40 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                       </td>
                       <td className="p-2">
                         <div className="relative">
-                          <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                          <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
                           <input
-                            type="date"
-                            value={item.expiry}
-                            onChange={(e) => updateItem(item.id, 'expiry', e.target.value)}
+                            type="text"
+                            value={item.expiry || ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              // Allow manual typing in YYYY-MM-DD format
+                              if (val === '' || /^\d{4}-\d{2}-\d{2}$/.test(val) || /^\d{0,4}-?\d{0,2}-?\d{0,2}$/.test(val)) {
+                                // Auto-format as user types
+                                let formatted = val.replace(/\D/g, '');
+                                if (formatted.length >= 5) {
+                                  formatted = formatted.slice(0, 4) + '-' + formatted.slice(4);
+                                }
+                                if (formatted.length >= 8) {
+                                  formatted = formatted.slice(0, 7) + '-' + formatted.slice(7, 9);
+                                }
+                                if (formatted.length <= 10) {
+                                  updateItem(item.id, 'expiry', formatted);
+                                }
+                              }
+                            }}
+                            onBlur={(e) => {
+                              // Validate date format on blur
+                              const val = e.target.value;
+                              if (val && !/^\d{4}-\d{2}-\d{2}$/.test(val)) {
+                                // Try to parse and format
+                                const date = new Date(val);
+                                if (!isNaN(date.getTime())) {
+                                  updateItem(item.id, 'expiry', date.toISOString().split('T')[0]);
+                                }
+                              }
+                            }}
+                            placeholder="YYYY-MM-DD"
                             className={`input-field w-full text-sm pl-9 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${errors[`expiry_${index}`] ? 'border-red-500' : ''}`}
-                            min={new Date().toISOString().split('T')[0]}
                           />
                         </div>
                         {errors[`expiry_${index}`] && (
@@ -919,35 +946,24 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                       </td>
                       <td className="p-2">
                         <input
-                          type="number"
+                          type="text"
+                          inputMode="numeric"
                           value={item.qty || ''}
                           onChange={(e) => {
                             const val = e.target.value;
-                            // Allow empty string for manual typing, or valid numbers
-                            if (val === '' || (!isNaN(Number(val)) && Number(val) >= 0)) {
-                              updateItem(item.id, 'qty', val === '' ? 0 : Number(val));
+                            // Allow empty string or valid numbers only
+                            if (val === '' || /^\d+$/.test(val)) {
+                              updateItem(item.id, 'qty', val === '' ? 0 : parseInt(val, 10) || 0);
                             }
                           }}
-                          onKeyDown={(e) => {
-                            // Allow: backspace, delete, tab, escape, enter, decimal point, and numbers
-                            if ([46, 8, 9, 27, 13, 110, 190].indexOf(e.keyCode) !== -1 ||
-                              // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
-                              (e.keyCode === 65 && e.ctrlKey === true) ||
-                              (e.keyCode === 67 && e.ctrlKey === true) ||
-                              (e.keyCode === 86 && e.ctrlKey === true) ||
-                              (e.keyCode === 88 && e.ctrlKey === true) ||
-                              // Allow: home, end, left, right
-                              (e.keyCode >= 35 && e.keyCode <= 39)) {
-                              return;
-                            }
-                            // Ensure that it is a number and stop the keypress
-                            if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
-                              e.preventDefault();
+                          onBlur={(e) => {
+                            // Ensure minimum value of 1 when field loses focus
+                            const val = parseInt(e.target.value, 10) || 0;
+                            if (val < 1) {
+                              updateItem(item.id, 'qty', 1);
                             }
                           }}
                           className={`input-field w-full text-sm text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${errors[`qty_${index}`] ? 'border-red-500' : ''}`}
-                          min="1"
-                          step="1"
                           placeholder="0"
                         />
                       </td>
@@ -955,35 +971,24 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                         <div className="relative">
                           <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-sm">৳</span>
                           <input
-                            type="number"
+                            type="text"
+                            inputMode="decimal"
                             value={item.unit_price || ''}
                             onChange={(e) => {
                               const val = e.target.value;
-                              // Allow empty string for manual typing, or valid numbers
-                              if (val === '' || (!isNaN(Number(val)) && Number(val) >= 0)) {
-                                updateItem(item.id, 'unit_price', val === '' ? 0 : Number(val));
+                              // Allow empty string or valid decimal numbers
+                              if (val === '' || /^\d*\.?\d*$/.test(val)) {
+                                updateItem(item.id, 'unit_price', val === '' ? 0 : parseFloat(val) || 0);
                               }
                             }}
-                            onKeyDown={(e) => {
-                              // Allow: backspace, delete, tab, escape, enter, decimal point, and numbers
-                              if ([46, 8, 9, 27, 13, 110, 190].indexOf(e.keyCode) !== -1 ||
-                                // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
-                                (e.keyCode === 65 && e.ctrlKey === true) ||
-                                (e.keyCode === 67 && e.ctrlKey === true) ||
-                                (e.keyCode === 86 && e.ctrlKey === true) ||
-                                (e.keyCode === 88 && e.ctrlKey === true) ||
-                                // Allow: home, end, left, right
-                                (e.keyCode >= 35 && e.keyCode <= 39)) {
-                                return;
-                              }
-                              // Ensure that it is a number and stop the keypress
-                              if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
-                                e.preventDefault();
+                            onBlur={(e) => {
+                              // Ensure minimum value of 0 when field loses focus
+                              const val = parseFloat(e.target.value) || 0;
+                              if (val < 0) {
+                                updateItem(item.id, 'unit_price', 0);
                               }
                             }}
                             className={`input-field w-full text-sm text-right pl-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${errors[`price_${index}`] ? 'border-red-500' : ''}`}
-                            min="0"
-                            step="0.01"
                             placeholder="0.00"
                           />
                         </div>
