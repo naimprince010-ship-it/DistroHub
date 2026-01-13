@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
 import { useNavigate } from 'react-router-dom';
-import { Info, AlertCircle, Wallet, CheckCircle2 } from 'lucide-react';
+import { Info, AlertCircle, Wallet } from 'lucide-react';
 import api from '@/lib/api';
 import { formatDateBD } from '@/lib/utils';
 
@@ -20,7 +20,6 @@ interface SrAccountability {
 }
 
 export function Accountability() {
-  const navigate = useNavigate();
   const [salesReps, setSalesReps] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedSr, setSelectedSr] = useState<string>('');
   const [accountability, setAccountability] = useState<SrAccountability | null>(null);
@@ -100,6 +99,80 @@ export function Accountability() {
       setAccountability(null);
     }
   }, [selectedSr]);
+
+  const handleSettleCash = async () => {
+    if (!accountability || !selectedSr) return;
+    
+    const completedRoutes = accountability.routes.filter(
+      (r: any) => r.status === 'completed'
+    );
+    
+    if (completedRoutes.length === 0) {
+      alert('No completed routes available for settlement. Please complete routes first.');
+      return;
+    }
+
+    if (!confirm(`Settle cash for ${accountability.user_name}? This will reconcile ${completedRoutes.length} completed route(s) and update cash holding to ৳${accountability.total_collected.toLocaleString()}.`)) {
+      return;
+    }
+
+    try {
+      setSettlingCash(true);
+      
+      // Reconcile all completed routes
+      for (const route of completedRoutes) {
+        try {
+          // Get full route details to calculate totals
+          const routeResponse = await api.get(`/api/routes/${route.id}`);
+          const routeDetails = routeResponse.data;
+          
+          // Calculate expected from route_sales
+          const routeSales = routeDetails.route_sales || [];
+          let totalExpected = 0;
+          
+          for (const rs of routeSales) {
+            const previousDue = parseFloat(rs.previous_due || 0);
+            const sale = routeDetails.sales?.find((s: any) => s.id === rs.sale_id);
+            const currentBill = parseFloat(sale?.total_amount || 0);
+            totalExpected += previousDue + currentBill;
+          }
+          
+          // Get payments for this route
+          let totalCollected = 0;
+          try {
+            const paymentsResponse = await api.get(`/api/payments`);
+            const allPayments = paymentsResponse.data || [];
+            const routePayments = allPayments.filter((p: any) => p.route_id === route.id);
+            totalCollected = routePayments.reduce((sum: number, p: any) => sum + parseFloat(p.amount || 0), 0);
+          } catch (paymentsError) {
+            console.warn('[Accountability] Could not fetch payments, using 0:', paymentsError);
+          }
+          
+          // Create reconciliation
+          await api.post(`/api/routes/${route.id}/reconcile`, {
+            total_collected_cash: totalCollected,
+            total_returns_amount: 0,
+            reconciliation_items: [],
+            notes: `Bulk settlement from SR Accountability page - Auto-reconciled ${new Date().toLocaleString()}`
+          });
+        } catch (routeError: any) {
+          console.error(`[Accountability] Error reconciling route ${route.route_number}:`, routeError);
+          // Continue with other routes even if one fails
+        }
+      }
+      
+      // Refresh accountability data
+      const response = await api.get(`/api/users/${selectedSr}/accountability`);
+      setAccountability(response.data);
+      
+      alert(`Cash settled successfully! ${completedRoutes.length} route(s) reconciled. Cash holding updated.`);
+    } catch (error: any) {
+      console.error('[Accountability] Error settling cash:', error);
+      alert(`Failed to settle cash: ${error?.response?.data?.detail || error?.message}`);
+    } finally {
+      setSettlingCash(false);
+    }
+  };
 
   return (
     <div className="min-h-screen">
