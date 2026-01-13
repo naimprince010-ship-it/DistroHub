@@ -853,58 +853,58 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
             </div>
           )}
           
-          <div className="border border-slate-200 rounded-xl overflow-hidden">
-            <table className="w-full">
+          <div className="border border-slate-200 rounded-xl overflow-hidden overflow-x-auto">
+            <table className="w-full min-w-[800px]">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="text-left p-2 text-sm font-semibold text-slate-700 w-8">SL</th>
-                  <th className="text-left p-2 text-sm font-semibold text-slate-700">Product</th>
-                  <th className="text-left p-2 text-sm font-semibold text-slate-700 w-28">Batch #<RequiredMark /></th>
-                  <th className="text-left p-2 text-sm font-semibold text-slate-700 w-32">
-                    <Calendar className="w-3 h-3 inline mr-1" />
-                    Expiry<RequiredMark />
+                  <th className="text-center px-1 py-1.5 text-xs font-semibold text-slate-700 w-6">SL</th>
+                  <th className="text-left px-1.5 py-1.5 text-xs font-semibold text-slate-700 min-w-[180px]">Product</th>
+                  <th className="text-left px-1.5 py-1.5 text-xs font-semibold text-slate-700 w-24">Batch<RequiredMark /></th>
+                  <th className="text-left px-1.5 py-1.5 text-xs font-semibold text-slate-700 w-28">
+                    <span className="text-xs">Expiry<RequiredMark /></span>
                   </th>
-                  <th className="text-right p-2 text-sm font-semibold text-slate-700 w-20">Qty<RequiredMark /></th>
-                  <th className="text-right p-2 text-sm font-semibold text-slate-700 w-24">Unit Price</th>
-                  <th className="text-right p-2 text-sm font-semibold text-slate-700 w-28">Sub-total</th>
-                  <th className="text-center p-2 text-sm font-semibold text-slate-700 w-12">Action</th>
+                  <th className="text-right px-1.5 py-1.5 text-xs font-semibold text-slate-700 w-16">Qty<RequiredMark /></th>
+                  <th className="text-right px-1.5 py-1.5 text-xs font-semibold text-slate-700 w-20">Price</th>
+                  <th className="text-right px-1.5 py-1.5 text-xs font-semibold text-slate-700 w-24">Sub-total</th>
+                  <th className="text-center px-1 py-1.5 text-xs font-semibold text-slate-700 w-8">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-4 text-center text-slate-500">
+                    <td colSpan={8} className="px-1.5 py-3 text-center text-xs text-slate-500">
                       No items added. Search and add products above.
                     </td>
                   </tr>
                 ) : (
                   items.map((item, index) => (
                     <tr key={item.id} className="hover:bg-slate-50">
-                      <td className="p-2 text-sm text-slate-600">{index + 1}</td>
-                      <td className="p-2">
+                      <td className="px-1 py-1.5 text-center text-xs text-slate-600">{index + 1}</td>
+                      <td className="px-1.5 py-1.5">
                         <div>
-                          <p className="font-medium text-slate-900">{item.product_name}</p>
-                          <p className="text-xs text-slate-500">{item.sku}</p>
+                          <p className="font-medium text-xs text-slate-900 leading-tight">{item.product_name}</p>
+                          <p className="text-xs text-slate-500 leading-tight">{item.sku}</p>
                           {item.last_purchase_price > 0 && (
-                            <p className="text-xs text-green-600">Last price: ৳{item.last_purchase_price}</p>
+                            <p className="text-xs text-green-600 leading-tight">Last: ৳{item.last_purchase_price}</p>
                           )}
                         </div>
                       </td>
-                      <td className="p-2">
+                      <td className="px-1.5 py-1.5">
                         <input
                           type="text"
                           value={item.batch}
                           onChange={(e) => updateItem(item.id, 'batch', e.target.value)}
-                          className={`input-field w-full text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${errors[`batch_${index}`] ? 'border-red-500' : ''}`}
+                          className={`input-field w-full text-xs px-1.5 py-1 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all ${errors[`batch_${index}`] ? 'border-red-500' : ''}`}
                           placeholder="BT-XXX"
+                          maxLength={20}
                         />
                         {errors[`batch_${index}`] && (
                           <p className="text-red-500 text-xs mt-0.5">{errors[`batch_${index}`]}</p>
                         )}
                       </td>
-                      <td className="p-2">
+                      <td className="px-1.5 py-1.5">
                         <div className="relative">
-                          <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
+                          <Calendar className="absolute left-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400 pointer-events-none z-10" />
                           <input
                             type="text"
                             value={item.expiry || ''}
@@ -937,14 +937,15 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                               }
                             }}
                             placeholder="YYYY-MM-DD"
-                            className={`input-field w-full text-sm pl-9 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${errors[`expiry_${index}`] ? 'border-red-500' : ''}`}
+                            className={`input-field w-full text-xs px-1.5 py-1 pl-7 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all ${errors[`expiry_${index}`] ? 'border-red-500' : ''}`}
+                            maxLength={10}
                           />
                         </div>
                         {errors[`expiry_${index}`] && (
                           <p className="text-red-500 text-xs mt-0.5">{errors[`expiry_${index}`]}</p>
                         )}
                       </td>
-                      <td className="p-2">
+                      <td className="px-1.5 py-1.5">
                         <input
                           type="text"
                           inputMode="numeric"
@@ -963,13 +964,14 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                               updateItem(item.id, 'qty', 1);
                             }
                           }}
-                          className={`input-field w-full text-sm text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${errors[`qty_${index}`] ? 'border-red-500' : ''}`}
+                          className={`input-field w-full text-xs px-1.5 py-1 text-right focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all ${errors[`qty_${index}`] ? 'border-red-500' : ''}`}
                           placeholder="0"
+                          maxLength={6}
                         />
                       </td>
-                      <td className="p-2">
+                      <td className="px-1.5 py-1.5">
                         <div className="relative">
-                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-sm">৳</span>
+                          <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-500 text-xs">৳</span>
                           <input
                             type="text"
                             inputMode="decimal"
@@ -988,21 +990,23 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                                 updateItem(item.id, 'unit_price', 0);
                               }
                             }}
-                            className={`input-field w-full text-sm text-right pl-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${errors[`price_${index}`] ? 'border-red-500' : ''}`}
+                            className={`input-field w-full text-xs px-1.5 py-1 text-right pl-5 focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all ${errors[`price_${index}`] ? 'border-red-500' : ''}`}
                             placeholder="0.00"
+                            maxLength={10}
                           />
                         </div>
                       </td>
-                      <td className="p-2 text-right font-medium text-slate-900">
-                        ৳ {item.sub_total.toLocaleString()}
+                      <td className="px-1.5 py-1.5 text-right font-medium text-xs text-slate-900">
+                        ৳{item.sub_total.toLocaleString()}
                       </td>
-                      <td className="p-2 text-center">
+                      <td className="px-1 py-1.5 text-center">
                         <button
                           type="button"
                           onClick={() => removeItem(item.id)}
-                          className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                          className="p-0.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                          title="Delete"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </td>
                     </tr>
