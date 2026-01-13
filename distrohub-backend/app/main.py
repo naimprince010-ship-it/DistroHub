@@ -1223,14 +1223,24 @@ async def get_collection_report(
     
     Returns:
     - List of payment records with sale invoice, retailer, route, collected_by details
+    
+    Filtering Logic:
+    - If user_id is provided, includes payments where:
+      1. payments.collected_by = user_id, OR
+      2. payment's sale.assigned_to = user_id, OR
+      3. payment's route.assigned_to = user_id
+    - This ensures payments are shown even if collected_by is NULL
     """
     try:
-        payments = db.get_payments(user_id=user_id, from_date=from_date, to_date=to_date)
+        # Get all payments (without user_id filter first, we'll filter manually)
+        all_payments = db.get_payments(from_date=from_date, to_date=to_date)
         
-        # Enrich payments with sale and route information
+        # Enrich payments with sale and route information, and apply SR filter
         enriched_payments = []
-        for payment in payments:
+        for payment in all_payments:
             enriched = payment.copy()
+            sale = None
+            route = None
             
             # Get sale information
             if payment.get("sale_id"):
@@ -1239,11 +1249,46 @@ async def get_collection_report(
                     enriched["invoice_number"] = sale.get("invoice_number")
                     enriched["retailer_name"] = sale.get("retailer_name") or payment.get("retailer_name")
             
-            # Get route information (already added in get_payments)
-            if payment.get("route_id") and not enriched.get("route_number"):
+            # Get route information
+            if payment.get("route_id"):
                 route = db.get_route(payment["route_id"])
                 if route:
                     enriched["route_number"] = route.get("route_number")
+            
+            # Apply SR filter with fallback logic
+            if user_id:
+                # Check if payment matches SR filter:
+                # 1. Direct match: payments.collected_by = user_id
+                # 2. Sale match: sale.assigned_to = user_id
+                # 3. Route match: route.assigned_to = user_id
+                payment_matches = False
+                
+                if payment.get("collected_by") == user_id:
+                    payment_matches = True
+                elif sale and sale.get("assigned_to") == user_id:
+                    payment_matches = True
+                elif route and route.get("assigned_to") == user_id:
+                    payment_matches = True
+                
+                if not payment_matches:
+                    continue  # Skip this payment
+            
+            # Enrich collected_by_name with fallback logic
+            if not enriched.get("collected_by_name"):
+                # Priority: collected_by > route.assigned_to > sale.assigned_to
+                collector_id = payment.get("collected_by")
+                if not collector_id and route:
+                    collector_id = route.get("assigned_to")
+                if not collector_id and sale:
+                    collector_id = sale.get("assigned_to")
+                
+                if collector_id:
+                    collector_user = db.get_user_by_id(collector_id)
+                    if collector_user:
+                        enriched["collected_by_name"] = collector_user.get("name")
+                        # Also set collected_by if it was NULL (for consistency)
+                        if not payment.get("collected_by"):
+                            enriched["collected_by"] = collector_id
             
             enriched_payments.append(enriched)
         

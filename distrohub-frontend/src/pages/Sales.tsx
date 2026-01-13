@@ -1430,7 +1430,7 @@ function CollectionModal({
 }) {
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
-  const [collectedBy, setCollectedBy] = useState(order.assigned_to || ''); // Default to order's assigned_to
+  const [collectedBy, setCollectedBy] = useState('');
   const [notes, setNotes] = useState('');
   const [salesReps, setSalesReps] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(false);
@@ -1460,6 +1460,36 @@ function CollectionModal({
     fetchSalesReps();
   }, []);
 
+  // Set default collected_by: Route SR > Sale SR
+  useEffect(() => {
+    const determineDefaultSR = async () => {
+      let defaultSrId = '';
+      
+      // Priority 1: If sale is in a route, use route's SR
+      if (order.route_id) {
+        try {
+          const routeRes = await api.get(`/api/routes/${order.route_id}`);
+          if (routeRes.data?.assigned_to) {
+            defaultSrId = routeRes.data.assigned_to;
+          }
+        } catch (error) {
+          console.error('[CollectionModal] Error fetching route:', error);
+        }
+      }
+      
+      // Priority 2: Fallback to sale's assigned_to
+      if (!defaultSrId && order.assigned_to) {
+        defaultSrId = order.assigned_to;
+      }
+      
+      if (defaultSrId) {
+        setCollectedBy(defaultSrId);
+      }
+    };
+    
+    determineDefaultSR();
+  }, [order.route_id, order.assigned_to]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const paymentAmount = parseFloat(amount);
@@ -1474,8 +1504,27 @@ function CollectionModal({
       return;
     }
     
-    if (!collectedBy) {
-      alert('Please select who collected this payment');
+    // Auto-determine collected_by if not selected (fallback logic)
+    let finalCollectedBy = collectedBy;
+    if (!finalCollectedBy) {
+      // Priority: Route SR > Sale SR
+      if (order.route_id) {
+        try {
+          const routeRes = await api.get(`/api/routes/${order.route_id}`);
+          if (routeRes.data?.assigned_to) {
+            finalCollectedBy = routeRes.data.assigned_to;
+          }
+        } catch (error) {
+          console.error('[CollectionModal] Error fetching route for fallback:', error);
+        }
+      }
+      if (!finalCollectedBy && order.assigned_to) {
+        finalCollectedBy = order.assigned_to;
+      }
+    }
+    
+    if (!finalCollectedBy) {
+      alert('Please select who collected this payment, or ensure the order is assigned to an SR');
       return;
     }
 
@@ -1495,7 +1544,7 @@ function CollectionModal({
         sale_id: order.id,
         amount: paymentAmount,
         payment_method: paymentMethod,
-        collected_by: collectedBy,
+        collected_by: finalCollectedBy,  // Use determined SR (from dropdown or fallback)
         notes: notes || undefined
       };
       

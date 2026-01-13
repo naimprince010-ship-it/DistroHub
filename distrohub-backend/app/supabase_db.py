@@ -1363,12 +1363,19 @@ class SupabaseDatabase:
             raise ValueError(f"Failed to create sale return: {error_type}: {error_msg}")
     
     def get_payments(self, sale_id: Optional[str] = None, user_id: Optional[str] = None, route_id: Optional[str] = None, from_date: Optional[str] = None, to_date: Optional[str] = None) -> List[dict]:
-        """Get payments with optional filters"""
+        """
+        Get payments with optional filters.
+        
+        Note: For Collection Report, user_id filtering is done in the API endpoint
+        with fallback logic (sale.assigned_to or route.assigned_to).
+        This method only filters by payments.collected_by directly.
+        """
         query = self.client.table("payments").select("*")
         
         if sale_id:
             query = query.eq("sale_id", sale_id)
         if user_id:
+            # Direct filter by collected_by (used for /api/users/{user_id}/payments)
             query = query.eq("collected_by", user_id)
         if route_id:
             query = query.eq("route_id", route_id)
