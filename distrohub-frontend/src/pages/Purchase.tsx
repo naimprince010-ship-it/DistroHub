@@ -552,29 +552,85 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
     p.barcode.includes(searchTerm)
   );
 
-  const addProductToItems = (product: ProductCatalogItem) => {
+  const addProductToItems = async (product: ProductCatalogItem) => {
     const existingItem = items.find(item => item.product_id === product.id);
     if (existingItem) {
-      setItems(items.map(item => 
-        item.product_id === product.id 
-          ? { ...item, qty: item.qty + 1, sub_total: (item.qty + 1) * item.unit_price }
-          : item
-      ));
+      // If product already exists, just increment quantity
+      setItems(items.map(item => {
+        if (item.product_id === product.id) {
+          const newQty = item.qty + 1;
+          const newSubTotal = newQty * item.unit_price;
+          return { ...item, qty: newQty, sub_total: newSubTotal };
+        }
+        return item;
+      }));
     } else {
-      // Ensure unit_price uses the full lastPrice value (not truncated)
-      const unitPrice = product.lastPrice || 0;
+      // Fetch full product details to get latest purchase_price and batches
+      let fullProduct = product;
+      let productBatches: Array<{ batch_number: string; expiry_date: string }> = [];
+      
+      try {
+        // Fetch product details
+        const productResponse = await api.get(`/api/products/${product.id}`);
+        if (productResponse.data) {
+          fullProduct = {
+            ...product,
+            purchase_price: productResponse.data.purchase_price || product.lastPrice,
+          };
+        }
+        
+        // Fetch product batches
+        try {
+          const batchesResponse = await api.get(`/api/products/${product.id}/batches`);
+          if (batchesResponse.data && Array.isArray(batchesResponse.data)) {
+            productBatches = batchesResponse.data
+              .map((b: any) => ({
+                batch_number: b.batch_number || '',
+                expiry_date: b.expiry_date || ''
+              }))
+              .filter((b: any) => b.batch_number); // Only batches with batch_number
+          }
+        } catch (batchError) {
+          console.warn('[Purchase] Could not fetch batches:', batchError);
+          // Continue without batches
+        }
+      } catch (error) {
+        console.error('[Purchase] Error fetching product details:', error);
+        // Continue with existing product data
+      }
+
+      // Auto-populate Unit Price from purchase_price (latest from master data)
+      const unitPrice = fullProduct.purchase_price || fullProduct.lastPrice || 0;
+      
+      // Auto-populate Batch Number from latest batch if available
+      let defaultBatch = '';
+      let defaultExpiry = '';
+      if (productBatches.length > 0) {
+        // Get the most recent batch (first one, assuming sorted by creation date)
+        const latestBatch = productBatches[0];
+        defaultBatch = latestBatch.batch_number || '';
+        defaultExpiry = latestBatch.expiry_date || '';
+      }
+      
+      // If no batch expiry, set default to current date + 1 year
+      if (!defaultExpiry) {
+        const nextYear = new Date();
+        nextYear.setFullYear(nextYear.getFullYear() + 1);
+        defaultExpiry = nextYear.toISOString().split('T')[0];
+      }
+
       const newItem: PurchaseItem = {
         id: `item-${Date.now()}`,
-        product_id: product.id,
-        product_name: product.name,
-        sku: product.sku,
-        batch: '',
-        expiry: '',
+        product_id: fullProduct.id,
+        product_name: fullProduct.name,
+        sku: fullProduct.sku,
+        batch: defaultBatch, // Auto-populated from latest batch
+        expiry: defaultExpiry, // Auto-populated (latest batch expiry or +1 year)
         qty: 1,
-        unit_price: unitPrice, // Use full price value
-        sub_total: unitPrice, // Calculate sub_total correctly
-        current_stock: product.stock,
-        last_purchase_price: product.lastPrice,
+        unit_price: unitPrice, // Auto-populated from purchase_price (master data)
+        sub_total: unitPrice, // Real-time calculation (qty * unit_price)
+        current_stock: fullProduct.stock,
+        last_purchase_price: unitPrice, // Store the purchase price used
       };
       setItems([...items, newItem]);
     }
