@@ -3011,8 +3011,40 @@ class SupabaseDatabase:
                 # #endregion
                 
                 # Get payments collected by this SR
+                # CRITICAL: Fetch ALL payments collected by this SR (not filtered by route yet)
                 payments_result = self.client.table("payments").select("*").eq("collected_by", user_id).execute()
                 all_payments = payments_result.data or []
+                
+                # #region agent log
+                import json
+                log_data = {
+                    "location": "supabase_db.py:get_sr_accountability:payment_fetch_raw",
+                    "message": "Raw payments fetched from database",
+                    "data": {
+                        "total_payments_fetched": len(all_payments),
+                        "all_payments_details": [
+                            {
+                                "id": p.get("id"),
+                                "sale_id": p.get("sale_id"),
+                                "route_id": p.get("route_id"),
+                                "collected_by": p.get("collected_by"),
+                                "amount": p.get("amount"),
+                                "sale_in_route_sale_ids": p.get("sale_id") in route_sale_ids if p.get("sale_id") else False
+                            } for p in all_payments[:10]
+                        ],
+                        "route_sale_ids_count": len(route_sale_ids),
+                        "route_sale_ids_sample": list(route_sale_ids)[:5] if len(route_sale_ids) > 5 else list(route_sale_ids)
+                    },
+                    "timestamp": int(datetime.now().timestamp() * 1000),
+                    "sessionId": "debug-session",
+                    "runId": "run1",
+                    "hypothesisId": "F"
+                }
+                try:
+                    with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                        f.write(json.dumps(log_data) + "\n")
+                except: pass
+                # #endregion
                 
                 # #region agent log
                 log_data = {
@@ -3192,7 +3224,7 @@ class SupabaseDatabase:
         if payments_by_route:
             print(f"[DB] DOUBLE-COUNT SAFEGUARD: {len(payments_by_route)} routes have payments - reconciliation totals excluded for those routes")
         
-        return {
+        result = {
             "user_id": user_id,
             "user_name": user.get("name"),
             "current_cash_holding": float(user.get("current_cash_holding", 0)),
@@ -3205,6 +3237,37 @@ class SupabaseDatabase:
             "routes": all_routes,  # Include all routes (active + reconciled)
             "reconciliations": reconciliations
         }
+        
+        # #region agent log
+        import json
+        log_data = {
+            "location": "supabase_db.py:get_sr_accountability:return_statement",
+            "message": "Returning SR Accountability result - VERIFY total_collected in response",
+            "data": {
+                "result_keys": list(result.keys()),
+                "total_collected_in_result": result.get("total_collected"),
+                "total_returns_in_result": result.get("total_returns"),
+                "total_collected_exists": "total_collected" in result,
+                "total_returns_exists": "total_returns" in result,
+                "total_collected_type": type(result.get("total_collected")).__name__,
+                "total_expected": total_expected,
+                "payments_collected_count": len(payments_collected),
+                "total_collected_from_payments": total_collected_from_payments
+            },
+            "timestamp": int(datetime.now().timestamp() * 1000),
+            "sessionId": "debug-session",
+            "runId": "run1",
+            "hypothesisId": "E"
+        }
+        try:
+            with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
+                f.write(json.dumps(log_data) + "\n")
+        except: pass
+        # #endregion
+        
+        print(f"[DB] VERIFY: Returning result with total_collected={result.get('total_collected')}, total_returns={result.get('total_returns')}")
+        
+        return result
     
     def backfill_payment_route_id(self, dry_run: bool = True) -> dict:
         """
