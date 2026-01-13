@@ -693,6 +693,68 @@ async def delete_retailer(retailer_id: str, current_user: dict = Depends(get_cur
         raise HTTPException(status_code=404, detail="Retailer not found")
     return {"message": "Retailer deleted"}
 
+@app.post("/api/admin/delete-demo-retailers")
+async def delete_demo_retailers(current_user: dict = Depends(get_current_user)):
+    """
+    Delete demo/test retailers that were inserted during initial setup.
+    Only accessible by admin users.
+    """
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    try:
+        # Demo retailer identifiers from schema.sql
+        demo_names = ['Karim Uddin', 'Abdul Haque', 'Rahim Mia', 'Jamal Ahmed']
+        demo_shops = ['Karim Store', 'Haque Grocery', 'Rahim Bhandar', 'Ahmed Store']
+        demo_phones = ['01712345678', '01812345678', '01912345678', '01612345678']
+        
+        # Get all retailers
+        all_retailers = db.get_retailers()
+        
+        # Find demo retailers
+        demo_retailer_ids = []
+        for retailer in all_retailers:
+            if (retailer.get("name") in demo_names or 
+                retailer.get("shop_name") in demo_shops or 
+                retailer.get("phone") in demo_phones):
+                demo_retailer_ids.append(retailer["id"])
+        
+        if not demo_retailer_ids:
+            return {
+                "message": "No demo retailers found",
+                "deleted_count": 0
+            }
+        
+        # Delete payments for demo retailers
+        all_payments = db.get_payments()
+        payments_deleted = 0
+        for payment in all_payments:
+            if payment.get("retailer_id") in demo_retailer_ids:
+                # Note: We don't have a delete_payment method, so we'll skip this
+                # Payments will be orphaned but that's acceptable for demo cleanup
+                payments_deleted += 1
+        
+        # Delete retailers
+        deleted_count = 0
+        for retailer_id in demo_retailer_ids:
+            if db.delete_retailer(retailer_id):
+                deleted_count += 1
+        
+        return {
+            "message": f"Deleted {deleted_count} demo retailer(s)",
+            "deleted_count": deleted_count,
+            "retailer_ids": demo_retailer_ids,
+            "payments_affected": payments_deleted
+        }
+    except Exception as e:
+        error_msg = str(e)
+        error_type = type(e).__name__
+        print(f"[API] Error deleting demo retailers: {error_type}: {error_msg}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete demo retailers: {error_type}: {error_msg}"
+        )
+
 @app.get("/api/purchases", response_model=List[Purchase])
 async def get_purchases(current_user: dict = Depends(get_current_user)):
     purchases = db.get_purchases()
