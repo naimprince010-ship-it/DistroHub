@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
-import { useNavigate } from 'react-router-dom';
 import { Info, AlertCircle, Wallet } from 'lucide-react';
 import api from '@/lib/api';
 import { formatDateBD } from '@/lib/utils';
