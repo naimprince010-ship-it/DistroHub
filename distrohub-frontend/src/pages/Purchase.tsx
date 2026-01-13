@@ -559,6 +559,8 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
           : item
       ));
     } else {
+      // Ensure unit_price uses the full lastPrice value (not truncated)
+      const unitPrice = product.lastPrice || 0;
       const newItem: PurchaseItem = {
         id: `item-${Date.now()}`,
         product_id: product.id,
@@ -567,8 +569,8 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
         batch: '',
         expiry: '',
         qty: 1,
-        unit_price: product.lastPrice,
-        sub_total: product.lastPrice,
+        unit_price: unitPrice, // Use full price value
+        sub_total: unitPrice, // Calculate sub_total correctly
         current_stock: product.stock,
         last_purchase_price: product.lastPrice,
       };
@@ -597,7 +599,10 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
       if (item.id === itemId) {
         const updated = { ...item, [field]: value };
         if (field === 'qty' || field === 'unit_price') {
-          updated.sub_total = updated.qty * updated.unit_price;
+          // Ensure proper calculation with numeric values
+          const qty = typeof updated.qty === 'number' ? updated.qty : parseFloat(String(updated.qty)) || 0;
+          const unitPrice = typeof updated.unit_price === 'number' ? updated.unit_price : parseFloat(String(updated.unit_price)) || 0;
+          updated.sub_total = qty * unitPrice;
         }
         return updated;
       }
@@ -916,19 +921,72 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                         <input
                           type="number"
                           value={item.qty || ''}
-                          onChange={(e) => updateItem(item.id, 'qty', Number(e.target.value))}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            // Allow empty string for manual typing, or valid numbers
+                            if (val === '' || (!isNaN(Number(val)) && Number(val) >= 0)) {
+                              updateItem(item.id, 'qty', val === '' ? 0 : Number(val));
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            // Allow: backspace, delete, tab, escape, enter, decimal point, and numbers
+                            if ([46, 8, 9, 27, 13, 110, 190].indexOf(e.keyCode) !== -1 ||
+                              // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+                              (e.keyCode === 65 && e.ctrlKey === true) ||
+                              (e.keyCode === 67 && e.ctrlKey === true) ||
+                              (e.keyCode === 86 && e.ctrlKey === true) ||
+                              (e.keyCode === 88 && e.ctrlKey === true) ||
+                              // Allow: home, end, left, right
+                              (e.keyCode >= 35 && e.keyCode <= 39)) {
+                              return;
+                            }
+                            // Ensure that it is a number and stop the keypress
+                            if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+                              e.preventDefault();
+                            }
+                          }}
                           className={`input-field w-full text-sm text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${errors[`qty_${index}`] ? 'border-red-500' : ''}`}
                           min="1"
+                          step="1"
+                          placeholder="0"
                         />
                       </td>
                       <td className="p-2">
-                        <input
-                          type="number"
-                          value={item.unit_price || ''}
-                          onChange={(e) => updateItem(item.id, 'unit_price', Number(e.target.value))}
-                          className={`input-field w-full text-sm text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${errors[`price_${index}`] ? 'border-red-500' : ''}`}
-                          min="0"
-                        />
+                        <div className="relative">
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-sm">৳</span>
+                          <input
+                            type="number"
+                            value={item.unit_price || ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              // Allow empty string for manual typing, or valid numbers
+                              if (val === '' || (!isNaN(Number(val)) && Number(val) >= 0)) {
+                                updateItem(item.id, 'unit_price', val === '' ? 0 : Number(val));
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              // Allow: backspace, delete, tab, escape, enter, decimal point, and numbers
+                              if ([46, 8, 9, 27, 13, 110, 190].indexOf(e.keyCode) !== -1 ||
+                                // Allow: Ctrl+A, Ctrl+C, Ctrl+V, Ctrl+X
+                                (e.keyCode === 65 && e.ctrlKey === true) ||
+                                (e.keyCode === 67 && e.ctrlKey === true) ||
+                                (e.keyCode === 86 && e.ctrlKey === true) ||
+                                (e.keyCode === 88 && e.ctrlKey === true) ||
+                                // Allow: home, end, left, right
+                                (e.keyCode >= 35 && e.keyCode <= 39)) {
+                                return;
+                              }
+                              // Ensure that it is a number and stop the keypress
+                              if ((e.shiftKey || (e.keyCode < 48 || e.keyCode > 57)) && (e.keyCode < 96 || e.keyCode > 105)) {
+                                e.preventDefault();
+                              }
+                            }}
+                            className={`input-field w-full text-sm text-right pl-6 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${errors[`price_${index}`] ? 'border-red-500' : ''}`}
+                            min="0"
+                            step="0.01"
+                            placeholder="0.00"
+                          />
+                        </div>
                       </td>
                       <td className="p-2 text-right font-medium text-slate-900">
                         ৳ {item.sub_total.toLocaleString()}
