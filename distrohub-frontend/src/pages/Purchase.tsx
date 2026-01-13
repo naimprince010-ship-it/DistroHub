@@ -69,6 +69,8 @@ interface ProductCatalogItem {
   barcode: string;
   stock: number;
   lastPrice: number;
+  purchase_price?: number;
+  batches?: Array<{ batch_number: string; expiry_date: string }>;
 }
 
 export function Purchase() {
@@ -614,7 +616,15 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
     setItems(items.filter(item => item.id !== itemId));
   };
 
-  const subTotal = items.reduce((sum, item) => sum + item.sub_total, 0);
+  // Real-time calculation: Recalculate totals whenever items or formData changes
+  const subTotal = items.reduce((sum, item) => {
+    // Ensure sub_total is always up-to-date
+    const qty = typeof item.qty === 'number' ? item.qty : parseFloat(String(item.qty)) || 0;
+    const unitPrice = typeof item.unit_price === 'number' ? item.unit_price : parseFloat(String(item.unit_price)) || 0;
+    const calculatedSubTotal = qty * unitPrice;
+    return sum + calculatedSubTotal;
+  }, 0);
+  
   const discountAmount = formData.discount_type === 'percent' 
     ? (subTotal * formData.discount_value / 100)
     : formData.discount_value;
@@ -622,6 +632,28 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
   const taxAmount = afterDiscount * formData.tax_percent / 100;
   const grandTotal = afterDiscount + taxAmount;
   const dueAmount = grandTotal - formData.paid_amount;
+
+  // Real-time update: Sync item sub_totals when qty or unit_price changes
+  useEffect(() => {
+    const updatedItems = items.map(item => {
+      const qty = typeof item.qty === 'number' ? item.qty : parseFloat(String(item.qty)) || 0;
+      const unitPrice = typeof item.unit_price === 'number' ? item.unit_price : parseFloat(String(item.unit_price)) || 0;
+      const calculatedSubTotal = qty * unitPrice;
+      // Only update if sub_total is different to avoid infinite loops
+      if (Math.abs(item.sub_total - calculatedSubTotal) > 0.01) {
+        return { ...item, sub_total: calculatedSubTotal };
+      }
+      return item;
+    });
+    
+    // Only update state if there are actual changes
+    const hasChanges = updatedItems.some((item, index) => 
+      Math.abs(item.sub_total - items[index].sub_total) > 0.01
+    );
+    if (hasChanges) {
+      setItems(updatedItems);
+    }
+  }, [items.map(i => `${i.id}-${i.qty}-${i.unit_price}`).join(',')]);
 
   const validateForm = (): boolean => {
     const newErrors: ValidationError = {};
