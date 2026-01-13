@@ -1362,9 +1362,38 @@ class SupabaseDatabase:
             traceback.print_exc()
             raise ValueError(f"Failed to create sale return: {error_type}: {error_msg}")
     
-    def get_payments(self) -> List[dict]:
-        result = self.client.table("payments").select("*").order("created_at", desc=True).execute()
-        return result.data or []
+    def get_payments(self, sale_id: Optional[str] = None, user_id: Optional[str] = None, route_id: Optional[str] = None, from_date: Optional[str] = None, to_date: Optional[str] = None) -> List[dict]:
+        """Get payments with optional filters"""
+        query = self.client.table("payments").select("*")
+        
+        if sale_id:
+            query = query.eq("sale_id", sale_id)
+        if user_id:
+            query = query.eq("collected_by", user_id)
+        if route_id:
+            query = query.eq("route_id", route_id)
+        if from_date:
+            query = query.gte("created_at", from_date)
+        if to_date:
+            # Add one day to include the end date
+            from datetime import timedelta
+            end_datetime = datetime.fromisoformat(to_date.replace('Z', '+00:00')) + timedelta(days=1)
+            query = query.lt("created_at", end_datetime.isoformat())
+        
+        result = query.order("created_at", desc=True).execute()
+        payments = result.data or []
+        
+        # Enrich with route information if route_id exists
+        for payment in payments:
+            if payment.get("route_id"):
+                try:
+                    route = self.get_route(payment["route_id"])
+                    if route:
+                        payment["route_number"] = route.get("route_number")
+                except:
+                    pass
+        
+        return payments
     
     def create_payment(self, data: dict) -> dict:
         retailer = self.get_retailer(data["retailer_id"])

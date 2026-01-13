@@ -97,6 +97,9 @@ export interface Payment {
   reference?: string;
   collected_by?: string;  // User ID of SR/delivery man who collected this payment
   collected_by_name?: string;  // Name of SR/delivery man who collected this payment
+  route_id?: string;  // Route ID if payment is for a sale in a route
+  route_number?: string;  // Route number (enriched from route)
+  invoice_number?: string;  // Invoice number (enriched from sale)
   notes?: string;
   created_at: string;
 }

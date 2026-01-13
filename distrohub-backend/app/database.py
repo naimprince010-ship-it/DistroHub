@@ -386,8 +386,24 @@ class InMemoryDatabase:
         self.sales[sale_id] = sale
         return sale
     
-    def get_payments(self) -> List[dict]:
-        return list(self.payments.values())
+    def get_payments(self, sale_id: Optional[str] = None, user_id: Optional[str] = None, route_id: Optional[str] = None, from_date: Optional[str] = None, to_date: Optional[str] = None) -> List[dict]:
+        """Get payments with optional filters (for InMemoryDatabase compatibility)"""
+        payments = list(self.payments.values())
+        
+        if sale_id:
+            payments = [p for p in payments if p.get("sale_id") == sale_id]
+        if user_id:
+            payments = [p for p in payments if p.get("collected_by") == user_id]
+        if route_id:
+            payments = [p for p in payments if p.get("route_id") == route_id]
+        if from_date:
+            from_dt = datetime.fromisoformat(from_date.replace('Z', '+00:00'))
+            payments = [p for p in payments if datetime.fromisoformat(p.get("created_at", "").replace('Z', '+00:00')) >= from_dt]
+        if to_date:
+            to_dt = datetime.fromisoformat(to_date.replace('Z', '+00:00'))
+            payments = [p for p in payments if datetime.fromisoformat(p.get("created_at", "").replace('Z', '+00:00')) <= to_dt]
+        
+        return payments
     
     def create_payment(self, data: dict) -> dict:
         payment_id = generate_id()

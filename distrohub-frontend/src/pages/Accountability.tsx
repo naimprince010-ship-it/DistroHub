@@ -25,6 +25,9 @@ export function Accountability() {
   const [loading, setLoading] = useState(true);
   const [loadingAccountability, setLoadingAccountability] = useState(false);
   const [settlingCash, setSettlingCash] = useState(false);
+  const [showPaymentHistory, setShowPaymentHistory] = useState(false);
+  const [paymentHistory, setPaymentHistory] = useState<any[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
 
   useEffect(() => {
     const fetchSalesReps = async () => {
@@ -298,6 +301,26 @@ export function Accountability() {
                         return null;
                       })()}
                       {/* #endregion */}
+                      <button
+                        onClick={async () => {
+                          if (!selectedSr) return;
+                          setLoadingPayments(true);
+                          setShowPaymentHistory(true);
+                          try {
+                            const response = await api.get(`/api/users/${selectedSr}/payments`);
+                            setPaymentHistory(response.data || []);
+                          } catch (error: any) {
+                            console.error('[Accountability] Error fetching payment history:', error);
+                            alert('Failed to load payment history');
+                          } finally {
+                            setLoadingPayments(false);
+                          }
+                        }}
+                        className="mt-2 flex items-center gap-1 text-xs text-emerald-700 hover:text-emerald-800 font-medium"
+                      >
+                        <History className="w-3 h-3" />
+                        View Payment History
+                      </button>
                       {accountability.pending_reconciliation_count > 0 && (
                         <div className="mt-2 flex items-center gap-1.5">
                           <AlertCircle className="w-3 h-3 text-yellow-600" />
@@ -449,6 +472,92 @@ export function Accountability() {
           </div>
         )}
       </div>
+
+      {/* Payment History Modal */}
+      {showPaymentHistory && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto m-4">
+            <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-slate-900">Payment History</h2>
+                <p className="text-sm text-slate-500">
+                  {accountability?.user_name} • {paymentHistory.length} payment{paymentHistory.length !== 1 ? 's' : ''}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowPaymentHistory(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4">
+              {loadingPayments ? (
+                <div className="text-center text-slate-500 py-8">Loading payment history...</div>
+              ) : paymentHistory.length === 0 ? (
+                <div className="text-center text-slate-500 py-8">No payment records found.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="text-left p-3 font-semibold text-slate-700 text-sm">Date/Time</th>
+                        <th className="text-left p-3 font-semibold text-slate-700 text-sm">Invoice</th>
+                        <th className="text-left p-3 font-semibold text-slate-700 text-sm">Retailer</th>
+                        <th className="text-right p-3 font-semibold text-slate-700 text-sm">Amount</th>
+                        <th className="text-center p-3 font-semibold text-slate-700 text-sm">Method</th>
+                        <th className="text-left p-3 font-semibold text-slate-700 text-sm">Route</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {paymentHistory.map((payment: any) => (
+                        <tr key={payment.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="p-3 text-sm text-slate-600">
+                            {formatDateBD(payment.created_at)}
+                          </td>
+                          <td className="p-3 text-sm font-medium text-slate-900">
+                            {payment.invoice_number || '-'}
+                          </td>
+                          <td className="p-3 text-sm text-slate-600">
+                            {payment.retailer_name}
+                          </td>
+                          <td className="p-3 text-right">
+                            <span className="font-bold text-slate-900">
+                              <span className="text-sm font-semibold">৳</span>{payment.amount.toLocaleString()}
+                            </span>
+                          </td>
+                          <td className="p-3 text-center">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded capitalize">
+                              {payment.payment_method}
+                            </span>
+                          </td>
+                          <td className="p-3 text-sm text-slate-600">
+                            {payment.route_number || '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-slate-50 border-t border-slate-200">
+                      <tr>
+                        <td colSpan={3} className="p-3 text-right font-semibold text-slate-700">
+                          Total:
+                        </td>
+                        <td className="p-3 text-right">
+                          <span className="font-bold text-slate-900">
+                            <span className="text-sm font-semibold">৳</span>
+                            {paymentHistory.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}
+                          </span>
+                        </td>
+                        <td colSpan={2}></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

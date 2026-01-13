@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { ChallanPrint } from '@/components/print/ChallanPrint';
 import { BarcodeScanButton } from '@/components/BarcodeScanner';
+import { PaymentHistory } from '@/components/payments/PaymentHistory';
 import api from '@/lib/api';
 import { formatDateBD } from '@/lib/utils';
 
@@ -894,6 +895,11 @@ function EditSaleModal({
                 ৳ {(order.total_amount - order.paid_amount).toLocaleString()}
               </span>
             </div>
+          </div>
+
+          {/* Payment History */}
+          <div className="border-t border-slate-200 pt-3 mt-3">
+            <PaymentHistory saleId={order.id} />
           </div>
 
           <div>

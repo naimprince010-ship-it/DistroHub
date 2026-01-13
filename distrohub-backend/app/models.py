@@ -206,6 +206,9 @@ class Payment(BaseModel):
     notes: Optional[str] = None
     collected_by: Optional[str] = None  # User ID of SR/delivery man who collected this payment
     collected_by_name: Optional[str] = None  # Name of SR/delivery man who collected this payment
+    route_id: Optional[str] = None  # Route ID if payment is for a sale in a route
+    route_number: Optional[str] = None  # Route number (enriched from route)
+    invoice_number: Optional[str] = None  # Invoice number (enriched from sale)
     created_at: datetime
 
 class RefundType(str, Enum):

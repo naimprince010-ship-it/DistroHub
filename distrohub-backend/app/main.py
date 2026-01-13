@@ -1082,11 +1082,34 @@ async def get_sale_returns(sale_id: str, current_user: dict = Depends(get_curren
 @app.get("/api/payments", response_model=List[Payment])
 async def get_payments(
     sale_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    route_id: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
-    payments = db.get_payments()
-    if sale_id:
-        payments = [p for p in payments if p.get("sale_id") == sale_id]
+    """Get payments with optional filters"""
+    payments = db.get_payments(sale_id=sale_id, user_id=user_id, route_id=route_id, from_date=from_date, to_date=to_date)
+    return [Payment(**p) for p in payments]
+
+@app.get("/api/sales/{sale_id}/payments", response_model=List[Payment])
+async def get_sale_payments(
+    sale_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all payment records for a specific sale"""
+    payments = db.get_payments(sale_id=sale_id)
+    return [Payment(**p) for p in payments]
+
+@app.get("/api/users/{user_id}/payments", response_model=List[Payment])
+async def get_user_payments(
+    user_id: str,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all payments collected by a specific SR/user"""
+    payments = db.get_payments(user_id=user_id, from_date=from_date, to_date=to_date)
     return [Payment(**p) for p in payments]
 
 @app.post("/api/payments", response_model=Payment)
@@ -1181,6 +1204,72 @@ async def get_sales_returns_report(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get sales returns report: {error_type}: {error_msg}"
+        )
+
+@app.get("/api/reports/collections")
+async def get_collection_report(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    user_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get collection report with detailed payment history.
+    
+    Query params:
+    - from_date: Start date (YYYY-MM-DD)
+    - to_date: End date (YYYY-MM-DD)
+    - user_id: Filter by SR/delivery man (optional)
+    
+    Returns:
+    - List of payment records with sale invoice, retailer, route, collected_by details
+    """
+    try:
+        payments = db.get_payments(user_id=user_id, from_date=from_date, to_date=to_date)
+        
+        # Enrich payments with sale and route information
+        enriched_payments = []
+        for payment in payments:
+            enriched = payment.copy()
+            
+            # Get sale information
+            if payment.get("sale_id"):
+                sale = db.get_sale(payment["sale_id"])
+                if sale:
+                    enriched["invoice_number"] = sale.get("invoice_number")
+                    enriched["retailer_name"] = sale.get("retailer_name") or payment.get("retailer_name")
+            
+            # Get route information (already added in get_payments)
+            if payment.get("route_id") and not enriched.get("route_number"):
+                route = db.get_route(payment["route_id"])
+                if route:
+                    enriched["route_number"] = route.get("route_number")
+            
+            enriched_payments.append(enriched)
+        
+        # Calculate summary
+        total_amount = sum(float(p.get("amount", 0)) for p in enriched_payments)
+        total_count = len(enriched_payments)
+        
+        return {
+            "payments": enriched_payments,
+            "summary": {
+                "total_payments": total_count,
+                "total_amount": total_amount,
+                "from_date": from_date,
+                "to_date": to_date,
+                "user_id": user_id
+            }
+        }
+    except Exception as e:
+        error_msg = str(e)
+        error_type = type(e).__name__
+        print(f"[API] Error getting collection report: {error_type}: {error_msg}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get collection report: {error_type}: {error_msg}"
         )
 
 @app.post("/api/products/import")

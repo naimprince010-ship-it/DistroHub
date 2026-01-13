@@ -111,8 +111,10 @@ export function Reports() {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Array<{ id: string; name: string; category: string }>>([]);
-  const [collectionReports, setCollectionReports] = useState<CollectionReport[]>([]);
-  const [collectionSummary, setCollectionSummary] = useState<CollectionReportSummary | null>(null);
+  const [collectionPayments, setCollectionPayments] = useState<any[]>([]);
+  const [collectionSummary, setCollectionSummary] = useState<any | null>(null);
+  const [srFilter, setSrFilter] = useState<string>('all');
+  const [salesReps, setSalesReps] = useState<Array<{ id: string; name: string }>>([]);
   
   // UI State
   const [selectedInvoice, setSelectedInvoice] = useState<SaleReport | null>(null);
@@ -121,16 +123,17 @@ export function Reports() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 50;
 
-  // Fetch categories and products for filter
+  // Fetch categories, products, and sales reps for filter
   useEffect(() => {
     const fetchCategoriesAndProducts = async () => {
       const token = localStorage.getItem('token');
       if (!token) return;
 
       try {
-        const [categoriesResponse, productsResponse] = await Promise.all([
+        const [categoriesResponse, productsResponse, usersResponse] = await Promise.all([
           api.get('/api/categories'),
-          api.get('/api/products')
+          api.get('/api/products'),
+          api.get('/api/users')
         ]);
         
         if (categoriesResponse.data) {
@@ -144,8 +147,15 @@ export function Reports() {
             category: p.category || 'Uncategorized'
           })));
         }
+
+        if (usersResponse.data) {
+          const reps = usersResponse.data
+            .filter((u: any) => u.role === 'sales_rep')
+            .map((u: any) => ({ id: u.id, name: u.name }));
+          setSalesReps(reps);
+        }
       } catch (error) {
-        console.error('[Reports] Error fetching categories/products:', error);
+        console.error('[Reports] Error fetching categories/products/users:', error);
       }
     };
 
@@ -203,12 +213,16 @@ export function Reports() {
         const params = new URLSearchParams();
         if (startDate) params.append('from_date', startDate);
         if (endDate) params.append('to_date', endDate);
-        const url = `/api/reports/collection${params.toString() ? '?' + params.toString() : ''}`;
+        if (srFilter && srFilter !== 'all') {
+          params.append('user_id', srFilter);
+        }
+        const url = `/api/reports/collections${params.toString() ? '?' + params.toString() : ''}`;
         const response = await api.get(url);
         if (response.data) {
-          setCollectionReports(response.data.reports || []);
+          // New collection report returns payments array and summary
+          setCollectionPayments(response.data.payments || []);
           setCollectionSummary(response.data.summary || null);
-          console.log('[Reports] Collection report fetched:', response.data.reports?.length || 0);
+          console.log('[Reports] Collection report fetched:', response.data.payments?.length || 0);
         }
       }
     } catch (error: any) {
@@ -224,7 +238,7 @@ export function Reports() {
 
   useEffect(() => {
     fetchReportData();
-  }, [activeReport, startDate, endDate]);
+  }, [activeReport, startDate, endDate, srFilter]);
 
   // Filter sales report by category/product (date filtering done on backend)
   const filteredSalesReport = salesReport.filter((sale) => {
@@ -578,6 +592,24 @@ export function Reports() {
               </>
             )}
 
+            {activeReport === 'collection' && (
+              <div className="flex items-center gap-2">
+                <Filter className="w-4 h-4 text-slate-400" />
+                <select
+                  value={srFilter}
+                  onChange={(e) => setSrFilter(e.target.value)}
+                  className="input-field w-48"
+                >
+                  <option value="all">All SRs</option>
+                  {salesReps.map((sr) => (
+                    <option key={sr.id} value={sr.id}>
+                      {sr.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
             <div className="flex items-center gap-2">
               <Filter className="w-4 h-4 text-slate-400" />
               <select
@@ -685,12 +717,12 @@ export function Reports() {
         {activeReport === 'collection' && collectionSummary && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
             <div className="bg-white rounded-xl p-3 shadow-sm">
-              <p className="text-slate-500 text-sm">Total SRs</p>
-              <p className="text-2xl font-bold text-slate-900">{collectionSummary.total_srs}</p>
+              <p className="text-slate-500 text-sm">Total Payments</p>
+              <p className="text-2xl font-bold text-slate-900">{collectionSummary.total_payments || 0}</p>
             </div>
             <div className="bg-white rounded-xl p-3 shadow-sm">
-              <p className="text-slate-500 text-sm">Total Pending</p>
-              <p className="text-2xl font-bold text-red-600">৳ {collectionSummary.total_pending.toLocaleString()}</p>
+              <p className="text-slate-500 text-sm">Total Amount</p>
+              <p className="text-2xl font-bold text-green-600">৳ {(collectionSummary.total_amount || 0).toLocaleString()}</p>
             </div>
           </div>
         )}
@@ -1043,81 +1075,73 @@ export function Reports() {
           <div className="space-y-3">
             {loading ? (
               <div className="p-8 text-center text-slate-500">Loading collection report...</div>
-            ) : collectionReports.length === 0 ? (
+            ) : collectionPayments.length === 0 ? (
               <div className="bg-white rounded-xl p-8 text-center text-slate-500 shadow-sm">
-                No collection data found for the selected period.
+                No payment records found for the selected period.
               </div>
             ) : (
-              collectionReports.map((report) => {
-                const getCollectionColor = (rate: number) => {
-                  if (rate >= 80) return 'text-green-600 bg-green-100';
-                  if (rate >= 50) return 'text-yellow-600 bg-yellow-100';
-                  return 'text-red-600 bg-red-100';
-                };
-                
-                return (
-                  <div key={report.user_id} className="bg-white rounded-xl shadow-sm overflow-hidden">
-                    <div className="p-3 border-b border-slate-200">
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h3 className={`text-lg font-semibold inline-block px-3 py-1 rounded-full ${getCollectionColor(report.collection_rate)}`}>
-                            {report.user_name}
-                          </h3>
-                          <p className="text-sm text-slate-500 mt-1">Collection Rate: {report.collection_rate.toFixed(1)}%</p>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-sm text-slate-500">Pending Amount</p>
-                          <p className="text-2xl font-bold text-red-600">৳ {report.current_pending_amount.toLocaleString()}</p>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="p-3">
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
-                        <div>
-                          <p className="text-xs text-slate-500">Total Orders</p>
-                          <p className="text-lg font-semibold text-slate-900">{report.total_orders_assigned}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-slate-500">Total Sales</p>
-                          <p className="text-lg font-semibold text-blue-600">৳ {report.total_sales_amount.toLocaleString()}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-slate-500">Total Collected</p>
-                          <p className="text-lg font-semibold text-green-600">৳ {report.total_collected_amount.toLocaleString()}</p>
-                        </div>
-                        <div>
-                          <p className="text-xs text-slate-500">Total Returns</p>
-                          <p className="text-lg font-semibold text-orange-600">৳ {report.total_returns.toLocaleString()}</p>
-                        </div>
-                      </div>
-                      
-                      {report.payment_history.length > 0 && (
-                        <div className="mt-3">
-                          <h4 className="text-sm font-semibold text-slate-700 mb-2">Payment History</h4>
-                          <div className="space-y-1 max-h-40 overflow-y-auto">
-                            {report.payment_history.map((payment) => (
-                              <div key={payment.id} className="bg-slate-50 rounded p-2 text-sm">
-                                <div className="flex justify-between items-center">
-                                  <div>
-                                    <span className="font-medium">৳ {payment.amount.toLocaleString()}</span>
-                                    <span className="text-slate-500 ml-2">
-                                      {formatDate(payment.created_at)}
-                                    </span>
-                                  </div>
-                                  <div className="text-right">
-                                    <span className="text-xs text-slate-500 capitalize">{payment.payment_method}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
+              <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-slate-50 border-b border-slate-200">
+                      <tr>
+                        <th className="text-left p-3 font-semibold text-slate-700 text-sm">Date/Time</th>
+                        <th className="text-left p-3 font-semibold text-slate-700 text-sm">Invoice #</th>
+                        <th className="text-left p-3 font-semibold text-slate-700 text-sm">Retailer</th>
+                        <th className="text-right p-3 font-semibold text-slate-700 text-sm">Amount</th>
+                        <th className="text-center p-3 font-semibold text-slate-700 text-sm">Method</th>
+                        <th className="text-left p-3 font-semibold text-slate-700 text-sm">Collected By</th>
+                        <th className="text-left p-3 font-semibold text-slate-700 text-sm">Route #</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {collectionPayments.map((payment: any) => (
+                        <tr key={payment.id} className="hover:bg-slate-50/50 transition-colors">
+                          <td className="p-3 text-sm text-slate-600">
+                            {formatDate(payment.created_at)}
+                          </td>
+                          <td className="p-3 text-sm font-medium text-primary-600">
+                            {payment.invoice_number || '-'}
+                          </td>
+                          <td className="p-3 text-sm text-slate-600">
+                            {payment.retailer_name}
+                          </td>
+                          <td className="p-3 text-right">
+                            <span className="font-bold text-slate-900">
+                              <span className="text-sm font-semibold">৳</span>{payment.amount.toLocaleString()}
+                            </span>
+                          </td>
+                          <td className="p-3 text-center">
+                            <span className="px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded capitalize">
+                              {payment.payment_method}
+                            </span>
+                          </td>
+                          <td className="p-3 text-sm text-slate-600">
+                            {payment.collected_by_name || '-'}
+                          </td>
+                          <td className="p-3 text-sm text-slate-600">
+                            {payment.route_number || '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot className="bg-slate-50 border-t border-slate-200">
+                      <tr>
+                        <td colSpan={3} className="p-3 text-right font-semibold text-slate-700">
+                          Total:
+                        </td>
+                        <td className="p-3 text-right">
+                          <span className="font-bold text-slate-900">
+                            <span className="text-sm font-semibold">৳</span>
+                            {collectionPayments.reduce((sum, p) => sum + p.amount, 0).toLocaleString()}
+                          </span>
+                        </td>
+                        <td colSpan={3}></td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
+              </div>
             )}
           </div>
         ) : null}
