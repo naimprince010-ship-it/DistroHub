@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
 import {
   Search,
@@ -11,79 +11,101 @@ import {
   Filter,
   X,
 } from 'lucide-react';
+import api from '@/lib/api';
 
 interface Receivable {
   id: string;
+  retailer_id: string;
   retailer_name: string;
   shop_name: string;
   phone: string;
   total_due: number;
-  last_payment_date: string;
+  last_payment_date: string | null;
   days_overdue: number;
-  orders: { order_number: string; amount: number; date: string }[];
+  orders: { order_number: string; invoice_number: string; amount: number; date: string; sale_id: string }[];
 }
 
-const receivablesData: Receivable[] = [
-  {
-    id: '1',
-    retailer_name: 'Rahim Uddin',
-    shop_name: 'Rahim Store',
-    phone: '01712345678',
-    total_due: 15000,
-    last_payment_date: '2024-12-20',
-    days_overdue: 10,
-    orders: [
-      { order_number: 'ORD-2024-001', amount: 5000, date: '2024-12-15' },
-      { order_number: 'ORD-2024-005', amount: 10000, date: '2024-12-25' },
-    ],
-  },
-  {
-    id: '2',
-    retailer_name: 'Karim Mia',
-    shop_name: 'Karim Traders',
-    phone: '01812345678',
-    total_due: 32000,
-    last_payment_date: '2024-12-10',
-    days_overdue: 20,
-    orders: [
-      { order_number: 'ORD-2024-002', amount: 22000, date: '2024-12-10' },
-      { order_number: 'ORD-2024-008', amount: 10000, date: '2024-12-28' },
-    ],
-  },
-  {
-    id: '3',
-    retailer_name: 'Hasan Ali',
-    shop_name: 'Hasan Shop',
-    phone: '01912345678',
-    total_due: 8500,
-    last_payment_date: '2024-12-28',
-    days_overdue: 2,
-    orders: [
-      { order_number: 'ORD-2024-003', amount: 8500, date: '2024-12-28' },
-    ],
-  },
-  {
-    id: '4',
-    retailer_name: 'Molla Brothers',
-    shop_name: 'Molla Enterprise',
-    phone: '01612345678',
-    total_due: 45000,
-    last_payment_date: '2024-11-30',
-    days_overdue: 30,
-    orders: [
-      { order_number: 'ORD-2024-004', amount: 31000, date: '2024-11-25' },
-      { order_number: 'ORD-2024-009', amount: 14000, date: '2024-12-20' },
-    ],
-  },
-];
-
 export function Receivables() {
-  const [receivables] = useState<Receivable[]>(receivablesData);
+  const [receivables, setReceivables] = useState<Receivable[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [amountFilter, setAmountFilter] = useState<string>('all');
   const [selectedReceivable, setSelectedReceivable] = useState<Receivable | null>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+
+  // Fetch receivables from API
+  useEffect(() => {
+    const fetchReceivables = async () => {
+      try {
+        setLoading(true);
+        const response = await api.get('/api/receivables');
+        const receivablesData = response.data || [];
+        
+        // Fetch outstanding orders for each retailer
+        const receivablesWithOrders = await Promise.all(
+          receivablesData.map(async (r: any) => {
+            // Get sales for this retailer with due_amount > 0
+            const salesResponse = await api.get('/api/sales');
+            const allSales = salesResponse.data || [];
+            const outstandingOrders = allSales
+              .filter((sale: any) => 
+                sale.retailer_id === r.retailer_id && 
+                sale.due_amount > 0
+              )
+              .map((sale: any) => ({
+                order_number: sale.order_number || sale.invoice_number,
+                invoice_number: sale.invoice_number,
+                amount: sale.due_amount,
+                date: sale.created_at || sale.order_date,
+                sale_id: sale.id
+              }));
+
+            // Calculate days_overdue from last_payment_date
+            let daysOverdue = 0;
+            if (r.last_payment_date) {
+              const lastPayment = new Date(r.last_payment_date);
+              const today = new Date();
+              const diffTime = today.getTime() - lastPayment.getTime();
+              daysOverdue = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            } else {
+              // If no payment history, use oldest order date
+              if (outstandingOrders.length > 0) {
+                const oldestOrder = outstandingOrders.reduce((oldest: any, order: any) => {
+                  return new Date(order.date) < new Date(oldest.date) ? order : oldest;
+                });
+                const oldestDate = new Date(oldestOrder.date);
+                const today = new Date();
+                const diffTime = today.getTime() - oldestDate.getTime();
+                daysOverdue = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+              }
+            }
+
+            return {
+              id: r.retailer_id,
+              retailer_id: r.retailer_id,
+              retailer_name: r.retailer_name,
+              shop_name: r.shop_name,
+              phone: r.phone,
+              total_due: parseFloat(r.total_due || 0),
+              last_payment_date: r.last_payment_date || null,
+              days_overdue: daysOverdue,
+              orders: outstandingOrders
+            };
+          })
+        );
+
+        setReceivables(receivablesWithOrders);
+      } catch (error) {
+        console.error('[Receivables] Error fetching receivables:', error);
+        alert('Failed to load receivables. Please refresh the page.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchReceivables();
+  }, []);
 
   const getOverdueStatus = (days: number) => {
     if (days <= 7) return { color: 'text-green-600', bg: 'bg-green-100', label: 'Current', key: 'current' };
@@ -125,6 +147,12 @@ export function Receivables() {
       <Header title="Receivables (বাকি হিসাব)" />
 
       <div className="p-3">
+        {loading ? (
+          <div className="bg-white rounded-xl p-8 text-center">
+            <p className="text-slate-500">Loading receivables...</p>
+          </div>
+        ) : (
+          <>
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
           <div className="bg-white rounded-xl p-3 shadow-sm">
@@ -267,6 +295,8 @@ export function Receivables() {
             No receivables found. All accounts are clear!
           </div>
         )}
+          </>
+        )}
       </div>
 
       {/* Receivable Details Modal */}
@@ -294,8 +324,8 @@ export function Receivables() {
                     className="flex items-center justify-between p-2 bg-slate-50 rounded-lg"
                   >
                     <div>
-                      <p className="font-medium text-primary-600">{order.order_number}</p>
-                      <p className="text-sm text-slate-500">{order.date}</p>
+                      <p className="font-medium text-primary-600">{order.invoice_number || order.order_number}</p>
+                      <p className="text-sm text-slate-500">{new Date(order.date).toLocaleDateString('en-BD')}</p>
                     </div>
                     <p className="font-semibold text-slate-900">৳ {order.amount.toLocaleString()}</p>
                   </div>
@@ -338,12 +368,93 @@ export function Receivables() {
 function PaymentModal({ receivable, onClose }: { receivable: Receivable; onClose: () => void }) {
   const [amount, setAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cash');
-  const [reference, setReference] = useState('');
+  const [notes, setNotes] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // If there's only one outstanding order, auto-select it
+  useEffect(() => {
+    if (receivable.orders.length === 1) {
+      setSelectedSaleId(receivable.orders[0].sale_id);
+    }
+  }, [receivable]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    alert(`Payment of ৳${amount} recorded for ${receivable.shop_name}`);
-    onClose();
+    const paymentAmount = parseFloat(amount);
+    
+    if (isNaN(paymentAmount) || paymentAmount <= 0) {
+      alert('Please enter a valid payment amount');
+      return;
+    }
+    
+    if (paymentAmount > receivable.total_due) {
+      alert(`Payment amount cannot exceed due amount of ৳${receivable.total_due.toLocaleString()}`);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // If a specific sale is selected, record payment against that sale
+      if (selectedSaleId) {
+        const sale = receivable.orders.find(o => o.sale_id === selectedSaleId);
+        if (sale) {
+          // Record payment for specific sale
+          const paymentPayload = {
+            retailer_id: receivable.retailer_id,
+            sale_id: selectedSaleId,
+            amount: paymentAmount,
+            payment_method: paymentMethod,
+            notes: notes || undefined
+          };
+          
+          await api.post('/api/payments', paymentPayload);
+          
+          // Update sale paid_amount
+          const saleResponse = await api.get(`/api/sales/${selectedSaleId}`);
+          const currentSale = saleResponse.data;
+          const newPaidAmount = (currentSale.paid_amount || 0) + paymentAmount;
+          await api.put(`/api/sales/${selectedSaleId}`, {
+            paid_amount: newPaidAmount
+          });
+        }
+      } else {
+        // Record general payment (no specific sale)
+        const paymentPayload = {
+          retailer_id: receivable.retailer_id,
+          amount: paymentAmount,
+          payment_method: paymentMethod,
+          notes: notes || undefined
+        };
+        
+        await api.post('/api/payments', paymentPayload);
+      }
+      
+      alert(`Payment of ৳${paymentAmount.toLocaleString()} recorded successfully!`);
+      onClose();
+      // Refresh the page to update receivables
+      window.location.reload();
+    } catch (error: any) {
+      console.error('[PaymentModal] Error recording payment:', error);
+      let errorMessage = 'Failed to record payment';
+      
+      if (error?.response?.data) {
+        const errorData = error.response.data;
+        if (typeof errorData === 'string') {
+          errorMessage = errorData;
+        } else if (errorData.detail) {
+          errorMessage = typeof errorData.detail === 'string' ? errorData.detail : JSON.stringify(errorData.detail);
+        } else if (errorData.message) {
+          errorMessage = typeof errorData.message === 'string' ? errorData.message : JSON.stringify(errorData.message);
+        }
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      alert(`Failed to record payment: ${errorMessage}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -373,6 +484,29 @@ function PaymentModal({ receivable, onClose }: { receivable: Receivable; onClose
             />
           </div>
 
+          {receivable.orders.length > 1 && (
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">
+                Apply to Order (Optional)
+              </label>
+              <select
+                value={selectedSaleId || ''}
+                onChange={(e) => setSelectedSaleId(e.target.value || null)}
+                className="input-field"
+              >
+                <option value="">General Payment (Apply to oldest)</option>
+                {receivable.orders.map((order) => (
+                  <option key={order.sale_id} value={order.sale_id}>
+                    {order.invoice_number} - ৳{order.amount.toLocaleString()}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-slate-500 mt-1">
+                If not selected, payment will be applied to the oldest outstanding order
+              </p>
+            </div>
+          )}
+
           <div>
             <label className="block text-sm font-medium text-slate-700 mb-1">Payment Method</label>
             <select
@@ -387,11 +521,11 @@ function PaymentModal({ receivable, onClose }: { receivable: Receivable; onClose
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Reference (Optional)</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">Notes (Optional)</label>
             <input
               type="text"
-              value={reference}
-              onChange={(e) => setReference(e.target.value)}
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
               className="input-field"
               placeholder="Transaction ID or note"
             />
@@ -401,9 +535,13 @@ function PaymentModal({ receivable, onClose }: { receivable: Receivable; onClose
             <button type="button" onClick={onClose} className="btn-secondary">
               Cancel
             </button>
-            <button type="submit" className="btn-primary flex items-center gap-2">
+            <button 
+              type="submit" 
+              className="btn-primary flex items-center gap-2"
+              disabled={loading}
+            >
               <CheckCircle className="w-4 h-4" />
-              Record Payment
+              {loading ? 'Recording...' : 'Record Payment'}
             </button>
           </div>
         </form>
