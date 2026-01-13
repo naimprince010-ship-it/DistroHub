@@ -21,10 +21,17 @@
     return;
   }
   
-  // Get API base URL from environment or use default
-  const apiBaseUrl = window.location.origin.includes('vercel') 
-    ? 'https://distrohub-backend.onrender.com' // Replace with your actual backend URL
-    : 'http://localhost:8000';
+  // Get API base URL from the frontend's axios instance or use default
+  // Try to get it from window or use the default production URL
+  let apiBaseUrl = 'https://distrohub-backend.onrender.com'; // Default production backend
+  
+  // Try to detect from axios instance if available
+  if (window.axios && window.axios.defaults && window.axios.defaults.baseURL) {
+    apiBaseUrl = window.axios.defaults.baseURL;
+  } else {
+    // Check console logs for API URL (frontend logs it on load)
+    console.log('💡 Tip: Check browser console for "[API] API URL:" to see the actual backend URL');
+  }
   
   console.log('📡 API Base URL:', apiBaseUrl);
   console.log('🔑 Auth Token:', token.substring(0, 20) + '...\n');
