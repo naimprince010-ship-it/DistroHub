@@ -477,8 +477,13 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loadingSuppliers, setLoadingSuppliers] = useState(false);
+  const [batchSuggestions, setBatchSuggestions] = useState<Record<string, string[]>>({});
+  const [showBatchDropdown, setShowBatchDropdown] = useState<Record<string, boolean>>({});
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [addingProductId, setAddingProductId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const batchInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
 
   // Fetch warehouses from API
   useEffect(() => {
@@ -618,7 +623,12 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
         }
         return item;
       }));
+      toast({
+        title: "Quantity Updated",
+        description: `${product.name} quantity increased to ${existingItem.qty + 1}`,
+      });
     } else {
+      setAddingProductId(product.id);
       // Fetch full product details to get latest purchase_price and batches
       let fullProduct = product;
       let productBatches: Array<{ batch_number: string; expiry_date: string }> = [];
@@ -643,6 +653,13 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                 expiry_date: b.expiry_date || ''
               }))
               .filter((b: any) => b.batch_number); // Only batches with batch_number
+            
+            // Store batch suggestions for autocomplete
+            const uniqueBatches = [...new Set(productBatches.map(b => b.batch_number).filter(Boolean))];
+            setBatchSuggestions(prev => ({
+              ...prev,
+              [product.id]: uniqueBatches
+            }));
           }
         } catch (batchError) {
           console.warn('[Purchase] Could not fetch batches:', batchError);
@@ -687,9 +704,23 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
         last_purchase_price: unitPrice, // Store the purchase price used
       };
       setItems([...items, newItem]);
+      
+      toast({
+        title: "Product Added",
+        description: `${product.name} added to purchase list`,
+      });
+      
+      // Auto-focus on batch field after adding product
+      setTimeout(() => {
+        const batchInput = batchInputRefs.current[newItem.id];
+        if (batchInput) {
+          batchInput.focus();
+        }
+      }, 100);
     }
     setSearchTerm('');
     setShowProductDropdown(false);
+    setAddingProductId(null);
   };
 
   const handleBarcodeScan = (barcode: string) => {
@@ -714,7 +745,8 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
           // Ensure proper calculation with numeric values
           const qty = typeof updated.qty === 'number' ? updated.qty : parseFloat(String(updated.qty)) || 0;
           const unitPrice = typeof updated.unit_price === 'number' ? updated.unit_price : parseFloat(String(updated.unit_price)) || 0;
-          updated.sub_total = qty * unitPrice;
+          // Line Total should be 0 if quantity is 0
+          updated.sub_total = qty > 0 ? qty * unitPrice : 0;
         }
         return updated;
       }
@@ -723,7 +755,58 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
   };
 
   const removeItem = (itemId: string) => {
-    setItems(items.filter(item => item.id !== itemId));
+    if (deleteConfirmId === itemId) {
+      setItems(items.filter(item => item.id !== itemId));
+      setDeleteConfirmId(null);
+      toast({
+        title: "Product Removed",
+        description: "Product has been removed from the list",
+      });
+    } else {
+      setDeleteConfirmId(itemId);
+    }
+  };
+
+  // Helper function to format date to DD/MM/YYYY
+  const formatDate = (dateString: string): string => {
+    if (!dateString) return '';
+    try {
+      const date = new Date(dateString);
+      const day = String(date.getDate()).padStart(2, '0');
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}/${month}/${year}`;
+    } catch {
+      return dateString;
+    }
+  };
+
+  // Helper function to check if expiry is within 6 months
+  const isExpiringSoon = (expiryDate: string): boolean => {
+    if (!expiryDate) return false;
+    try {
+      const expiry = new Date(expiryDate);
+      const today = new Date();
+      const sixMonthsFromNow = new Date();
+      sixMonthsFromNow.setMonth(today.getMonth() + 6);
+      return expiry <= sixMonthsFromNow && expiry >= today;
+    } catch {
+      return false;
+    }
+  };
+
+  // Helper function to check if expiry is past
+  const isExpired = (expiryDate: string): boolean => {
+    if (!expiryDate) return false;
+    try {
+      const expiry = new Date(expiryDate);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      expiry.setHours(0, 0, 0, 0);
+      return expiry < today;
+    } catch {
+      return false;
+    }
   };
 
   // Real-time calculation: Recalculate totals whenever items or formData changes
@@ -748,7 +831,8 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
     const updatedItems = items.map(item => {
       const qty = typeof item.qty === 'number' ? item.qty : parseFloat(String(item.qty)) || 0;
       const unitPrice = typeof item.unit_price === 'number' ? item.unit_price : parseFloat(String(item.unit_price)) || 0;
-      const calculatedSubTotal = qty * unitPrice;
+      // Line Total should be 0 if quantity is 0
+      const calculatedSubTotal = qty > 0 ? qty * unitPrice : 0;
       // Only update if sub_total is different to avoid infinite loops
       if (Math.abs(item.sub_total - calculatedSubTotal) > 0.01) {
         return { ...item, sub_total: calculatedSubTotal };
@@ -773,7 +857,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
     }
     
     items.forEach((item, index) => {
-      if (!item.batch) {
+      if (!item.batch || item.batch.trim() === '') {
         newErrors[`batch_${index}`] = 'Batch number is required';
       }
       if (!item.expiry) {
@@ -788,6 +872,8 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
       }
       if (item.qty <= 0) {
         newErrors[`qty_${index}`] = 'Quantity must be greater than 0';
+      } else if (item.current_stock && item.qty > item.current_stock) {
+        newErrors[`qty_${index}`] = `Quantity cannot exceed available stock (${item.current_stock})`;
       }
       if (item.unit_price <= 0) {
         newErrors[`price_${index}`] = 'Price must be greater than 0';
@@ -997,7 +1083,8 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                           key={product.id}
                           type="button"
                           onClick={() => addProductToItems(product)}
-                          className="w-full px-3 py-2 text-left hover:bg-slate-50 flex items-center justify-between border-b border-slate-100 last:border-0"
+                          disabled={addingProductId === product.id}
+                          className="w-full px-3 py-2 text-left hover:bg-slate-50 flex items-center justify-between border-b border-slate-100 last:border-0 disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           <div>
                             <p className="font-medium text-slate-900">{product.name}</p>
@@ -1006,6 +1093,9 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                           <div className="text-right">
                             <p className="text-sm text-slate-600">Stock: <span className="font-medium">{product.stock}</span></p>
                             <p className="text-xs text-slate-500">Last: ৳{product.lastPrice}</p>
+                            {addingProductId === product.id && (
+                              <p className="text-xs text-blue-600 mt-1">Adding...</p>
+                            )}
                           </div>
                         </button>
                       ))
@@ -1037,155 +1127,214 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
           )}
           
           <div className="border border-slate-200 rounded-xl overflow-hidden overflow-x-auto bg-white shadow-sm">
-            <table className="w-full min-w-[1000px]">
+            <table className="w-full min-w-[1200px]">
               <thead className="bg-gradient-to-r from-slate-100 to-slate-50 border-b-2 border-slate-200">
                 <tr>
-                  <th className="text-center px-2 py-2 text-xs font-semibold text-slate-700 w-8">SL</th>
-                  <th className="text-left px-2 py-2 text-xs font-semibold text-slate-700 min-w-[200px]">Product</th>
-                  <th className="text-left px-2 py-2 text-xs font-semibold text-slate-700 w-32">Batch<RequiredMark /></th>
-                  <th className="text-left px-2 py-2 text-xs font-semibold text-slate-700 w-36">
-                    <span className="text-xs">Expiry<RequiredMark /></span>
-                  </th>
-                  <th className="text-right px-2 py-2 text-xs font-semibold text-slate-700 w-24">Quantity<RequiredMark /></th>
-                  <th className="text-right px-2 py-2 text-xs font-semibold text-slate-700 w-28">Unit Price</th>
-                  <th className="text-right px-2 py-2 text-xs font-semibold text-slate-700 w-28">Line Total</th>
-                  <th className="text-center px-2 py-2 text-xs font-semibold text-slate-700 w-12">Action</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold text-slate-700 w-12">SL</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-700 min-w-[220px]">Product</th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-700 min-w-[150px]">Batch<RequiredMark /></th>
+                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-700 min-w-[140px]">Expiry<RequiredMark /></th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-slate-700 min-w-[140px]">Quantity<RequiredMark /></th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-slate-700 min-w-[120px]">Unit Price</th>
+                  <th className="text-right px-4 py-3 text-xs font-semibold text-slate-700 min-w-[120px]">Line Total</th>
+                  <th className="text-center px-4 py-3 text-xs font-semibold text-slate-700 w-16">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-1.5 py-3 text-center text-xs text-slate-500">
+                    <td colSpan={8} className="px-4 py-6 text-center text-sm text-slate-500">
                       No items added. Search and add products above.
                     </td>
                   </tr>
                 ) : (
-                  items.map((item, index) => (
+                  items.map((item, index) => {
+                    const itemBatches = batchSuggestions[item.product_id] || [];
+                    const showBatchDropdownForItem = itemBatches.length > 0 && (showBatchDropdown[item.id] || false);
+                    const expiryWarning = isExpiringSoon(item.expiry);
+                    const expiryError = isExpired(item.expiry);
+                    
+                    return (
                     <tr key={item.id} className={`hover:bg-blue-50/50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
-                      <td className="px-2 py-3 text-center text-sm text-slate-600 font-medium">{index + 1}</td>
-                      <td className="px-2 py-3">
+                      <td className="px-4 py-4 text-center text-sm text-slate-600 font-semibold align-middle">{index + 1}</td>
+                      <td className="px-4 py-4 align-middle">
                         <div>
-                          <p className="font-semibold text-sm text-slate-900 leading-tight">{item.product_name}</p>
-                          <p className="text-xs text-slate-500 leading-tight">{item.sku}</p>
+                          <p className="font-bold text-base text-slate-900 leading-tight mb-1">{item.product_name}</p>
+                          <p className="text-xs text-slate-500 leading-tight mb-1">{item.sku}</p>
                           {item.last_purchase_price > 0 && (
-                            <p className="text-xs text-emerald-600 leading-tight mt-0.5">Last: ৳{item.last_purchase_price}</p>
+                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">
+                              Last: ৳{item.last_purchase_price}
+                            </span>
                           )}
                         </div>
                       </td>
-                      <td className="px-1.5 py-1.5">
-                        <input
-                          type="text"
-                          value={item.batch}
-                          onChange={(e) => updateItem(item.id, 'batch', e.target.value)}
-                          className={`input-field w-full text-sm px-2 py-1.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all ${errors[`batch_${index}`] ? 'border-red-500' : ''}`}
-                          placeholder="BT-XXX"
-                          maxLength={20}
-                        />
+                      <td className="px-4 py-4 align-middle">
+                        <div className="relative">
+                          <input
+                            ref={(el) => { batchInputRefs.current[item.id] = el; }}
+                            type="text"
+                            value={item.batch}
+                            onChange={(e) => {
+                              updateItem(item.id, 'batch', e.target.value);
+                              setShowBatchDropdown(prev => ({ ...prev, [item.id]: true }));
+                            }}
+                            onFocus={() => {
+                              if (itemBatches.length > 0) {
+                                setShowBatchDropdown(prev => ({ ...prev, [item.id]: true }));
+                              }
+                            }}
+                            onBlur={() => {
+                              setTimeout(() => {
+                                setShowBatchDropdown(prev => ({ ...prev, [item.id]: false }));
+                              }, 200);
+                            }}
+                            className={`input-field w-full text-sm px-3 py-2.5 min-w-[150px] focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all ${errors[`batch_${index}`] ? 'border-red-500' : ''}`}
+                            placeholder="Enter or select batch"
+                            maxLength={20}
+                          />
+                          {showBatchDropdownForItem && itemBatches.length > 0 && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto z-20">
+                              {itemBatches
+                                .filter(batch => batch.toLowerCase().includes(item.batch.toLowerCase()))
+                                .map((batch, idx) => (
+                                  <button
+                                    key={idx}
+                                    type="button"
+                                    onClick={() => {
+                                      updateItem(item.id, 'batch', batch);
+                                      setShowBatchDropdown(prev => ({ ...prev, [item.id]: false }));
+                                    }}
+                                    className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0"
+                                  >
+                                    {batch}
+                                  </button>
+                                ))}
+                            </div>
+                          )}
+                        </div>
                         {errors[`batch_${index}`] && (
-                          <p className="text-red-500 text-xs mt-0.5">{errors[`batch_${index}`]}</p>
+                          <p className="text-red-500 text-xs mt-1">{errors[`batch_${index}`]}</p>
                         )}
                       </td>
-                      <td className="px-2 py-2">
+                      <td className="px-4 py-4 align-middle">
                         <div className="relative">
-                          <Calendar className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none z-10" />
+                          <Calendar className={`absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 pointer-events-none z-10 ${expiryError ? 'text-red-500' : expiryWarning ? 'text-orange-500' : 'text-slate-400'}`} />
                           <input
-                            type="text"
+                            type="date"
                             value={item.expiry || ''}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              // Allow manual typing in YYYY-MM-DD format
-                              if (val === '' || /^\d{4}-\d{2}-\d{2}$/.test(val) || /^\d{0,4}-?\d{0,2}-?\d{0,2}$/.test(val)) {
-                                // Auto-format as user types
-                                let formatted = val.replace(/\D/g, '');
-                                if (formatted.length >= 5) {
-                                  formatted = formatted.slice(0, 4) + '-' + formatted.slice(4);
-                                }
-                                if (formatted.length >= 8) {
-                                  formatted = formatted.slice(0, 7) + '-' + formatted.slice(7, 9);
-                                }
-                                if (formatted.length <= 10) {
-                                  updateItem(item.id, 'expiry', formatted);
-                                }
-                              }
-                            }}
-                            onBlur={(e) => {
-                              // Validate date format on blur
-                              const val = e.target.value;
-                              if (val && !/^\d{4}-\d{2}-\d{2}$/.test(val)) {
-                                // Try to parse and format
-                                const date = new Date(val);
-                                if (!isNaN(date.getTime())) {
-                                  updateItem(item.id, 'expiry', date.toISOString().split('T')[0]);
-                                }
-                              }
-                            }}
-                            placeholder="YYYY-MM-DD"
-                            className={`input-field w-full text-sm px-2 py-1.5 pl-8 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all ${errors[`expiry_${index}`] ? 'border-red-500' : ''}`}
-                            maxLength={10}
+                            onChange={(e) => updateItem(item.id, 'expiry', e.target.value)}
+                            className={`input-field w-full text-sm px-3 py-2.5 pl-10 pr-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all ${
+                              errors[`expiry_${index}`] ? 'border-red-500' : 
+                              expiryError ? 'border-red-500 bg-red-50' : 
+                              expiryWarning ? 'border-orange-500 bg-orange-50' : ''
+                            }`}
+                            placeholder="DD/MM/YYYY"
                           />
+                          {item.expiry && (
+                            <p className={`text-xs mt-1 ${expiryError ? 'text-red-600 font-medium' : expiryWarning ? 'text-orange-600' : 'text-slate-500'}`}>
+                              {formatDate(item.expiry)}
+                            </p>
+                          )}
                         </div>
                         {errors[`expiry_${index}`] && (
-                          <p className="text-red-500 text-xs mt-0.5">{errors[`expiry_${index}`]}</p>
+                          <p className="text-red-500 text-xs mt-1">{errors[`expiry_${index}`]}</p>
                         )}
                       </td>
-                      <td className="px-2 py-3">
-                        <div className="flex items-center gap-1">
+                      <td className="px-4 py-4 align-middle">
+                        <div className="flex items-center gap-2">
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
                               const currentQty = typeof item.qty === 'number' ? item.qty : parseInt(String(item.qty), 10) || 0;
-                              if (currentQty > 1) {
-                                updateItem(item.id, 'qty', currentQty - 1);
-                              }
+                              const newQty = Math.max(0, currentQty - 1);
+                              updateItem(item.id, 'qty', newQty === 0 ? 0 : Math.max(1, newQty));
                             }}
-                            className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 hover:border-indigo-500 transition-colors text-slate-600 hover:text-indigo-600"
+                            className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-300 hover:bg-slate-100 hover:border-indigo-500 transition-colors text-slate-600 hover:text-indigo-600 flex-shrink-0"
                             title="Decrease quantity"
                           >
-                            <Minus className="w-3.5 h-3.5" />
+                            <Minus className="w-4 h-4" />
                           </button>
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            value={item.qty || ''}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === '' || /^\d+$/.test(val)) {
-                                updateItem(item.id, 'qty', val === '' ? 0 : parseInt(val, 10) || 0);
-                              }
-                            }}
-                            onBlur={(e) => {
-                              const val = parseInt(e.target.value, 10) || 0;
-                              if (val < 1) {
-                                updateItem(item.id, 'qty', 1);
-                              }
-                            }}
-                            className={`input-field w-full text-sm px-2 py-1.5 text-center focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all ${errors[`qty_${index}`] ? 'border-red-500' : ''}`}
-                            placeholder="0"
-                            maxLength={6}
-                          />
+                          <div className="flex-1">
+                            <input
+                              type="number"
+                              inputMode="numeric"
+                              min="0"
+                              step="1"
+                              value={item.qty === 0 ? '' : item.qty}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (val === '') {
+                                  updateItem(item.id, 'qty', 0);
+                                } else {
+                                  const numVal = parseInt(val, 10);
+                                  if (!isNaN(numVal) && numVal >= 0) {
+                                    const maxQty = item.current_stock || 999999;
+                                    updateItem(item.id, 'qty', Math.min(numVal, maxQty));
+                                  }
+                                }
+                              }}
+                              onBlur={(e) => {
+                                const val = parseInt(e.target.value, 10);
+                                if (isNaN(val) || val < 1) {
+                                  updateItem(item.id, 'qty', 1);
+                                } else {
+                                  const maxQty = item.current_stock || 999999;
+                                  if (val > maxQty) {
+                                    updateItem(item.id, 'qty', maxQty);
+                                    toast({
+                                      title: "Quantity Limited",
+                                      description: `Maximum available stock: ${maxQty}`,
+                                      variant: "destructive",
+                                    });
+                                  }
+                                }
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.currentTarget.blur();
+                                }
+                              }}
+                              className={`input-field w-full text-sm px-3 py-2.5 text-center focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all ${errors[`qty_${index}`] ? 'border-red-500' : ''}`}
+                              placeholder="0"
+                            />
+                            <p className="text-xs text-slate-500 mt-1 text-center">Stock: {item.current_stock || 0}</p>
+                          </div>
                           <button
                             type="button"
-                            onClick={() => {
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
                               const currentQty = typeof item.qty === 'number' ? item.qty : parseInt(String(item.qty), 10) || 0;
-                              updateItem(item.id, 'qty', currentQty + 1);
+                              const maxQty = item.current_stock || 999999;
+                              const newQty = Math.min(currentQty + 1, maxQty);
+                              updateItem(item.id, 'qty', newQty);
+                              if (newQty >= maxQty && currentQty < maxQty) {
+                                toast({
+                                  title: "Maximum Stock Reached",
+                                  description: `Cannot exceed available stock: ${maxQty}`,
+                                  variant: "destructive",
+                                });
+                              }
                             }}
-                            className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 hover:border-indigo-500 transition-colors text-slate-600 hover:text-indigo-600"
+                            className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-300 hover:bg-slate-100 hover:border-indigo-500 transition-colors text-slate-600 hover:text-indigo-600 flex-shrink-0"
                             title="Increase quantity"
                           >
-                            <Plus className="w-3.5 h-3.5" />
+                            <Plus className="w-4 h-4" />
                           </button>
                         </div>
                         {errors[`qty_${index}`] && (
-                          <p className="text-red-500 text-xs mt-0.5">{errors[`qty_${index}`]}</p>
+                          <p className="text-red-500 text-xs mt-1 text-center">{errors[`qty_${index}`]}</p>
                         )}
                       </td>
-                      <td className="px-2 py-3">
+                      <td className="px-4 py-4 align-middle">
                         <div className="relative">
-                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">৳</span>
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium z-10">৳</span>
                           <input
                             type="text"
                             inputMode="decimal"
-                            value={item.unit_price || ''}
+                            value={item.unit_price === 0 ? '' : item.unit_price}
                             onChange={(e) => {
                               const val = e.target.value;
                               if (val === '' || /^\d*\.?\d*$/.test(val)) {
@@ -1198,27 +1347,49 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                                 updateItem(item.id, 'unit_price', 0);
                               }
                             }}
-                            className={`input-field w-full text-sm px-2 py-1.5 text-right pl-7 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:shadow-sm transition-all ${errors[`price_${index}`] ? 'border-red-500' : ''}`}
+                            className={`input-field w-full text-sm px-3 py-2.5 text-right pl-8 pr-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:shadow-sm transition-all ${errors[`price_${index}`] ? 'border-red-500' : ''}`}
                             placeholder="0.00"
                             maxLength={10}
                           />
                         </div>
                       </td>
-                      <td className="px-2 py-3 text-right font-bold text-base text-slate-900">
-                        ৳{item.sub_total.toLocaleString()}
+                      <td className="px-4 py-4 text-right align-middle">
+                        <span className="font-bold text-base text-slate-900">৳{item.sub_total.toLocaleString()}</span>
                       </td>
-                      <td className="px-2 py-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => removeItem(item.id)}
-                          className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all shadow-sm hover:shadow-md"
-                          title="Delete item"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                      <td className="px-4 py-4 text-center align-middle">
+                        {deleteConfirmId === item.id ? (
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => removeItem(item.id)}
+                              className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+                              title="Confirm delete"
+                            >
+                              Yes
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeleteConfirmId(null)}
+                              className="px-2 py-1 text-xs bg-slate-200 text-slate-700 rounded hover:bg-slate-300 transition-colors"
+                              title="Cancel"
+                            >
+                              No
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => removeItem(item.id)}
+                            className="p-2.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all shadow-sm hover:shadow-md"
+                            title="Delete item"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        )}
                       </td>
                     </tr>
-                  ))
+                  );
+                  })
                 )}
               </tbody>
             </table>
@@ -1227,113 +1398,164 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
           {/* Financial Summary */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Discount & Tax */}
-            <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-slate-700 w-20">Discount:</label>
-                <select
-                  value={formData.discount_type}
-                  onChange={(e) => setFormData({ ...formData, discount_type: e.target.value as 'percent' | 'fixed' })}
-                  className="input-field w-24"
-                >
-                  <option value="percent">%</option>
-                  <option value="fixed">৳ Fixed</option>
-                </select>
-                <input
-                  type="number"
-                  value={formData.discount_value || ''}
-                  onChange={(e) => setFormData({ ...formData, discount_value: Number(e.target.value) })}
-                  className="input-field w-24"
-                  min="0"
-                  placeholder="0"
-                />
+            <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-4">
+              <h3 className="text-sm font-semibold text-slate-700 mb-3">Discount & Tax</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Discount</label>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={formData.discount_type}
+                      onChange={(e) => setFormData({ ...formData, discount_type: e.target.value as 'percent' | 'fixed' })}
+                      className="input-field w-28 font-medium"
+                    >
+                      <option value="percent">Percentage (%)</option>
+                      <option value="fixed">Fixed (৳)</option>
+                    </select>
+                    <input
+                      type="number"
+                      value={formData.discount_value || ''}
+                      onChange={(e) => setFormData({ ...formData, discount_value: Number(e.target.value) })}
+                      className="input-field flex-1"
+                      min="0"
+                      placeholder="0"
+                    />
+                  </div>
+                  {discountAmount > 0 && (
+                    <p className="text-xs text-emerald-600 mt-1 font-medium">
+                      Discount Amount: ৳{discountAmount.toLocaleString()}
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Tax (%)</label>
+                  <input
+                    type="number"
+                    value={formData.tax_percent || ''}
+                    onChange={(e) => setFormData({ ...formData, tax_percent: Number(e.target.value) })}
+                    className="input-field w-full"
+                    min="0"
+                    max="100"
+                    placeholder="0"
+                  />
+                  {taxAmount > 0 && (
+                    <p className="text-xs text-slate-600 mt-1">
+                      Tax Amount: ৳{taxAmount.toLocaleString()}
+                    </p>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <label className="text-sm font-medium text-slate-700 w-20">Tax (%):</label>
-                <input
-                  type="number"
-                  value={formData.tax_percent || ''}
-                  onChange={(e) => setFormData({ ...formData, tax_percent: Number(e.target.value) })}
-                  className="input-field w-24"
-                  min="0"
-                  max="100"
-                  placeholder="0"
-                />
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center gap-2">
-                  <label className="text-sm font-medium text-slate-700 w-20">Paid (৳):</label>
+            </div>
+
+            {/* Payment Section */}
+            <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-4">
+              <h3 className="text-sm font-semibold text-slate-700 mb-3">Payment</h3>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Paid Amount (৳)</label>
                   <input
                     type="number"
                     value={formData.paid_amount || ''}
                     onChange={(e) => setFormData({ ...formData, paid_amount: Number(e.target.value) })}
-                    className="input-field w-32 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                    className="input-field w-full text-lg font-semibold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                     min="0"
                     placeholder="0"
                   />
                 </div>
                 {/* Quick Payment Buttons */}
-                <div className="flex items-center gap-2 pl-24">
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, paid_amount: 5000 })}
-                    className="px-2 py-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded transition-colors"
-                  >
-                    ৫,০০০
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, paid_amount: 10000 })}
-                    className="px-2 py-1 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded transition-colors"
-                  >
-                    ১০,০০০
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFormData({ ...formData, paid_amount: grandTotal })}
-                    className="px-2 py-1 text-xs bg-emerald-100 hover:bg-emerald-200 text-emerald-700 rounded transition-colors font-medium shadow-sm"
-                  >
-                    Full Paid
-                  </button>
+                <div>
+                  <label className="block text-xs text-slate-500 mb-2">Quick Amount</label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, paid_amount: 100 })}
+                      className="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors font-medium"
+                    >
+                      ৳100
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, paid_amount: 500 })}
+                      className="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors font-medium"
+                    >
+                      ৳500
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, paid_amount: 1000 })}
+                      className="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors font-medium"
+                    >
+                      ৳1,000
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, paid_amount: 5000 })}
+                      className="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors font-medium"
+                    >
+                      ৳5,000
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, paid_amount: 10000 })}
+                      className="px-3 py-1.5 text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg transition-colors font-medium"
+                    >
+                      ৳10,000
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, paid_amount: grandTotal })}
+                      className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors font-semibold shadow-md"
+                    >
+                      Full Paid
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Totals - Sticky Card */}
-            <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 border-2 border-blue-300 rounded-xl p-5 space-y-3 shadow-md sticky top-4">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-700 font-medium">Subtotal</span>
-                <span className="font-semibold text-right text-slate-900">৳ {subTotal.toLocaleString()}</span>
-              </div>
-              {discountAmount > 0 && (
-                <div className="flex justify-between text-sm text-emerald-600">
-                  <span className="font-medium">Discount ({formData.discount_type === 'percent' ? `${formData.discount_value}%` : 'Fixed'})</span>
-                  <span className="text-right font-semibold">- ৳ {discountAmount.toLocaleString()}</span>
+            <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 border-2 border-blue-300 rounded-xl p-6 space-y-4 shadow-md sticky top-4 lg:col-span-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-700 font-medium">Subtotal</span>
+                    <span className="font-semibold text-right text-slate-900">৳ {subTotal.toLocaleString()}</span>
+                  </div>
+                  {discountAmount > 0 && (
+                    <div className="flex justify-between text-sm text-emerald-600">
+                      <span className="font-medium">Discount ({formData.discount_type === 'percent' ? `${formData.discount_value}%` : 'Fixed'})</span>
+                      <span className="text-right font-semibold">- ৳ {discountAmount.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {taxAmount > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-700 font-medium">Tax ({formData.tax_percent}%)</span>
+                      <span className="text-right font-semibold text-slate-900">+ ৳ {taxAmount.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-xl font-bold border-t-2 border-blue-400 pt-3 mt-2">
+                    <span className="text-slate-900">Grand Total</span>
+                    <span className="text-indigo-700 text-right">৳ {grandTotal.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between text-base pt-2">
+                    <span className="text-slate-700 font-semibold">Paid</span>
+                    <span className="text-emerald-600 font-bold text-right">৳ {formData.paid_amount.toLocaleString()}</span>
+                  </div>
                 </div>
-              )}
-              {taxAmount > 0 && (
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-700 font-medium">Tax ({formData.tax_percent}%)</span>
-                  <span className="text-right font-semibold text-slate-900">+ ৳ {taxAmount.toLocaleString()}</span>
+                <div className="flex flex-col justify-center items-center bg-white rounded-lg p-6 border-2 border-red-300 shadow-sm">
+                  <span className="text-sm font-medium text-slate-600 mb-2 uppercase tracking-wide">Due Amount</span>
+                  <span className={`text-4xl font-bold ${dueAmount > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
+                    ৳{dueAmount.toLocaleString()}
+                  </span>
+                  {dueAmount === 0 && (
+                    <span className="text-xs text-emerald-600 mt-2 font-medium">✓ Fully Paid</span>
+                  )}
                 </div>
-              )}
-              <div className="flex justify-between text-2xl font-bold border-t-2 border-blue-400 pt-4 mt-2">
-                <span className="text-slate-900">Grand Total</span>
-                <span className="text-indigo-700 text-right">৳ {grandTotal.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-base pt-2">
-                <span className="text-slate-700 font-semibold">Paid</span>
-                <span className="text-emerald-600 font-bold text-right">৳ {formData.paid_amount.toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between text-base font-bold pt-1">
-                <span className="text-red-700">Due</span>
-                <span className={`text-right font-bold ${dueAmount > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
-                  ৳ {dueAmount.toLocaleString()}
-                </span>
               </div>
               <button 
                 type="submit" 
                 disabled={items.length === 0 || !formData.warehouse_id}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-semibold px-4 py-3 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg mt-4"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-semibold px-4 py-3 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg mt-2"
               >
                 Save Purchase
               </button>
