@@ -299,6 +299,135 @@ async def register(user_data: UserCreate):
         )
     )
 
+@app.get("/api/auth/google")
+async def google_login():
+    """
+    Initiate Google OAuth login flow.
+    Redirects user to Google OAuth consent screen.
+    """
+    from urllib.parse import urlencode
+    from fastapi.responses import RedirectResponse
+    
+    google_client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    if not google_client_id:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Google OAuth not configured. Please set GOOGLE_CLIENT_ID environment variable."
+        )
+    
+    # Get redirect URI from environment or use default
+    redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI", "https://distrohub-backend.onrender.com/api/auth/google/callback")
+    
+    # Google OAuth parameters
+    params = {
+        "client_id": google_client_id,
+        "redirect_uri": redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+        "prompt": "consent"
+    }
+    
+    google_auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
+    return RedirectResponse(url=google_auth_url)
+
+@app.get("/api/auth/google/callback")
+async def google_callback(code: str = None, error: str = None):
+    """
+    Handle Google OAuth callback.
+    Exchanges authorization code for user info and creates/updates user.
+    """
+    import httpx
+    from fastapi.responses import RedirectResponse
+    
+    frontend_url = os.environ.get("FRONTEND_URL", "https://distrohub-frontend.vercel.app")
+    
+    if error:
+        return RedirectResponse(url=f"{frontend_url}/login?error={error}")
+    
+    if not code:
+        return RedirectResponse(url=f"{frontend_url}/login?error=no_code")
+    
+    google_client_id = os.environ.get("GOOGLE_CLIENT_ID")
+    google_client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
+    redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI", "https://distrohub-backend.onrender.com/api/auth/google/callback")
+    
+    if not google_client_id or not google_client_secret:
+        return RedirectResponse(url=f"{frontend_url}/login?error=oauth_not_configured")
+    
+    try:
+        # Exchange authorization code for access token
+        async with httpx.AsyncClient() as client:
+            token_response = await client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "code": code,
+                    "client_id": google_client_id,
+                    "client_secret": google_client_secret,
+                    "redirect_uri": redirect_uri,
+                    "grant_type": "authorization_code"
+                }
+            )
+            
+            if token_response.status_code != 200:
+                print(f"[GOOGLE OAUTH] Token exchange failed: {token_response.text}")
+                return RedirectResponse(url=f"{frontend_url}/login?error=token_exchange_failed")
+            
+            token_data = token_response.json()
+            access_token = token_data.get("access_token")
+            
+            if not access_token:
+                return RedirectResponse(url=f"{frontend_url}/login?error=no_access_token")
+            
+            # Get user info from Google
+            user_info_response = await client.get(
+                "https://www.googleapis.com/oauth2/v2/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"}
+            )
+            
+            if user_info_response.status_code != 200:
+                print(f"[GOOGLE OAUTH] User info fetch failed: {user_info_response.text}")
+                return RedirectResponse(url=f"{frontend_url}/login?error=user_info_failed")
+            
+            user_info = user_info_response.json()
+            google_email = user_info.get("email")
+            google_name = user_info.get("name", "User")
+            
+            if not google_email:
+                return RedirectResponse(url=f"{frontend_url}/login?error=no_email")
+            
+            # Check if user exists, if not create one
+            user = db.get_user_by_email(google_email)
+            if not user:
+                # Create new user with Google email
+                # Use a random password since Google OAuth users don't need password
+                import secrets
+                random_password = secrets.token_urlsafe(32)
+                user = db.create_user(
+                    email=google_email,
+                    name=google_name,
+                    password=random_password,  # Random password, won't be used
+                    role=UserRole.SALES_REP,
+                    phone=None
+                )
+                print(f"[GOOGLE OAUTH] Created new user: {google_email}")
+            else:
+                print(f"[GOOGLE OAUTH] Existing user logged in: {google_email}")
+            
+            # Generate JWT token
+            jwt_token = create_access_token(data={"sub": user["id"]})
+            
+            # Redirect to frontend with token
+            return RedirectResponse(
+                url=f"{frontend_url}/login?token={jwt_token}&email={google_email}&name={google_name}"
+            )
+            
+    except Exception as e:
+        print(f"[GOOGLE OAUTH] Error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return RedirectResponse(url=f"{frontend_url}/login?error=oauth_error")
+
 @app.get("/api/users", response_model=List[User])
 async def get_users(current_user: dict = Depends(get_current_user)):
     """Get all users (admin only or for SR selection)"""
