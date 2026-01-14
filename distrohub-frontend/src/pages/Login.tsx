@@ -11,6 +11,35 @@ export function Login() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Handle Google OAuth callback
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    const emailParam = urlParams.get('email');
+    const nameParam = urlParams.get('name');
+    const errorParam = urlParams.get('error');
+
+    if (errorParam) {
+      setError(`Google login failed: ${errorParam}`);
+      // Clean URL
+      window.history.replaceState({}, '', '/login');
+      return;
+    }
+
+    if (token && emailParam) {
+      // Google OAuth success
+      localStorage.setItem('token', token);
+      localStorage.setItem('user', JSON.stringify({
+        email: emailParam,
+        name: nameParam || 'User',
+        id: '', // Will be fetched from /api/auth/me
+      }));
+      // Clean URL
+      window.history.replaceState({}, '', '/login');
+      navigate('/');
+    }
+  }, [navigate]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
