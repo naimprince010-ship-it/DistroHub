@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Auto Generate PWA Icons</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 50px;
+            background: #f5f5f5;
+        }
+        .status {
+            font-size: 18px;
+            margin: 20px 0;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .success {
+            color: #10b981;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎨 DistroHub PWA Icons</h1>
+    <div id="status" class="status">Generating icons...</div>
+    
+    <canvas id="canvas192" width="192" height="192" style="display:none;"></canvas>
+    <canvas id="canvas512" width="512" height="512" style="display:none;"></canvas>
+    
+    <script>
+        function drawDistroHubIcon(canvas, size) {
+            const ctx = canvas.getContext('2d');
+            const centerX = size / 2;
+            const centerY = size / 2;
+            const iconSize = size * 0.5;
+            
+            // Clear
+            ctx.clearRect(0, 0, size, size);
+            
+            // Background with rounded corners
+            ctx.fillStyle = '#4F46E5';
+            ctx.beginPath();
+            const radius = size * 0.15;
+            ctx.moveTo(radius, 0);
+            ctx.lineTo(size - radius, 0);
+            ctx.quadraticCurveTo(size, 0, size, radius);
+            ctx.lineTo(size, size - radius);
+            ctx.quadraticCurveTo(size, size, size - radius, size);
+            ctx.lineTo(radius, size);
+            ctx.quadraticCurveTo(0, size, 0, size - radius);
+            ctx.lineTo(0, radius);
+            ctx.quadraticCurveTo(0, 0, radius, 0);
+            ctx.closePath();
+            ctx.fill();
+            
+            // 3D Cube
+            const cubeSize = iconSize * 0.6;
+            const offsetX = centerX - cubeSize / 2;
+            const offsetY = centerY - cubeSize / 2 - size * 0.05;
+            
+            // Front face
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+            ctx.beginPath();
+            ctx.moveTo(offsetX, offsetY);
+            ctx.lineTo(offsetX + cubeSize * 0.6, offsetY + cubeSize * 0.3);
+            ctx.lineTo(offsetX + cubeSize * 0.6, offsetY + cubeSize * 0.9);
+            ctx.lineTo(offsetX, offsetY + cubeSize * 0.6);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Top face
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+            ctx.beginPath();
+            ctx.moveTo(offsetX, offsetY);
+            ctx.lineTo(offsetX + cubeSize * 0.6, offsetY + cubeSize * 0.3);
+            ctx.lineTo(offsetX + cubeSize, offsetY);
+            ctx.lineTo(offsetX + cubeSize * 0.4, offsetY - cubeSize * 0.3);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Right face
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.beginPath();
+            ctx.moveTo(offsetX + cubeSize * 0.6, offsetY + cubeSize * 0.3);
+            ctx.lineTo(offsetX + cubeSize, offsetY);
+            ctx.lineTo(offsetX + cubeSize, offsetY + cubeSize * 0.6);
+            ctx.lineTo(offsetX + cubeSize * 0.6, offsetY + cubeSize * 0.9);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Text
+            if (size >= 192) {
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = `bold ${size * 0.18}px Arial, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('DH', centerX, centerY + iconSize * 0.4);
+            }
+        }
+        
+        function downloadCanvas(canvas, filename) {
+            return new Promise((resolve) => {
+                canvas.toBlob(function(blob) {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    resolve();
+                }, 'image/png');
+            });
+        }
+        
+        async function generateIcons() {
+            const statusDiv = document.getElementById('status');
+            const canvas192 = document.getElementById('canvas192');
+            const canvas512 = document.getElementById('canvas512');
+            
+            try {
+                statusDiv.innerHTML = '🎨 Drawing icons...';
+                
+                // Draw icons
+                drawDistroHubIcon(canvas192, 192);
+                drawDistroHubIcon(canvas512, 512);
+                
+                statusDiv.innerHTML = '📥 Downloading pwa-192x192.png...';
+                await downloadCanvas(canvas192, 'pwa-192x192.png');
+                
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                statusDiv.innerHTML = '📥 Downloading pwa-512x512.png...';
+                await downloadCanvas(canvas512, 'pwa-512x512.png');
+                
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                statusDiv.innerHTML = '<div class="success">✅ Icons generated successfully!<br><br>📁 Files downloaded:<br>• pwa-192x192.png<br>• pwa-512x512.png<br><br>👉 Move these files to:<br><code>distrohub-frontend/public/</code><br><br>Then run: <code>npm run build</code></div>';
+                
+            } catch (error) {
+                statusDiv.innerHTML = '❌ Error: ' + error.message;
+            }
+        }
+        
+        // Auto-generate on load
+        window.onload = function() {
+            setTimeout(generateIcons, 500);
+        };
+    </script>
+</body>
+</html>
