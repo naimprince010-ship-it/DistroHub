@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import {
   Plus,
-  Search,
   Eye,
   Package,
   Calendar,
@@ -878,7 +877,6 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
             </label>
             <div className="flex gap-2">
               <div className="relative flex-1" ref={dropdownRef}>
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input
                   ref={searchInputRef}
                   type="text"
@@ -889,7 +887,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                   }}
                   onFocus={() => setShowProductDropdown(true)}
                   onKeyDown={handleKeyDown}
-                  className="input-field w-full pl-10 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
+                  className="input-field w-full pl-4 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
                   placeholder="Type product name, SKU, or scan barcode..."
                 />
                 {showProductDropdown && searchTerm && (
