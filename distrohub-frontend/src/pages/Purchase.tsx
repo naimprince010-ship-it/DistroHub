@@ -479,6 +479,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
   const [loadingSuppliers, setLoadingSuppliers] = useState(false);
   const [batchSuggestions, setBatchSuggestions] = useState<Record<string, string[]>>({});
   const [showBatchDropdown, setShowBatchDropdown] = useState<Record<string, boolean>>({});
+  const [focusedExpiryId, setFocusedExpiryId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [addingProductId, setAddingProductId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -1223,6 +1224,8 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                             type="date"
                             value={item.expiry || ''}
                             onChange={(e) => updateItem(item.id, 'expiry', e.target.value)}
+                            onFocus={() => setFocusedExpiryId(item.id)}
+                            onBlur={() => setFocusedExpiryId(null)}
                             className={`input-field w-full text-sm px-3 py-2.5 pl-10 pr-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all ${
                               errors[`expiry_${index}`] ? 'border-red-500' : 
                               expiryError ? 'border-red-500 bg-red-50' : 
@@ -1230,12 +1233,12 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                             }`}
                             placeholder="DD/MM/YYYY"
                           />
-                          {item.expiry && (
-                            <p className={`text-xs mt-1 ${expiryError ? 'text-red-600 font-medium' : expiryWarning ? 'text-orange-600' : 'text-slate-500'}`}>
-                              {formatDate(item.expiry)}
-                            </p>
-                          )}
                         </div>
+                        {item.expiry && focusedExpiryId !== item.id && (
+                          <p className={`text-xs mt-1.5 ${expiryError ? 'text-red-600 font-medium' : expiryWarning ? 'text-orange-600' : 'text-slate-500'}`}>
+                            {formatDate(item.expiry)}
+                          </p>
+                        )}
                         {errors[`expiry_${index}`] && (
                           <p className="text-red-500 text-xs mt-1">{errors[`expiry_${index}`]}</p>
                         )}
