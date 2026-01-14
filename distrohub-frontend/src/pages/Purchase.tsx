@@ -1127,34 +1127,24 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
             </div>
           )}
           
-          <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm">
-            <table className="w-full table-auto">
-              <colgroup>
-                <col className="w-[50px]" />
-                <col className="w-[35%]" />
-                <col className="w-[150px]" />
-                <col className="w-[140px]" />
-                <col className="w-[130px]" />
-                <col className="w-[120px]" />
-                <col className="w-[120px]" />
-                <col className="w-[60px]" />
-              </colgroup>
+          <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm w-full">
+            <table className="w-full" style={{ tableLayout: 'auto' }}>
               <thead className="bg-gradient-to-r from-slate-100 to-slate-50 border-b-2 border-slate-200">
                 <tr>
-                  <th className="text-center px-3 py-3 text-xs font-semibold text-slate-700">SL</th>
-                  <th className="text-left px-4 py-3 text-xs font-semibold text-slate-700">Product</th>
-                  <th className="text-left px-3 py-3 text-xs font-semibold text-slate-700">Batch<RequiredMark /></th>
-                  <th className="text-left px-3 py-3 text-xs font-semibold text-slate-700">Expiry<RequiredMark /></th>
-                  <th className="text-right px-3 py-3 text-xs font-semibold text-slate-700">Quantity<RequiredMark /></th>
-                  <th className="text-right px-3 py-3 text-xs font-semibold text-slate-700">Unit Price</th>
-                  <th className="text-right px-3 py-3 text-xs font-semibold text-slate-700">Line Total</th>
-                  <th className="text-center px-2 py-3 text-xs font-semibold text-slate-700">Action</th>
+                  <th className="text-center px-2 py-2 text-xs font-semibold text-slate-700">SL</th>
+                  <th className="text-left px-2 py-2 text-xs font-semibold text-slate-700">Product</th>
+                  <th className="text-left px-2 py-2 text-xs font-semibold text-slate-700">Batch<RequiredMark /></th>
+                  <th className="text-left px-2 py-2 text-xs font-semibold text-slate-700">Expiry<RequiredMark /></th>
+                  <th className="text-right px-2 py-2 text-xs font-semibold text-slate-700">Quantity<RequiredMark /></th>
+                  <th className="text-right px-2 py-2 text-xs font-semibold text-slate-700">Unit Price</th>
+                  <th className="text-right px-2 py-2 text-xs font-semibold text-slate-700">Line Total</th>
+                  <th className="text-center px-2 py-2 text-xs font-semibold text-slate-700">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {items.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-6 text-center text-sm text-slate-500">
+                    <td colSpan={8} className="px-2 py-6 text-center text-sm text-slate-500">
                       No items added. Search and add products above.
                     </td>
                   </tr>
@@ -1167,21 +1157,19 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                     
                     return (
                     <tr key={item.id} className={`hover:bg-blue-50/50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
-                      <td className="px-3 py-4 text-center text-sm text-slate-600 font-semibold align-middle">{index + 1}</td>
-                      <td className="px-4 py-4 align-middle">
-                        <div className="flex items-center gap-2">
-                          <div className="flex-1 min-w-0">
-                            <p className="font-bold text-sm text-slate-900 leading-tight truncate">{item.product_name}</p>
-                            <p className="text-xs text-slate-500 leading-tight mt-0.5">{item.sku}</p>
-                          </div>
+                      <td className="px-2 py-3 text-center text-sm text-slate-600 font-semibold align-middle">{index + 1}</td>
+                      <td className="px-2 py-3 align-middle">
+                        <div className="space-y-1">
+                          <p className="font-bold text-sm text-slate-900 leading-tight">{item.product_name}</p>
+                          <p className="text-xs text-slate-500 leading-tight">{item.sku}</p>
                           {item.last_purchase_price > 0 && (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700 whitespace-nowrap flex-shrink-0">
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-emerald-100 text-emerald-700">
                               Last: ৳{item.last_purchase_price}
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-4 align-middle">
+                      <td className="px-2 py-3 align-middle">
                         <div className="relative">
                           <input
                             ref={(el) => { batchInputRefs.current[item.id] = el; }}
@@ -1201,7 +1189,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                                 setShowBatchDropdown(prev => ({ ...prev, [item.id]: false }));
                               }, 200);
                             }}
-                            className={`w-full text-sm border border-slate-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white ${errors[`batch_${index}`] ? 'border-red-500' : 'hover:border-slate-400'}`}
+                            className={`w-full max-w-[120px] text-sm border border-slate-300 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white ${errors[`batch_${index}`] ? 'border-red-500' : 'hover:border-slate-400'}`}
                             placeholder="Enter or select"
                             maxLength={20}
                           />
@@ -1226,19 +1214,19 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                           )}
                         </div>
                         {errors[`batch_${index}`] && (
-                          <p className="text-red-500 text-xs mt-1.5">{errors[`batch_${index}`]}</p>
+                          <p className="text-red-500 text-xs mt-1">{errors[`batch_${index}`]}</p>
                         )}
                       </td>
-                      <td className="px-3 py-4 align-middle">
+                      <td className="px-2 py-3 align-middle">
                         <div className="relative">
-                          <Calendar className={`absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none z-10 ${expiryError ? 'text-red-500' : expiryWarning ? 'text-orange-500' : 'text-slate-400'}`} />
+                          <Calendar className={`absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none z-10 ${expiryError ? 'text-red-500' : expiryWarning ? 'text-orange-500' : 'text-slate-400'}`} />
                           <input
                             type="date"
                             value={item.expiry || ''}
                             onChange={(e) => updateItem(item.id, 'expiry', e.target.value)}
                             onFocus={() => setFocusedExpiryId(item.id)}
                             onBlur={() => setFocusedExpiryId(null)}
-                            className={`w-full text-sm border border-slate-300 rounded-lg px-3 py-2 pl-9 pr-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white ${
+                            className={`w-full max-w-[110px] text-sm border border-slate-300 rounded-lg px-2 py-1.5 pl-7 pr-1.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white ${
                               errors[`expiry_${index}`] ? 'border-red-500' : 
                               expiryError ? 'border-red-500 bg-red-50' : 
                               expiryWarning ? 'border-orange-500 bg-orange-50' : 'hover:border-slate-400'
@@ -1247,7 +1235,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                           />
                         </div>
                         {item.expiry && focusedExpiryId !== item.id && (
-                          <p className={`text-xs mt-1.5 ${expiryError ? 'text-red-600 font-medium' : expiryWarning ? 'text-orange-600' : 'text-slate-500'}`}>
+                          <p className={`text-xs mt-1 ${expiryError ? 'text-red-600 font-medium' : expiryWarning ? 'text-orange-600' : 'text-slate-500'}`}>
                             {formatDate(item.expiry)}
                           </p>
                         )}
@@ -1255,8 +1243,8 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                           <p className="text-red-500 text-xs mt-1">{errors[`expiry_${index}`]}</p>
                         )}
                       </td>
-                      <td className="px-3 py-4 align-middle">
-                        <div className="flex items-center gap-1.5 justify-end">
+                      <td className="px-2 py-3 align-middle">
+                        <div className="flex items-center gap-1 justify-end">
                           <button
                             type="button"
                             onClick={(e) => {
@@ -1266,12 +1254,12 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                               const newQty = Math.max(0, currentQty - 1);
                               updateItem(item.id, 'qty', newQty === 0 ? 0 : Math.max(1, newQty));
                             }}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-300 hover:bg-slate-100 hover:border-indigo-500 transition-colors text-slate-600 hover:text-indigo-600 flex-shrink-0"
+                            className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-300 hover:bg-slate-100 hover:border-indigo-500 transition-colors text-slate-600 hover:text-indigo-600 flex-shrink-0"
                             title="Decrease quantity"
                           >
-                            <Minus className="w-3.5 h-3.5" />
+                            <Minus className="w-3 h-3" />
                           </button>
-                          <div className="w-16">
+                          <div className="w-14">
                             <input
                               type="number"
                               inputMode="numeric"
@@ -1311,7 +1299,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                                   e.currentTarget.blur();
                                 }
                               }}
-                              className={`w-full text-sm border border-slate-300 rounded-lg px-2 py-2 text-center focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white hover:border-slate-400 ${errors[`qty_${index}`] ? 'border-red-500' : ''}`}
+                              className={`w-full max-w-[50px] text-sm border border-slate-300 rounded-lg px-1.5 py-1.5 text-center focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white hover:border-slate-400 ${errors[`qty_${index}`] ? 'border-red-500' : ''}`}
                               placeholder="0"
                             />
                           </div>
@@ -1332,10 +1320,10 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                                 });
                               }
                             }}
-                            className="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-300 hover:bg-slate-100 hover:border-indigo-500 transition-colors text-slate-600 hover:text-indigo-600 flex-shrink-0"
+                            className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-300 hover:bg-slate-100 hover:border-indigo-500 transition-colors text-slate-600 hover:text-indigo-600 flex-shrink-0"
                             title="Increase quantity"
                           >
-                            <Plus className="w-3.5 h-3.5" />
+                            <Plus className="w-3 h-3" />
                           </button>
                         </div>
                         <p className="text-xs text-slate-500 mt-1 text-center">Stock: {item.current_stock || 0}</p>
@@ -1343,9 +1331,9 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                           <p className="text-red-500 text-xs mt-1 text-center">{errors[`qty_${index}`]}</p>
                         )}
                       </td>
-                      <td className="px-3 py-4 align-middle">
+                      <td className="px-2 py-3 align-middle">
                         <div className="relative">
-                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium z-10">৳</span>
+                          <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-xs font-medium z-10">৳</span>
                           <input
                             type="text"
                             inputMode="decimal"
@@ -1362,16 +1350,16 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                                 updateItem(item.id, 'unit_price', 0);
                               }
                             }}
-                            className={`w-full text-sm border border-slate-300 rounded-lg px-3 py-2 text-right pl-7 pr-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white hover:border-slate-400 ${errors[`price_${index}`] ? 'border-red-500' : ''}`}
+                            className={`w-full text-sm border border-slate-300 rounded-lg px-2 py-1.5 text-right pl-6 pr-1.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white hover:border-slate-400 ${errors[`price_${index}`] ? 'border-red-500' : ''}`}
                             placeholder="0.00"
                             maxLength={10}
                           />
                         </div>
                       </td>
-                      <td className="px-3 py-4 text-right align-middle">
+                      <td className="px-2 py-3 text-right align-middle">
                         <span className="font-bold text-sm text-slate-900">৳{item.sub_total.toLocaleString()}</span>
                       </td>
-                      <td className="px-2 py-4 text-center align-middle">
+                      <td className="px-2 py-3 text-center align-middle">
                         {deleteConfirmId === item.id ? (
                           <div className="flex items-center gap-1">
                             <button
