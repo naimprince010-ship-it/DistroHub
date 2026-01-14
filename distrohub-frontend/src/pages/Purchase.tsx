@@ -20,16 +20,26 @@ import { BarcodeScanButton } from '@/components/BarcodeScanner';
 import { useToast } from '@/hooks/use-toast';
 import api from '@/lib/api';
 
+interface BatchInfo {
+  id: string;
+  batch_number: string;
+  expiry_date: string;
+  quantity: number; // available stock
+  purchase_price: number;
+}
+
 interface PurchaseItem {
   id: string;
   product_id: string;
   product_name: string;
   sku: string;
+  batch_id: string | null;
   batch: string;
   expiry: string;
   qty: number;
   unit_price: number;
   sub_total: number;
+  batch_stock: number; // stock for selected batch
   current_stock: number;
   last_purchase_price: number;
 }
@@ -429,6 +439,8 @@ export function Purchase() {
                   expiry_date: item.expiry,
                   quantity: item.qty,
                   unit_price: item.unit_price,
+                  // Include batch_id if available for server-side validation
+                  batch_id: (item as any).batch_id || null,
                 })),
                 notes: `Warehouse: ${purchase.warehouse}, Supplier Invoice: ${purchase.supplier_invoice}`,
               };
@@ -477,14 +489,15 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loadingSuppliers, setLoadingSuppliers] = useState(false);
-  const [batchSuggestions, setBatchSuggestions] = useState<Record<string, string[]>>({});
+  const [productBatches, setProductBatches] = useState<Record<string, BatchInfo[]>>({});
+  const [batchSearchTerms, setBatchSearchTerms] = useState<Record<string, string>>({});
   const [showBatchDropdown, setShowBatchDropdown] = useState<Record<string, boolean>>({});
-  const [focusedExpiryId, setFocusedExpiryId] = useState<string | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [showDeleteModal, setShowDeleteModal] = useState<{ itemId: string; productName: string } | null>(null);
   const [addingProductId, setAddingProductId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const batchInputRefs = useRef<Record<string, HTMLInputElement | null>>({});
+  const batchDropdownRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   // Fetch warehouses from API
   useEffect(() => {
@@ -601,6 +614,13 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowProductDropdown(false);
       }
+      // Close batch dropdowns when clicking outside
+      Object.keys(batchDropdownRefs.current).forEach(itemId => {
+        const ref = batchDropdownRefs.current[itemId];
+        if (ref && !ref.contains(event.target as Node)) {
+          setShowBatchDropdown(prev => ({ ...prev, [itemId]: false }));
+        }
+      });
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -612,116 +632,77 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
     p.barcode.includes(searchTerm)
   );
 
-  const addProductToItems = async (product: ProductCatalogItem) => {
-    const existingItem = items.find(item => item.product_id === product.id);
-    if (existingItem) {
-      // If product already exists, just increment quantity
-      setItems(items.map(item => {
-        if (item.product_id === product.id) {
-          const newQty = item.qty + 1;
-          const newSubTotal = newQty * item.unit_price;
-          return { ...item, qty: newQty, sub_total: newSubTotal };
-        }
-        return item;
-      }));
-      toast({
-        title: "Quantity Updated",
-        description: `${product.name} quantity increased to ${existingItem.qty + 1}`,
-      });
-    } else {
-      setAddingProductId(product.id);
-      // Fetch full product details to get latest purchase_price and batches
-      let fullProduct = product;
-      let productBatches: Array<{ batch_number: string; expiry_date: string }> = [];
-      
-      try {
-        // Fetch product details
-        const productResponse = await api.get(`/api/products/${product.id}`);
-        if (productResponse.data) {
-          fullProduct = {
-            ...product,
-            purchase_price: productResponse.data.purchase_price || product.lastPrice,
-          };
-        }
-        
-        // Fetch product batches
-        try {
-          const batchesResponse = await api.get(`/api/products/${product.id}/batches`);
-          if (batchesResponse.data && Array.isArray(batchesResponse.data)) {
-            productBatches = batchesResponse.data
-              .map((b: any) => ({
-                batch_number: b.batch_number || '',
-                expiry_date: b.expiry_date || ''
-              }))
-              .filter((b: any) => b.batch_number); // Only batches with batch_number
-            
-            // Store batch suggestions for autocomplete
-            const uniqueBatches = [...new Set(productBatches.map(b => b.batch_number).filter(Boolean))];
-            setBatchSuggestions(prev => ({
-              ...prev,
-              [product.id]: uniqueBatches
-            }));
-          }
-        } catch (batchError) {
-          console.warn('[Purchase] Could not fetch batches:', batchError);
-          // Continue without batches
-        }
-      } catch (error) {
-        console.error('[Purchase] Error fetching product details:', error);
-        // Continue with existing product data
+  // Fetch batches for a product
+  const fetchProductBatches = async (productId: string): Promise<BatchInfo[]> => {
+    try {
+      const batchesResponse = await api.get(`/api/products/${productId}/batches`);
+      if (batchesResponse.data && Array.isArray(batchesResponse.data)) {
+        return batchesResponse.data.map((b: any) => ({
+          id: b.id || '',
+          batch_number: b.batch_number || '',
+          expiry_date: b.expiry_date || '',
+          quantity: b.quantity || 0,
+          purchase_price: b.purchase_price || 0,
+        }));
       }
+    } catch (error) {
+      console.warn('[Purchase] Could not fetch batches:', error);
+    }
+    return [];
+  };
 
-      // Auto-populate Unit Price from purchase_price (latest from master data)
-      const unitPrice = fullProduct.purchase_price || fullProduct.lastPrice || 0;
-      
-      // Auto-populate Batch Number from latest batch if available
-      let defaultBatch = '';
-      let defaultExpiry = '';
-      if (productBatches.length > 0) {
-        // Get the most recent batch (first one, assuming sorted by creation date)
-        const latestBatch = productBatches[0];
-        defaultBatch = latestBatch.batch_number || '';
-        defaultExpiry = latestBatch.expiry_date || '';
-      }
-      
-      // If no batch expiry, set default to current date + 1 year
-      if (!defaultExpiry) {
-        const nextYear = new Date();
-        nextYear.setFullYear(nextYear.getFullYear() + 1);
-        defaultExpiry = nextYear.toISOString().split('T')[0];
-      }
+  const addProductToItems = async (product: ProductCatalogItem) => {
+    setAddingProductId(product.id);
+    
+    try {
+      // Fetch product details and batches
+      const [productResponse, batches] = await Promise.all([
+        api.get(`/api/products/${product.id}`).catch(() => ({ data: null })),
+        fetchProductBatches(product.id)
+      ]);
+
+      const fullProduct = productResponse.data || product;
+      const unitPrice = fullProduct.purchase_price || product.lastPrice || 0;
+
+      // Store batches for this product
+      setProductBatches(prev => ({
+        ...prev,
+        [product.id]: batches
+      }));
 
       const newItem: PurchaseItem = {
         id: `item-${Date.now()}`,
-        product_id: fullProduct.id,
-        product_name: fullProduct.name,
-        sku: fullProduct.sku,
-        batch: defaultBatch, // Auto-populated from latest batch
-        expiry: defaultExpiry, // Auto-populated (latest batch expiry or +1 year)
-        qty: 1,
-        unit_price: unitPrice, // Auto-populated from purchase_price (master data)
-        sub_total: unitPrice, // Real-time calculation (qty * unit_price)
-        current_stock: fullProduct.stock,
-        last_purchase_price: unitPrice, // Store the purchase price used
+        product_id: product.id,
+        product_name: product.name,
+        sku: product.sku,
+        batch_id: null, // No batch selected initially
+        batch: '',
+        expiry: '',
+        qty: 0, // Start with 0, require batch selection first
+        unit_price: unitPrice, // Locked from product master
+        sub_total: 0,
+        batch_stock: 0,
+        current_stock: product.stock,
+        last_purchase_price: unitPrice,
       };
       setItems([...items, newItem]);
       
       toast({
         title: "Product Added",
-        description: `${product.name} added to purchase list`,
+        description: `Please select a batch for ${product.name}`,
       });
-      
-      // Auto-focus on batch field after adding product
-      setTimeout(() => {
-        const batchInput = batchInputRefs.current[newItem.id];
-        if (batchInput) {
-          batchInput.focus();
-        }
-      }, 100);
+    } catch (error) {
+      console.error('[Purchase] Error adding product:', error);
+      toast({
+        title: "Error",
+        description: "Failed to add product. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSearchTerm('');
+      setShowProductDropdown(false);
+      setAddingProductId(null);
     }
-    setSearchTerm('');
-    setShowProductDropdown(false);
-    setAddingProductId(null);
   };
 
   const handleBarcodeScan = (barcode: string) => {
@@ -738,17 +719,60 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
     }
   };
 
+  // Handle batch selection - this is the single source of truth
+  const handleBatchSelect = (itemId: string, batch: BatchInfo) => {
+    setItems(items.map(item => {
+      if (item.id === itemId) {
+        const updated = {
+          ...item,
+          batch_id: batch.id,
+          batch: batch.batch_number,
+          expiry: batch.expiry_date, // Auto-populate from batch
+          batch_stock: batch.quantity, // Set available stock
+          unit_price: batch.purchase_price || item.unit_price, // Use batch price or fallback
+          qty: item.qty > batch.quantity ? batch.quantity : (item.qty || 1), // Clamp qty to stock
+          sub_total: 0, // Will be recalculated
+        };
+        // Recalculate sub_total
+        const qty = updated.qty;
+        const unitPrice = updated.unit_price;
+        updated.sub_total = qty * unitPrice;
+        return updated;
+      }
+      return item;
+    }));
+    setShowBatchDropdown(prev => ({ ...prev, [itemId]: false }));
+    setBatchSearchTerms(prev => ({ ...prev, [itemId]: '' }));
+  };
+
   const updateItem = (itemId: string, field: keyof PurchaseItem, value: string | number) => {
     setItems(items.map(item => {
       if (item.id === itemId) {
         const updated = { ...item, [field]: value };
+        
+        // Enforce quantity <= stock rule
+        if (field === 'qty') {
+          const qty = typeof value === 'number' ? value : parseFloat(String(value)) || 0;
+          const maxQty = updated.batch_stock || 0;
+          if (qty > maxQty) {
+            toast({
+              title: "Quantity Exceeds Stock",
+              description: `Maximum available stock: ${maxQty}`,
+              variant: "destructive",
+            });
+            updated.qty = maxQty;
+          } else if (qty < 0) {
+            updated.qty = 0;
+          }
+        }
+        
+        // Recalculate sub_total when qty or unit_price changes
         if (field === 'qty' || field === 'unit_price') {
-          // Ensure proper calculation with numeric values
           const qty = typeof updated.qty === 'number' ? updated.qty : parseFloat(String(updated.qty)) || 0;
           const unitPrice = typeof updated.unit_price === 'number' ? updated.unit_price : parseFloat(String(updated.unit_price)) || 0;
-          // Line Total should be 0 if quantity is 0
-          updated.sub_total = qty > 0 ? qty * unitPrice : 0;
+          updated.sub_total = qty * unitPrice;
         }
+        
         return updated;
       }
       return item;
@@ -756,15 +780,20 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
   };
 
   const removeItem = (itemId: string) => {
-    if (deleteConfirmId === itemId) {
-      setItems(items.filter(item => item.id !== itemId));
-      setDeleteConfirmId(null);
+    const item = items.find(i => i.id === itemId);
+    if (item) {
+      setShowDeleteModal({ itemId, productName: item.product_name });
+    }
+  };
+
+  const confirmDeleteItem = () => {
+    if (showDeleteModal) {
+      setItems(items.filter(item => item.id !== showDeleteModal.itemId));
       toast({
         title: "Product Removed",
-        description: "Product has been removed from the list",
+        description: `${showDeleteModal.productName} has been removed from the list`,
       });
-    } else {
-      setDeleteConfirmId(itemId);
+      setShowDeleteModal(null);
     }
   };
 
@@ -858,11 +887,14 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
     }
     
     items.forEach((item, index) => {
-      if (!item.batch || item.batch.trim() === '') {
-        newErrors[`batch_${index}`] = 'Batch number is required';
+      // Batch validation - must be selected
+      if (!item.batch_id || !item.batch || item.batch.trim() === '') {
+        newErrors[`batch_${index}`] = 'Please select a batch';
       }
+      
+      // Expiry validation - must come from batch
       if (!item.expiry) {
-        newErrors[`expiry_${index}`] = 'Expiry date is required';
+        newErrors[`expiry_${index}`] = 'Expiry date is required (select batch first)';
       } else {
         const expiryDate = new Date(item.expiry);
         const today = new Date();
@@ -871,11 +903,20 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
           newErrors[`expiry_${index}`] = 'Expiry date cannot be in the past';
         }
       }
+      
+      // Quantity validation - must be > 0 and <= batch stock
       if (item.qty <= 0) {
         newErrors[`qty_${index}`] = 'Quantity must be greater than 0';
-      } else if (item.current_stock && item.qty > item.current_stock) {
-        newErrors[`qty_${index}`] = `Quantity cannot exceed available stock (${item.current_stock})`;
+      } else if (item.batch_stock !== undefined && item.qty > item.batch_stock) {
+        newErrors[`qty_${index}`] = `Quantity cannot exceed available stock (${item.batch_stock})`;
       }
+      
+      // Stock validation
+      if (item.batch_stock === 0) {
+        newErrors[`stock_${index}`] = 'This batch is out of stock';
+      }
+      
+      // Unit price validation
       if (item.unit_price <= 0) {
         newErrors[`price_${index}`] = 'Price must be greater than 0';
       }
@@ -1150,10 +1191,17 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                   </tr>
                 ) : (
                   items.map((item, index) => {
-                    const itemBatches = batchSuggestions[item.product_id] || [];
-                    const showBatchDropdownForItem = itemBatches.length > 0 && (showBatchDropdown[item.id] || false);
-                    const expiryWarning = isExpiringSoon(item.expiry);
-                    const expiryError = isExpired(item.expiry);
+                    const availableBatches = productBatches[item.product_id] || [];
+                    const batchSearchTerm = batchSearchTerms[item.id] || '';
+                    const showBatchDropdownForItem = showBatchDropdown[item.id] || false;
+                    const filteredBatches = availableBatches.filter(b => 
+                      b.batch_number.toLowerCase().includes(batchSearchTerm.toLowerCase()) ||
+                      b.expiry_date.includes(batchSearchTerm)
+                    );
+                    const expiryWarning = item.expiry ? isExpiringSoon(item.expiry) : false;
+                    const expiryError = item.expiry ? isExpired(item.expiry) : false;
+                    const isOutOfStock = item.batch_stock === 0;
+                    const canIncreaseQty = item.qty < (item.batch_stock || 0);
                     
                     return (
                     <tr key={item.id} className={`hover:bg-blue-50/50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
@@ -1170,17 +1218,16 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                         </div>
                       </td>
                       <td className="px-2 py-3 align-middle">
-                        <div className="relative">
+                        <div className="relative" ref={(el) => { batchDropdownRefs.current[item.id] = el; }}>
                           <input
-                            ref={(el) => { batchInputRefs.current[item.id] = el; }}
                             type="text"
-                            value={item.batch}
+                            value={item.batch || batchSearchTerm}
                             onChange={(e) => {
-                              updateItem(item.id, 'batch', e.target.value);
+                              setBatchSearchTerms(prev => ({ ...prev, [item.id]: e.target.value }));
                               setShowBatchDropdown(prev => ({ ...prev, [item.id]: true }));
                             }}
                             onFocus={() => {
-                              if (itemBatches.length > 0) {
+                              if (availableBatches.length > 0) {
                                 setShowBatchDropdown(prev => ({ ...prev, [item.id]: true }));
                               }
                             }}
@@ -1189,56 +1236,49 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                                 setShowBatchDropdown(prev => ({ ...prev, [item.id]: false }));
                               }, 200);
                             }}
-                            className={`w-full max-w-[120px] text-sm border border-slate-300 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white ${errors[`batch_${index}`] ? 'border-red-500' : 'hover:border-slate-400'}`}
-                            placeholder="Enter or select"
-                            maxLength={20}
+                            className={`w-full max-w-[140px] text-sm border border-slate-300 rounded-lg px-2 py-1.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white ${errors[`batch_${index}`] ? 'border-red-500' : 'hover:border-slate-400'}`}
+                            placeholder="Select batch"
                           />
-                          {showBatchDropdownForItem && itemBatches.length > 0 && (
-                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-40 overflow-y-auto z-20">
-                              {itemBatches
-                                .filter(batch => batch.toLowerCase().includes(item.batch.toLowerCase()))
-                                .map((batch, idx) => (
-                                  <button
-                                    key={idx}
-                                    type="button"
-                                    onClick={() => {
-                                      updateItem(item.id, 'batch', batch);
-                                      setShowBatchDropdown(prev => ({ ...prev, [item.id]: false }));
-                                    }}
-                                    className="w-full px-3 py-2 text-left text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0"
-                                  >
-                                    {batch}
-                                  </button>
-                                ))}
+                          {showBatchDropdownForItem && filteredBatches.length > 0 && (
+                            <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto z-30">
+                              {filteredBatches.map((batch) => (
+                                <button
+                                  key={batch.id}
+                                  type="button"
+                                  onClick={() => handleBatchSelect(item.id, batch)}
+                                  className="w-full px-3 py-2 text-left text-xs hover:bg-slate-50 border-b border-slate-100 last:border-0"
+                                >
+                                  <div className="font-medium text-slate-900">{batch.batch_number}</div>
+                                  <div className="text-slate-500 mt-0.5">
+                                    Exp: {formatDate(batch.expiry_date)} | Stock: {batch.quantity}
+                                  </div>
+                                </button>
+                              ))}
                             </div>
                           )}
                         </div>
                         {errors[`batch_${index}`] && (
                           <p className="text-red-500 text-xs mt-1">{errors[`batch_${index}`]}</p>
                         )}
+                        {isOutOfStock && item.batch && (
+                          <p className="text-red-500 text-xs mt-1">Out of stock</p>
+                        )}
                       </td>
                       <td className="px-2 py-3 align-middle">
                         <div className="relative">
                           <Calendar className={`absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 pointer-events-none z-10 ${expiryError ? 'text-red-500' : expiryWarning ? 'text-orange-500' : 'text-slate-400'}`} />
                           <input
-                            type="date"
-                            value={item.expiry || ''}
-                            onChange={(e) => updateItem(item.id, 'expiry', e.target.value)}
-                            onFocus={() => setFocusedExpiryId(item.id)}
-                            onBlur={() => setFocusedExpiryId(null)}
-                            className={`w-full max-w-[110px] text-sm border border-slate-300 rounded-lg px-2 py-1.5 pl-7 pr-1.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white ${
+                            type="text"
+                            value={item.expiry ? formatDate(item.expiry) : 'Select batch first'}
+                            readOnly
+                            className={`w-full max-w-[110px] text-sm border border-slate-300 rounded-lg px-2 py-1.5 pl-7 pr-1.5 bg-slate-50 cursor-not-allowed ${
                               errors[`expiry_${index}`] ? 'border-red-500' : 
                               expiryError ? 'border-red-500 bg-red-50' : 
-                              expiryWarning ? 'border-orange-500 bg-orange-50' : 'hover:border-slate-400'
+                              expiryWarning ? 'border-orange-500 bg-orange-50' : ''
                             }`}
-                            placeholder="DD/MM/YYYY"
+                            placeholder="Select batch first"
                           />
                         </div>
-                        {item.expiry && focusedExpiryId !== item.id && (
-                          <p className={`text-xs mt-1 ${expiryError ? 'text-red-600 font-medium' : expiryWarning ? 'text-orange-600' : 'text-slate-500'}`}>
-                            {formatDate(item.expiry)}
-                          </p>
-                        )}
                         {errors[`expiry_${index}`] && (
                           <p className="text-red-500 text-xs mt-1">{errors[`expiry_${index}`]}</p>
                         )}
@@ -1252,9 +1292,10 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                               e.stopPropagation();
                               const currentQty = typeof item.qty === 'number' ? item.qty : parseInt(String(item.qty), 10) || 0;
                               const newQty = Math.max(0, currentQty - 1);
-                              updateItem(item.id, 'qty', newQty === 0 ? 0 : Math.max(1, newQty));
+                              updateItem(item.id, 'qty', newQty);
                             }}
-                            className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-300 hover:bg-slate-100 hover:border-indigo-500 transition-colors text-slate-600 hover:text-indigo-600 flex-shrink-0"
+                            disabled={!item.batch_id || item.qty <= 0}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-300 hover:bg-slate-100 hover:border-indigo-500 transition-colors text-slate-600 hover:text-indigo-600 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Decrease quantity"
                           >
                             <Minus className="w-3 h-3" />
@@ -1264,6 +1305,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                               type="number"
                               inputMode="numeric"
                               min="0"
+                              max={item.batch_stock || 0}
                               step="1"
                               value={item.qty === 0 ? '' : item.qty}
                               onChange={(e) => {
@@ -1273,7 +1315,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                                 } else {
                                   const numVal = parseInt(val, 10);
                                   if (!isNaN(numVal) && numVal >= 0) {
-                                    const maxQty = item.current_stock || 999999;
+                                    const maxQty = item.batch_stock || 0;
                                     updateItem(item.id, 'qty', Math.min(numVal, maxQty));
                                   }
                                 }
@@ -1281,9 +1323,9 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                               onBlur={(e) => {
                                 const val = parseInt(e.target.value, 10);
                                 if (isNaN(val) || val < 1) {
-                                  updateItem(item.id, 'qty', 1);
+                                  updateItem(item.id, 'qty', item.batch_stock > 0 ? 1 : 0);
                                 } else {
-                                  const maxQty = item.current_stock || 999999;
+                                  const maxQty = item.batch_stock || 0;
                                   if (val > maxQty) {
                                     updateItem(item.id, 'qty', maxQty);
                                     toast({
@@ -1299,7 +1341,8 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                                   e.currentTarget.blur();
                                 }
                               }}
-                              className={`w-full max-w-[50px] text-sm border border-slate-300 rounded-lg px-1.5 py-1.5 text-center focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white hover:border-slate-400 ${errors[`qty_${index}`] ? 'border-red-500' : ''}`}
+                              disabled={!item.batch_id || isOutOfStock}
+                              className={`w-full max-w-[50px] text-sm border border-slate-300 rounded-lg px-1.5 py-1.5 text-center focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white hover:border-slate-400 disabled:bg-slate-100 disabled:cursor-not-allowed ${errors[`qty_${index}`] ? 'border-red-500' : ''}`}
                               placeholder="0"
                             />
                           </div>
@@ -1309,7 +1352,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                               e.preventDefault();
                               e.stopPropagation();
                               const currentQty = typeof item.qty === 'number' ? item.qty : parseInt(String(item.qty), 10) || 0;
-                              const maxQty = item.current_stock || 999999;
+                              const maxQty = item.batch_stock || 0;
                               const newQty = Math.min(currentQty + 1, maxQty);
                               updateItem(item.id, 'qty', newQty);
                               if (newQty >= maxQty && currentQty < maxQty) {
@@ -1320,15 +1363,21 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                                 });
                               }
                             }}
-                            className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-300 hover:bg-slate-100 hover:border-indigo-500 transition-colors text-slate-600 hover:text-indigo-600 flex-shrink-0"
+                            disabled={!item.batch_id || !canIncreaseQty || isOutOfStock}
+                            className="w-7 h-7 flex items-center justify-center rounded-lg border border-slate-300 hover:bg-slate-100 hover:border-indigo-500 transition-colors text-slate-600 hover:text-indigo-600 flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
                             title="Increase quantity"
                           >
                             <Plus className="w-3 h-3" />
                           </button>
                         </div>
-                        <p className="text-xs text-slate-500 mt-1 text-center">Stock: {item.current_stock || 0}</p>
+                        <p className={`text-xs mt-1 text-center ${isOutOfStock ? 'text-red-600 font-medium' : 'text-slate-500'}`}>
+                          Stock: {item.batch_stock !== undefined ? item.batch_stock : (item.batch_id ? 'N/A' : 'Select batch')}
+                        </p>
                         {errors[`qty_${index}`] && (
                           <p className="text-red-500 text-xs mt-1 text-center">{errors[`qty_${index}`]}</p>
+                        )}
+                        {errors[`stock_${index}`] && (
+                          <p className="text-red-500 text-xs mt-1 text-center">{errors[`stock_${index}`]}</p>
                         )}
                       </td>
                       <td className="px-2 py-3 align-middle">
@@ -1336,23 +1385,10 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                           <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-xs font-medium z-10">৳</span>
                           <input
                             type="text"
-                            inputMode="decimal"
-                            value={item.unit_price === 0 ? '' : item.unit_price}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              if (val === '' || /^\d*\.?\d*$/.test(val)) {
-                                updateItem(item.id, 'unit_price', val === '' ? 0 : parseFloat(val) || 0);
-                              }
-                            }}
-                            onBlur={(e) => {
-                              const val = parseFloat(e.target.value) || 0;
-                              if (val < 0) {
-                                updateItem(item.id, 'unit_price', 0);
-                              }
-                            }}
-                            className={`w-full text-sm border border-slate-300 rounded-lg px-2 py-1.5 text-right pl-6 pr-1.5 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all bg-white hover:border-slate-400 ${errors[`price_${index}`] ? 'border-red-500' : ''}`}
+                            value={item.unit_price === 0 ? '' : item.unit_price.toFixed(2)}
+                            readOnly
+                            className={`w-full text-sm border border-slate-300 rounded-lg px-2 py-1.5 text-right pl-6 pr-1.5 bg-slate-50 cursor-not-allowed ${errors[`price_${index}`] ? 'border-red-500' : ''}`}
                             placeholder="0.00"
-                            maxLength={10}
                           />
                         </div>
                       </td>
@@ -1360,35 +1396,14 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                         <span className="font-bold text-sm text-slate-900">৳{item.sub_total.toLocaleString()}</span>
                       </td>
                       <td className="px-2 py-3 text-center align-middle">
-                        {deleteConfirmId === item.id ? (
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => removeItem(item.id)}
-                              className="px-2 py-1 text-xs bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
-                              title="Confirm delete"
-                            >
-                              Yes
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setDeleteConfirmId(null)}
-                              className="px-2 py-1 text-xs bg-slate-200 text-slate-700 rounded hover:bg-slate-300 transition-colors"
-                              title="Cancel"
-                            >
-                              No
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => removeItem(item.id)}
-                            className="p-2.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all shadow-sm hover:shadow-md"
-                            title="Delete item"
-                          >
-                            <Trash2 className="w-5 h-5" />
-                          </button>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeItem(item.id)}
+                          className="p-2.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all shadow-sm hover:shadow-md"
+                          title="Delete item"
+                        >
+                          <Trash2 className="w-5 h-5" />
+                        </button>
                       </td>
                     </tr>
                   );
@@ -1580,6 +1595,34 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
             </button>
           </div>
         </form>
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl">
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">Remove Item</h3>
+              <p className="text-sm text-slate-600 mb-6">
+                Are you sure you want to remove <span className="font-medium">{showDeleteModal.productName}</span> from the cart?
+              </p>
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowDeleteModal(null)}
+                  className="px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmDeleteItem}
+                  className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

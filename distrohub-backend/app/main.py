@@ -906,7 +906,31 @@ async def create_purchase(purchase_data: PurchaseCreate, current_user: dict = De
         print(f"[API] create_purchase start: supplier={purchase_data.supplier_name}, invoice={purchase_data.invoice_number}, items={len(purchase_data.items)}")
         print(f"[API] User: {current_user.get('email', 'unknown')}")
         
+        # Server-side validation: Check quantity <= stock for each batch
         items = [item.model_dump() for item in purchase_data.items]
+        for item in items:
+            batch_number = item.get("batch_number")
+            quantity = item.get("quantity", 0)
+            
+            if batch_number:
+                # Find the batch to check stock
+                product_id = item.get("product_id")
+                if product_id:
+                    batches = db.get_batches_by_product(product_id)
+                    matching_batch = next((b for b in batches if b.get("batch_number") == batch_number), None)
+                    
+                    if matching_batch:
+                        available_stock = matching_batch.get("quantity", 0)
+                        if quantity > available_stock:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"Quantity ({quantity}) exceeds available stock ({available_stock}) for batch {batch_number}"
+                            )
+                    else:
+                        # Batch not found - this is a new purchase, so we'll create the batch
+                        # No validation needed for new batches
+                        pass
+        
         purchase = db.create_purchase(
             {"supplier_name": purchase_data.supplier_name, "invoice_number": purchase_data.invoice_number, "notes": purchase_data.notes},
             items
