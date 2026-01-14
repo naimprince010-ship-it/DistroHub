@@ -788,8 +788,8 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
   const RequiredMark = () => <span className="text-red-500 ml-0.5">*</span>;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl w-full max-w-5xl max-h-[95vh] overflow-y-auto m-2 animate-fade-in">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl w-full max-w-7xl max-h-[95vh] overflow-y-auto animate-fade-in shadow-2xl">
         <div className="p-4 border-b border-slate-200 flex items-center justify-between">
           <h2 className="text-xl font-semibold text-slate-900">New Purchase / Stock-In</h2>
           {errors.barcode && (
@@ -800,7 +800,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
           )}
         </div>
 
-        <form onSubmit={(e) => handleSubmit(e, false)} className="p-4 space-y-4">
+        <form onSubmit={(e) => handleSubmit(e, false)} className="p-6 space-y-5">
           {/* Header Fields - Section 1 */}
           <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
             <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
@@ -942,19 +942,19 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
           )}
           
           <div className="border border-slate-200 rounded-xl overflow-hidden overflow-x-auto">
-            <table className="w-full min-w-[800px]">
+            <table className="w-full min-w-[1000px]">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="text-center px-1 py-1.5 text-xs font-semibold text-slate-700 w-6">SL</th>
-                  <th className="text-left px-1.5 py-1.5 text-xs font-semibold text-slate-700 min-w-[180px]">Product</th>
-                  <th className="text-left px-1.5 py-1.5 text-xs font-semibold text-slate-700 w-24">Batch<RequiredMark /></th>
-                  <th className="text-left px-1.5 py-1.5 text-xs font-semibold text-slate-700 w-28">
+                  <th className="text-center px-2 py-2 text-xs font-semibold text-slate-700 w-8">SL</th>
+                  <th className="text-left px-2 py-2 text-xs font-semibold text-slate-700 min-w-[200px]">Product</th>
+                  <th className="text-left px-2 py-2 text-xs font-semibold text-slate-700 w-32">Batch<RequiredMark /></th>
+                  <th className="text-left px-2 py-2 text-xs font-semibold text-slate-700 w-36">
                     <span className="text-xs">Expiry<RequiredMark /></span>
                   </th>
-                  <th className="text-right px-1.5 py-1.5 text-xs font-semibold text-slate-700 w-16">Qty<RequiredMark /></th>
-                  <th className="text-right px-1.5 py-1.5 text-xs font-semibold text-slate-700 w-20">Price</th>
-                  <th className="text-right px-1.5 py-1.5 text-xs font-semibold text-slate-700 w-24">Sub-total</th>
-                  <th className="text-center px-1 py-1.5 text-xs font-semibold text-slate-700 w-8">Action</th>
+                  <th className="text-right px-2 py-2 text-xs font-semibold text-slate-700 w-20">Qty<RequiredMark /></th>
+                  <th className="text-right px-2 py-2 text-xs font-semibold text-slate-700 w-28">Unit Price</th>
+                  <th className="text-right px-2 py-2 text-xs font-semibold text-slate-700 w-28">Sub-total</th>
+                  <th className="text-center px-2 py-2 text-xs font-semibold text-slate-700 w-12">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -1105,7 +1105,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
           </div>
 
           {/* Financial Summary */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Discount & Tax */}
             <div className="space-y-3">
               <div className="flex items-center gap-2">
