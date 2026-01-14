@@ -3,8 +3,10 @@
 ## ✅ Google OAuth Credentials Created
 
 Based on your Google Cloud Console setup, you have:
-- **Client ID**: `108532255770-l3e9v98bq5kt0tp0mlpiraao8klg6b9k.apps.googleusercontent.com`
-- **Client Secret**: `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`
+- **Client ID**: Copy from Google Cloud Console (starts with numbers, ends with `.apps.googleusercontent.com`)
+- **Client Secret**: Copy from Google Cloud Console (starts with `GOCSPX-`)
+
+⚠️ **Important**: Copy these values from the Google Cloud Console dialog before closing it!
 
 ---
 
@@ -23,12 +25,14 @@ Click **"Add Environment Variable"** and add these **4 variables** one by one:
 
 #### Variable 1:
 - **Key**: `GOOGLE_CLIENT_ID`
-- **Value**: `108532255770-l3e9v98bq5kt0tp0mlpiraao8klg6b9k.apps.googleusercontent.com`
+- **Value**: `[Paste your Client ID from Google Cloud Console]`
+  - Example format: `123456789-abcdefg.apps.googleusercontent.com`
 - Click **Save Changes**
 
 #### Variable 2:
 - **Key**: `GOOGLE_CLIENT_SECRET`
-- **Value**: `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`
+- **Value**: `[Paste your Client Secret from Google Cloud Console]`
+  - Example format: `GOCSPX-abcdefghijklmnop`
 - Click **Save Changes**
 
 #### Variable 3:
@@ -74,9 +78,10 @@ In Render → Environment tab, verify all 4 variables are present:
 ## Important Notes
 
 ⚠️ **Client Secret Security:**
-- The Client Secret (`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`) will NOT be viewable again after closing the Google Cloud Console dialog
-- Make sure you've copied it to Render environment variables
-- Never commit it to Git or expose it in frontend code
+- The Client Secret will NOT be viewable again after closing the Google Cloud Console dialog
+- Make sure you've copied it to Render environment variables **immediately**
+- Never commit credentials to Git or expose them in frontend code
+- If you already closed the dialog, you'll need to create new OAuth credentials
 
 ✅ **Redirect URI Match:**
 - Your Google Cloud Console has: `https://distrohub-backend.onrender.com/api/auth/google/callback`
@@ -84,16 +89,22 @@ In Render → Environment tab, verify all 4 variables are present:
 
 ---
 
-## Quick Copy-Paste for Render
+## Quick Reference - Environment Variables
 
-Copy these values directly into Render Environment Variables:
+Add these 4 variables to Render (replace placeholders with your actual values):
 
 ```
-GOOGLE_CLIENT_ID=108532255770-l3e9v98bq5kt0tp0mlpiraao8klg6b9k.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=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
+GOOGLE_CLIENT_ID=[Your Client ID from Google Cloud Console]
+GOOGLE_CLIENT_SECRET=[Your Client Secret from Google Cloud Console]
 GOOGLE_REDIRECT_URI=https://distrohub-backend.onrender.com/api/auth/google/callback
 FRONTEND_URL=https://distrohub-frontend.vercel.app
 ```
+
+**Where to find your credentials:**
+- Open the Google Cloud Console dialog you just created
+- Copy the **Client ID** (long string ending in `.apps.googleusercontent.com`)
+- Copy the **Client Secret** (starts with `GOCSPX-`)
+- ⚠️ If you closed the dialog, you'll need to create new credentials (Client Secret won't be viewable again)
 
 ---
 
