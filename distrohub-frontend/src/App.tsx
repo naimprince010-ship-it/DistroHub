@@ -19,6 +19,8 @@ import { Settings } from '@/pages/Settings';
 import { OfflineProvider } from '@/contexts/OfflineContext';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
 import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { startKeepAlive, stopKeepAlive } from '@/lib/keepAlive';
+import { useEffect } from 'react';
 
 const queryClient = new QueryClient();
 
@@ -31,6 +33,14 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
+  // Start keep-alive service to prevent Render cold starts
+  useEffect(() => {
+    startKeepAlive();
+    return () => {
+      stopKeepAlive();
+    };
+  }, []);
+
   return (
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
