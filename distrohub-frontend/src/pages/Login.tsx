@@ -21,20 +21,17 @@ export function Login() {
 
     if (errorParam) {
       setError(`Google login failed: ${errorParam}`);
-      // Clean URL
       window.history.replaceState({}, '', '/login');
       return;
     }
 
     if (token && emailParam) {
-      // Google OAuth success
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify({
         email: emailParam,
         name: nameParam || 'User',
-        id: '', // Will be fetched from /api/auth/me
+        id: '',
       }));
-      // Clean URL
       window.history.replaceState({}, '', '/login');
       navigate('/');
     }
