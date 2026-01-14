@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import {
   Plus,
+  Minus,
   Eye,
   Package,
   Calendar,
@@ -16,6 +17,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { BarcodeScanButton } from '@/components/BarcodeScanner';
+import { useToast } from '@/hooks/use-toast';
 import api from '@/lib/api';
 
 interface PurchaseItem {
@@ -51,7 +53,15 @@ interface Purchase {
   items: PurchaseItem[];
 }
 
-const suppliers = ['Akij Food & Beverage Ltd.', 'Pran Foods Ltd.', 'Square Food Ltd.', 'ACI Foods Ltd.', 'Nestle Bangladesh'];
+interface Supplier {
+  id: string;
+  name: string;
+  phone: string;
+  address?: string;
+  contact_person?: string;
+  email?: string;
+  created_at: string;
+}
 
 interface Warehouse {
   id: string;
@@ -446,8 +456,9 @@ interface ValidationError {
 }
 
 function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (purchase: Purchase) => void }) {
+  const { toast } = useToast();
   const [formData, setFormData] = useState({
-    supplier_name: suppliers[0],
+    supplier_name: '',
     supplier_invoice: '',
     warehouse_id: '',
     purchase_date: new Date().toISOString().split('T')[0],
@@ -464,6 +475,8 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
   const [productCatalog, setProductCatalog] = useState<ProductCatalogItem[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [loadingSuppliers, setLoadingSuppliers] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -483,6 +496,48 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
     };
     fetchWarehouses();
   }, []);
+
+  // Fetch suppliers from API
+  useEffect(() => {
+    const fetchSuppliers = async () => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        console.warn('[Purchase] No token found, skipping suppliers fetch');
+        setSuppliers([]);
+        return;
+      }
+
+      try {
+        setLoadingSuppliers(true);
+        console.log('[Purchase] Fetching suppliers from API...');
+        const response = await api.get('/api/suppliers');
+        console.log('[Purchase] Suppliers fetched successfully:', response.data?.length || 0);
+        
+        if (response.data && Array.isArray(response.data)) {
+          setSuppliers(response.data);
+        } else {
+          setSuppliers([]);
+        }
+      } catch (error: any) {
+        console.error('[Purchase] Error fetching suppliers:', error);
+        if (error?.response?.status === 401) {
+          console.warn('[Purchase] 401 Unauthorized - token may be expired');
+          return;
+        }
+        setSuppliers([]);
+      } finally {
+        setLoadingSuppliers(false);
+      }
+    };
+    fetchSuppliers();
+  }, []);
+
+  // Set default supplier when suppliers are loaded
+  useEffect(() => {
+    if (suppliers.length > 0 && !formData.supplier_name) {
+      setFormData(prev => ({ ...prev, supplier_name: suppliers[0].name }));
+    }
+  }, [suppliers]);
 
   // Fetch products from API
   const fetchProducts = async () => {
@@ -746,7 +801,14 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
   const handleSubmit = (e: React.FormEvent, shouldPrint = false) => {
     e.preventDefault();
     
-    if (!validateForm()) return;
+    if (!validateForm()) {
+      toast({
+        title: "Validation Error",
+        description: "Please fix all errors before saving",
+        variant: "destructive",
+      });
+      return;
+    }
     
     const purchase: Purchase & { warehouse_id?: string } = {
       id: '',
@@ -754,7 +816,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
       supplier_invoice: formData.supplier_invoice,
       supplier_name: formData.supplier_name,
       warehouse: warehouses.find(w => w.id === formData.warehouse_id)?.name || 'Main Warehouse',
-      warehouse_id: formData.warehouse_id, // Include warehouse_id for API call
+      warehouse_id: formData.warehouse_id,
       purchase_date: formData.purchase_date,
       sub_total: subTotal,
       discount_type: formData.discount_type,
@@ -770,12 +832,40 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
     
     onSave(purchase);
     
+    toast({
+      title: "✅ Stock Added Successfully",
+      description: `Purchase ${purchase.invoice_number} created. Total: ৳${grandTotal.toLocaleString()}`,
+    });
+    
     if (shouldPrint) {
       setTimeout(() => {
         window.print();
       }, 100);
     }
   };
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+S or Cmd+S: Save purchase
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        const form = document.querySelector('form');
+        if (form) {
+          const submitEvent = new Event('submit', { bubbles: true, cancelable: true });
+          form.dispatchEvent(submitEvent);
+        }
+      }
+      // Ctrl+B or Cmd+B: Trigger barcode scan
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        e.preventDefault();
+        const scanButton = document.querySelector('[title*="Scan"], button:has(svg)') as HTMLButtonElement;
+        if (scanButton) scanButton.click();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && showProductDropdown && filteredProducts.length > 0) {
@@ -816,16 +906,23 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                 onChange={(e) => setFormData({ ...formData, supplier_name: e.target.value })}
                   className="input-field w-full focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
                   required
+                  disabled={loadingSuppliers}
                 >
-                  {suppliers.map(s => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
+                  {loadingSuppliers ? (
+                    <option value="">Loading suppliers...</option>
+                  ) : suppliers.length === 0 ? (
+                    <option value="">No suppliers available</option>
+                  ) : (
+                    suppliers.map(s => (
+                      <option key={s.id} value={s.name}>{s.name}</option>
+                    ))
+                  )}
                 </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 <FileText className="w-3 h-3 inline mr-1" />
-                Supplier Invoice #
+                Supplier Invoice <span className="text-xs text-slate-500 font-normal">(Optional)</span>
               </label>
               <input
                 type="text"
@@ -949,9 +1046,9 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                   <th className="text-left px-2 py-2 text-xs font-semibold text-slate-700 w-36">
                     <span className="text-xs">Expiry<RequiredMark /></span>
                   </th>
-                  <th className="text-right px-2 py-2 text-xs font-semibold text-slate-700 w-20">Qty<RequiredMark /></th>
+                  <th className="text-right px-2 py-2 text-xs font-semibold text-slate-700 w-24">Quantity<RequiredMark /></th>
                   <th className="text-right px-2 py-2 text-xs font-semibold text-slate-700 w-28">Unit Price</th>
-                  <th className="text-right px-2 py-2 text-xs font-semibold text-slate-700 w-28">Sub-total</th>
+                  <th className="text-right px-2 py-2 text-xs font-semibold text-slate-700 w-28">Line Total</th>
                   <th className="text-center px-2 py-2 text-xs font-semibold text-slate-700 w-12">Action</th>
                 </tr>
               </thead>
@@ -965,13 +1062,13 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                 ) : (
                   items.map((item, index) => (
                     <tr key={item.id} className={`hover:bg-blue-50/50 transition-colors ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50/50'}`}>
-                      <td className="px-1 py-1.5 text-center text-xs text-slate-600">{index + 1}</td>
-                      <td className="px-1.5 py-1.5">
+                      <td className="px-2 py-3 text-center text-sm text-slate-600 font-medium">{index + 1}</td>
+                      <td className="px-2 py-3">
                         <div>
-                          <p className="font-medium text-xs text-slate-900 leading-tight">{item.product_name}</p>
+                          <p className="font-semibold text-sm text-slate-900 leading-tight">{item.product_name}</p>
                           <p className="text-xs text-slate-500 leading-tight">{item.sku}</p>
                           {item.last_purchase_price > 0 && (
-                            <p className="text-xs text-green-600 leading-tight">Last: ৳{item.last_purchase_price}</p>
+                            <p className="text-xs text-emerald-600 leading-tight mt-0.5">Last: ৳{item.last_purchase_price}</p>
                           )}
                         </div>
                       </td>
@@ -1031,31 +1128,58 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                           <p className="text-red-500 text-xs mt-0.5">{errors[`expiry_${index}`]}</p>
                         )}
                       </td>
-                      <td className="px-2 py-2">
-                        <input
-                          type="text"
-                          inputMode="numeric"
-                          value={item.qty || ''}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            // Allow empty string or valid numbers only
-                            if (val === '' || /^\d+$/.test(val)) {
-                              updateItem(item.id, 'qty', val === '' ? 0 : parseInt(val, 10) || 0);
-                            }
-                          }}
-                          onBlur={(e) => {
-                            // Ensure minimum value of 1 when field loses focus
-                            const val = parseInt(e.target.value, 10) || 0;
-                            if (val < 1) {
-                              updateItem(item.id, 'qty', 1);
-                            }
-                          }}
-                          className={`input-field w-full text-sm px-2 py-1.5 text-right focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all ${errors[`qty_${index}`] ? 'border-red-500' : ''}`}
-                          placeholder="0"
-                          maxLength={6}
-                        />
+                      <td className="px-2 py-3">
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const currentQty = typeof item.qty === 'number' ? item.qty : parseInt(String(item.qty), 10) || 0;
+                              if (currentQty > 1) {
+                                updateItem(item.id, 'qty', currentQty - 1);
+                              }
+                            }}
+                            className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 hover:border-indigo-500 transition-colors text-slate-600 hover:text-indigo-600"
+                            title="Decrease quantity"
+                          >
+                            <Minus className="w-3.5 h-3.5" />
+                          </button>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            value={item.qty || ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (val === '' || /^\d+$/.test(val)) {
+                                updateItem(item.id, 'qty', val === '' ? 0 : parseInt(val, 10) || 0);
+                              }
+                            }}
+                            onBlur={(e) => {
+                              const val = parseInt(e.target.value, 10) || 0;
+                              if (val < 1) {
+                                updateItem(item.id, 'qty', 1);
+                              }
+                            }}
+                            className={`input-field w-full text-sm px-2 py-1.5 text-center focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all ${errors[`qty_${index}`] ? 'border-red-500' : ''}`}
+                            placeholder="0"
+                            maxLength={6}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const currentQty = typeof item.qty === 'number' ? item.qty : parseInt(String(item.qty), 10) || 0;
+                              updateItem(item.id, 'qty', currentQty + 1);
+                            }}
+                            className="p-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 hover:border-indigo-500 transition-colors text-slate-600 hover:text-indigo-600"
+                            title="Increase quantity"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                        {errors[`qty_${index}`] && (
+                          <p className="text-red-500 text-xs mt-0.5">{errors[`qty_${index}`]}</p>
+                        )}
                       </td>
-                      <td className="px-2 py-2">
+                      <td className="px-2 py-3">
                         <div className="relative">
                           <span className="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">৳</span>
                           <input
@@ -1064,33 +1188,31 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                             value={item.unit_price || ''}
                             onChange={(e) => {
                               const val = e.target.value;
-                              // Allow empty string or valid decimal numbers
                               if (val === '' || /^\d*\.?\d*$/.test(val)) {
                                 updateItem(item.id, 'unit_price', val === '' ? 0 : parseFloat(val) || 0);
                               }
                             }}
                             onBlur={(e) => {
-                              // Ensure minimum value of 0 when field loses focus
                               const val = parseFloat(e.target.value) || 0;
                               if (val < 0) {
                                 updateItem(item.id, 'unit_price', 0);
                               }
                             }}
-                            className={`input-field w-full text-sm px-2 py-1.5 text-right pl-7 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all ${errors[`price_${index}`] ? 'border-red-500' : ''}`}
+                            className={`input-field w-full text-sm px-2 py-1.5 text-right pl-7 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:shadow-sm transition-all ${errors[`price_${index}`] ? 'border-red-500' : ''}`}
                             placeholder="0.00"
                             maxLength={10}
                           />
                         </div>
                       </td>
-                      <td className="px-2 py-2 text-right font-medium text-sm text-slate-900">
+                      <td className="px-2 py-3 text-right font-bold text-base text-slate-900">
                         ৳{item.sub_total.toLocaleString()}
                       </td>
-                      <td className="px-2 py-2 text-center">
+                      <td className="px-2 py-3 text-center">
                         <button
                           type="button"
                           onClick={() => removeItem(item.id)}
-                          className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all shadow-sm hover:shadow-md"
-                          title="Delete"
+                          className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all shadow-sm hover:shadow-md"
+                          title="Delete item"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -1176,38 +1298,45 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
               </div>
             </div>
 
-            {/* Totals - Highlighted Section */}
-            <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 space-y-3">
+            {/* Totals - Sticky Card */}
+            <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-blue-100 border-2 border-blue-300 rounded-xl p-5 space-y-3 shadow-md sticky top-4">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-600">Sub-total:</span>
-                <span className="font-medium text-right">৳ {subTotal.toLocaleString()}</span>
+                <span className="text-slate-700 font-medium">Subtotal</span>
+                <span className="font-semibold text-right text-slate-900">৳ {subTotal.toLocaleString()}</span>
               </div>
               {discountAmount > 0 && (
-                <div className="flex justify-between text-sm text-green-600">
-                  <span>Discount ({formData.discount_type === 'percent' ? `${formData.discount_value}%` : 'Fixed'}):</span>
-                  <span className="text-right">- ৳ {discountAmount.toLocaleString()}</span>
+                <div className="flex justify-between text-sm text-emerald-600">
+                  <span className="font-medium">Discount ({formData.discount_type === 'percent' ? `${formData.discount_value}%` : 'Fixed'})</span>
+                  <span className="text-right font-semibold">- ৳ {discountAmount.toLocaleString()}</span>
                 </div>
               )}
               {taxAmount > 0 && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-600">Tax ({formData.tax_percent}%):</span>
-                  <span className="text-right">+ ৳ {taxAmount.toLocaleString()}</span>
+                  <span className="text-slate-700 font-medium">Tax ({formData.tax_percent}%)</span>
+                  <span className="text-right font-semibold text-slate-900">+ ৳ {taxAmount.toLocaleString()}</span>
                 </div>
               )}
-              <div className="flex justify-between text-xl font-bold border-t-2 border-blue-300 pt-3">
-                <span className="text-slate-900">Grand Total:</span>
-                <span className="text-blue-700 text-right">৳ {grandTotal.toLocaleString()}</span>
+              <div className="flex justify-between text-2xl font-bold border-t-2 border-blue-400 pt-4 mt-2">
+                <span className="text-slate-900">Grand Total</span>
+                <span className="text-indigo-700 text-right">৳ {grandTotal.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between text-base">
-                <span className="text-slate-700 font-medium">Paid:</span>
-                <span className="text-green-600 font-semibold text-right">৳ {formData.paid_amount.toLocaleString()}</span>
+              <div className="flex justify-between text-base pt-2">
+                <span className="text-slate-700 font-semibold">Paid</span>
+                <span className="text-emerald-600 font-bold text-right">৳ {formData.paid_amount.toLocaleString()}</span>
               </div>
-              <div className="flex justify-between text-base font-bold">
-                <span className="text-red-700">Due:</span>
-                <span className={`text-right ${dueAmount > 0 ? 'text-red-600' : 'text-green-600'}`}>
+              <div className="flex justify-between text-base font-bold pt-1">
+                <span className="text-red-700">Due</span>
+                <span className={`text-right font-bold ${dueAmount > 0 ? 'text-red-600' : 'text-emerald-600'}`}>
                   ৳ {dueAmount.toLocaleString()}
                 </span>
               </div>
+              <button 
+                type="submit" 
+                disabled={items.length === 0 || !formData.warehouse_id}
+                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-semibold px-4 py-3 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg mt-4"
+              >
+                Save Purchase
+              </button>
             </div>
           </div>
 
@@ -1223,9 +1352,6 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
             >
               <Printer className="w-4 h-4" />
               Save & Print
-            </button>
-            <button type="submit" className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg">
-              Create Purchase
             </button>
           </div>
         </form>
