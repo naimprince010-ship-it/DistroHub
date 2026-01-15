@@ -923,7 +923,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
     }
     
     items.forEach((item, index) => {
-      if (!item.batch_number || !item.batch_id) {
+      if (!item.batch_number) {
         newErrors[`batch_${index}`] = 'Batch is required';
       }
       if (item.quantity <= 0) {
