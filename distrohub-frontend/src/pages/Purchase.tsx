@@ -1274,7 +1274,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
               </div>
 
               <div className="relative min-w-[140px]">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">৳</span>
+                <span className="absolute left-3 inset-y-0 flex items-center text-slate-500 text-sm font-medium pointer-events-none">৳</span>
                 <input
                   type="number"
                   inputMode="decimal"
