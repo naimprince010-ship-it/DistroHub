@@ -1273,14 +1273,14 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                 )}
               </div>
 
-              <div className="relative min-w-0">
+              <div className="relative min-w-[120px]">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">৳</span>
                 <input
                   type="number"
                   inputMode="decimal"
                   value={entryUnitPrice === 0 ? '' : entryUnitPrice}
                   onChange={(e) => setEntryUnitPrice(parseFloat(e.target.value || '0'))}
-                  className="input-field w-full pl-8 text-right"
+                  className="input-field w-full pl-8 pr-3 text-right tabular-nums"
                   placeholder="0.00"
                   disabled={!entryProduct || !entryOverridePrice}
                 />
