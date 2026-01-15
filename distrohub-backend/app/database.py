@@ -304,6 +304,8 @@ class InMemoryDatabase:
             "invoice_number": data["invoice_number"],
             "items": purchase_items,
             "total_amount": total_amount,
+            "paid_amount": float(data.get("paid_amount", 0)),
+            "due_amount": max(0, total_amount - float(data.get("paid_amount", 0))),
             "notes": data.get("notes"),
             "created_at": datetime.now()
         }

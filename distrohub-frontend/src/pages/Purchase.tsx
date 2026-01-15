@@ -133,7 +133,15 @@ export function Purchase() {
       
       if (response.data) {
         // Map backend Purchase to frontend Purchase interface
-        const mappedPurchases: Purchase[] = response.data.map((p: any) => ({
+        const mappedPurchases: Purchase[] = response.data.map((p: any) => {
+          const paidAmount = typeof p.paid_amount === 'number'
+            ? p.paid_amount
+            : parseFloat(String(p.paid_amount)) || 0;
+          const dueAmount = typeof p.due_amount === 'number'
+            ? p.due_amount
+            : parseFloat(String(p.due_amount)) || (p.total_amount || 0) - paidAmount;
+
+          return ({
           id: p.id || '',
           invoice_number: p.invoice_number || '',
           supplier_invoice: '', // Backend doesn't return this, set empty
@@ -147,8 +155,8 @@ export function Purchase() {
           tax_percent: 0,
           tax_amount: 0,
           total_amount: p.total_amount || 0,
-          paid_amount: 0, // Backend doesn't track this yet
-          due_amount: p.total_amount || 0,
+            paid_amount: paidAmount,
+            due_amount: dueAmount,
           items: (p.items || []).map((item: any) => ({
             id: item.id || '',
             product_id: item.product_id || '',
@@ -164,7 +172,8 @@ export function Purchase() {
             current_stock: 0, // Backend doesn't return this
             last_purchase_price: item.unit_price || 0,
           })),
-        }));
+          });
+        });
         setPurchases(mappedPurchases);
         console.log('[Purchase] Purchases mapped and set:', mappedPurchases.length);
       }

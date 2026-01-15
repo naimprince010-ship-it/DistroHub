@@ -932,7 +932,14 @@ async def create_purchase(purchase_data: PurchaseCreate, current_user: dict = De
                         pass
         
         purchase = db.create_purchase(
-            {"supplier_name": purchase_data.supplier_name, "invoice_number": purchase_data.invoice_number, "notes": purchase_data.notes},
+            {
+                "supplier_name": purchase_data.supplier_name,
+                "invoice_number": purchase_data.invoice_number,
+                "notes": purchase_data.notes,
+                "warehouse_id": purchase_data.warehouse_id,
+                "paid_amount": purchase_data.paid_amount,
+                "due_amount": purchase_data.due_amount,
+            },
             items
         )
         print(f"[API] Purchase created in DB: {purchase.get('id', 'no-id')}")

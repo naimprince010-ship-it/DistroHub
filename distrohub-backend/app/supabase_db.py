@@ -369,6 +369,12 @@ class SupabaseDatabase:
         
         purchase_id = str(uuid.uuid4())
         total_amount = sum(item["quantity"] * item["unit_price"] for item in items)
+        paid_amount = float(data.get("paid_amount") or 0)
+        due_amount = data.get("due_amount")
+        if due_amount is None:
+            due_amount = max(0.0, total_amount - paid_amount)
+        else:
+            due_amount = max(0.0, float(due_amount))
         
         # Get warehouse info if provided
         warehouse_id = data.get("warehouse_id")
@@ -392,6 +398,8 @@ class SupabaseDatabase:
             "warehouse_id": warehouse_id,
             "warehouse_name": warehouse_name or "Main Warehouse",
             "total_amount": total_amount,
+            "paid_amount": paid_amount,
+            "due_amount": due_amount,
             "notes": data.get("notes"),
             "created_at": datetime.now().isoformat()
         }

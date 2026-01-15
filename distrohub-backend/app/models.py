@@ -115,6 +115,8 @@ class PurchaseCreate(BaseModel):
     warehouse_id: Optional[str] = None  # Warehouse where stock will be added
     items: List[PurchaseItemCreate]
     notes: Optional[str] = None
+    paid_amount: float = 0
+    due_amount: Optional[float] = None
 
 class PurchaseItem(BaseModel):
     id: str
@@ -133,6 +135,8 @@ class Purchase(BaseModel):
     invoice_number: str
     items: List[PurchaseItem]
     total_amount: float
+    paid_amount: float = 0
+    due_amount: float = 0
     notes: Optional[str] = None
     created_at: datetime
 
