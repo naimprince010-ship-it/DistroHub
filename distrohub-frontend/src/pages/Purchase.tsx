@@ -1115,7 +1115,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Data Entry Row
             </label>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[2fr_1.5fr_1fr_1fr_1fr_auto] gap-2 items-start">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[2fr_1.4fr_1.1fr_0.9fr_1.3fr_auto] gap-2 items-start">
               <div className="relative min-w-0" ref={dropdownRef}>
                 <input
                   ref={searchInputRef}
@@ -1273,7 +1273,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                 )}
               </div>
 
-              <div className="relative min-w-[120px]">
+              <div className="relative min-w-[140px]">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">৳</span>
                 <input
                   type="number"
