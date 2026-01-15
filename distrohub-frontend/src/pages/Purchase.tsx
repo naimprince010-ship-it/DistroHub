@@ -1263,7 +1263,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                   }}
                   className="input-field w-full"
                   placeholder="Qty"
-                  disabled={(!entryBatchId && entryBatches.length > 0) || (entryBatchId && entryBatchStock === 0)}
+                  disabled={(!entryBatchId && entryBatches.length > 0) || (!!entryBatchId && entryBatchStock === 0)}
                 />
                 {entryBatchStock === 0 && entryBatchId && (
                   <p className="text-red-500 text-xs mt-1">Out of stock</p>
@@ -1302,7 +1302,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                 <button
                   type="button"
                   onClick={handleAddEntryItem}
-                  disabled={!entryProduct || (entryBatches.length > 0 && !entryBatchId) || (entryBatchId && entryBatchStock === 0)}
+                  disabled={!entryProduct || (entryBatches.length > 0 && !entryBatchId) || (!!entryBatchId && entryBatchStock === 0)}
                   className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-medium px-4 py-2 rounded-lg transition-colors"
                 >
                   Add to List
