@@ -650,7 +650,6 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
     p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.barcode.includes(searchTerm)
   );
-
   const fetchEntryBatches = async (productId: string, warehouseId: string | null) => {
     try {
       setEntryBatchesLoading(true);
