@@ -731,14 +731,22 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
     });
   };
 
+  const generateAutoBatchNumber = (product: ProductCatalogItem) => {
+    const base = product.sku || product.name.replace(/\s+/g, '-').toUpperCase();
+    return `AUTO-${base}-${Date.now()}`;
+  };
+
   const handleAddEntryItem = () => {
     const newEntryErrors: ValidationError = {};
+    const allowAutoBatch = entryProduct && entryBatches.length === 0 && !entryBatchesLoading && !entryBatchesError;
 
     if (!entryProduct) {
       newEntryErrors.entryProduct = 'Select a product';
     }
     if (!entryBatchId || !entryBatchNo) {
-      newEntryErrors.entryBatch = 'Select a batch';
+      if (!allowAutoBatch) {
+        newEntryErrors.entryBatch = 'Select a batch';
+      }
     }
     if (!entryExpiry) {
       newEntryErrors.entryExpiry = 'Expiry is required';
@@ -760,6 +768,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
 
     const unitPrice = entryUnitPrice || entryProduct?.lastPrice || 0;
     const lineTotal = entryQty * unitPrice;
+    const resolvedBatchNo = entryBatchId ? entryBatchNo : (allowAutoBatch ? generateAutoBatchNumber(entryProduct!) : entryBatchNo);
 
     setItems(prev => {
       const existingIndex = prev.findIndex(
@@ -791,7 +800,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
         product_name: entryProduct!.name,
         sku: entryProduct!.sku,
         batch_id: entryBatchId,
-        batch_number: entryBatchNo,
+        batch_number: resolvedBatchNo,
         expiry_date: entryExpiry,
         quantity: entryQty,
         unit_price: unitPrice,
@@ -1179,7 +1188,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                       <div className="px-3 py-2 text-xs text-red-500">{entryBatchesError}</div>
                     )}
                     {!entryBatchesLoading && !entryBatchesError && entryBatches.length === 0 && (
-                      <div className="px-3 py-2 text-xs text-slate-500">No batches found</div>
+                      <div className="px-3 py-2 text-xs text-slate-500">No batches found (auto batch will be created)</div>
                     )}
                     {!entryBatchesLoading && !entryBatchesError && entryBatches
                       .filter(b => b.batch_number.toLowerCase().includes(entryBatchSearch.toLowerCase()) || b.expiry_date.includes(entryBatchSearch))
@@ -1204,14 +1213,24 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
               </div>
 
               <div className="min-w-0">
-                <input
-                  type="text"
-                  value={entryExpiry ? formatDate(entryExpiry) : 'Select batch first'}
-                  readOnly
-                  className="input-field w-full bg-slate-50 cursor-not-allowed"
-                />
-                {!entryExpiry && (
-                  <p className="text-xs text-slate-500 mt-1">Select batch first</p>
+                {entryBatchId ? (
+                  <input
+                    type="text"
+                    value={entryExpiry ? formatDate(entryExpiry) : 'Select batch first'}
+                    readOnly
+                    className="input-field w-full bg-slate-50 cursor-not-allowed"
+                  />
+                ) : (
+                  <input
+                    type="date"
+                    value={entryExpiry}
+                    onChange={(e) => setEntryExpiry(e.target.value)}
+                    className="input-field w-full"
+                    disabled={!entryProduct}
+                  />
+                )}
+                {!entryBatchId && !entryExpiry && (
+                  <p className="text-xs text-slate-500 mt-1">Set expiry for auto batch</p>
                 )}
                 {entryErrors.entryExpiry && (
                   <p className="text-red-500 text-xs mt-1">{entryErrors.entryExpiry}</p>
@@ -1240,7 +1259,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                   }}
                   className="input-field w-full"
                   placeholder="Qty"
-                  disabled={!entryBatchId || entryBatchStock === 0}
+                  disabled={(!entryBatchId && entryBatches.length > 0) || entryBatchStock === 0}
                 />
                 {entryBatchStock === 0 && entryBatchId && (
                   <p className="text-red-500 text-xs mt-1">Out of stock</p>
@@ -1279,7 +1298,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                 <button
                   type="button"
                   onClick={handleAddEntryItem}
-                  disabled={!entryProduct || !entryBatchId || entryBatchStock === 0}
+                  disabled={!entryProduct || (entryBatches.length > 0 && !entryBatchId) || entryBatchStock === 0}
                   className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-medium px-4 py-2 rounded-lg transition-colors"
                 >
                   Add to List
