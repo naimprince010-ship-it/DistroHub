@@ -1028,6 +1028,8 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
   const [loadingSalesReps, setLoadingSalesReps] = useState(true);
   const [retailerSearchTerm, setRetailerSearchTerm] = useState('');
   const [showRetailerDropdown, setShowRetailerDropdown] = useState(false);
+  const [productSearchTerms, setProductSearchTerms] = useState<string[]>(['']);
+  const [openProductDropdownIndex, setOpenProductDropdownIndex] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Fetch retailers and products on mount
@@ -1109,10 +1111,13 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
         setShowRetailerDropdown(false);
         setRetailerSearchTerm('');
       }
+      if (openProductDropdownIndex !== null && !target.closest('.product-dropdown-container')) {
+        setOpenProductDropdownIndex(null);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showRetailerDropdown]);
+  }, [showRetailerDropdown, openProductDropdownIndex]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1156,6 +1161,7 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
       ...formData,
       items: [...formData.items, { product: '', qty: 0, price: 0 }],
     });
+    setProductSearchTerms((prev) => [...prev, '']);
   };
 
   const handleBarcodeScan = (barcode: string) => {
@@ -1174,11 +1180,15 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
           const newItems = [...formData.items];
           newItems[emptyIndex] = { product: product.name, qty: 1, price: product.selling_price };
           setFormData({ ...formData, items: newItems });
+          const nextTerms = [...productSearchTerms];
+          nextTerms[emptyIndex] = '';
+          setProductSearchTerms(nextTerms);
         } else {
           setFormData({
             ...formData,
             items: [...formData.items, { product: product.name, qty: 1, price: product.selling_price }],
           });
+          setProductSearchTerms((prev) => [...prev, '']);
         }
       }
     } else {
@@ -1323,30 +1333,75 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
                       </div>
             {formData.items.map((item, index) => (
               <div key={index} className="grid grid-cols-5 gap-2 mb-1 items-center">
-                <div className="col-span-2">
-                  <select
-                    value={item.product}
-                    onChange={(e) => {
-                      const newItems = [...formData.items];
-                      newItems[index].product = e.target.value;
-                      // Auto-update price when product is selected
-                      const selectedProduct = products.find((p: any) => p.name === e.target.value);
-                      if (selectedProduct) {
-                        newItems[index].price = selectedProduct.selling_price;
-                      }
-                      setFormData({ ...formData, items: newItems });
-                    }}
-                    className="input-field"
-                    required
-                    disabled={loadingProducts}
+                <div className="col-span-2 relative product-dropdown-container">
+                  <div
+                    onClick={() => !loadingProducts && setOpenProductDropdownIndex(openProductDropdownIndex === index ? null : index)}
+                    className="input-field flex items-center justify-between cursor-pointer"
                   >
-                    <option value="">{loadingProducts ? 'Loading products...' : 'Select Product'}</option>
-                    {products.map((product: any) => (
-                      <option key={product.id} value={product.name}>
-                        {product.name} - ৳{product.selling_price}
-                      </option>
-                    ))}
-                  </select>
+                    <span className={item.product ? 'text-slate-900' : 'text-slate-400'}>
+                      {item.product || (loadingProducts ? 'Loading products...' : products.length === 0 ? 'No products found' : 'Select Product')}
+                    </span>
+                    <ChevronDown
+                      className={`w-4 h-4 text-slate-400 transition-transform ${openProductDropdownIndex === index ? 'rotate-180' : ''}`}
+                    />
+                  </div>
+                  {openProductDropdownIndex === index && !loadingProducts && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-hidden">
+                      <div className="p-2 border-b border-slate-200">
+                        <div className="relative">
+                          <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
+                          <input
+                            type="text"
+                            placeholder="পণ্য খুঁজুন... (Search)"
+                            value={productSearchTerms[index] || ''}
+                            onChange={(e) => {
+                              const next = [...productSearchTerms];
+                              next[index] = e.target.value;
+                              setProductSearchTerms(next);
+                            }}
+                            className="w-full pl-8 pr-2 py-1.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                            autoFocus
+                          />
+                        </div>
+                      </div>
+                      <div className="max-h-48 overflow-y-auto">
+                        {products
+                          .filter((product) =>
+                            product.name.toLowerCase().includes((productSearchTerms[index] || '').toLowerCase())
+                          )
+                          .map((product: any) => (
+                            <div
+                              key={product.id}
+                              onClick={() => {
+                                const newItems = [...formData.items];
+                                newItems[index].product = product.name;
+                                newItems[index].price = product.selling_price;
+                                setFormData({ ...formData, items: newItems });
+                                setOpenProductDropdownIndex(null);
+                                const next = [...productSearchTerms];
+                                next[index] = '';
+                                setProductSearchTerms(next);
+                              }}
+                              className={`px-3 py-2 cursor-pointer hover:bg-primary-50 transition-colors ${
+                                item.product === product.name ? 'bg-primary-50 text-primary-700' : 'text-slate-900'
+                              }`}
+                            >
+                              {product.name} - ৳{product.selling_price}
+                            </div>
+                          ))}
+                        {products.filter((product) =>
+                          product.name.toLowerCase().includes((productSearchTerms[index] || '').toLowerCase())
+                        ).length === 0 && (
+                          <div className="px-3 py-2 text-sm text-slate-500 text-center">
+                            No products found
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  {item.product && (
+                    <input type="hidden" value={item.product} required />
+                  )}
                 </div>
                 <input
                   type="number"
@@ -1376,7 +1431,10 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
                   type="button"
                   onClick={() => {
                     const newItems = formData.items.filter((_, i) => i !== index);
+                    const newTerms = productSearchTerms.filter((_, i) => i !== index);
                     setFormData({ ...formData, items: newItems });
+                    setProductSearchTerms(newTerms.length > 0 ? newTerms : ['']);
+                    setOpenProductDropdownIndex(null);
                   }}
                   className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors flex items-center justify-center"
                   title="Delete item"
