@@ -92,6 +92,19 @@ interface ProductCatalogItem {
   batches?: Array<{ batch_number: string; expiry_date: string }>;
 }
 
+const formatDate = (dateString: string): string => {
+  if (!dateString) return '';
+  try {
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch {
+    return dateString;
+  }
+};
+
 export function Purchase() {
   const [searchParams] = useSearchParams();
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -856,21 +869,6 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
       setShowDeleteModal(null);
     }
   };
-
-  // Helper function to format date to DD/MM/YYYY
-  const formatDate = (dateString: string): string => {
-    if (!dateString) return '';
-    try {
-      const date = new Date(dateString);
-      const day = String(date.getDate()).padStart(2, '0');
-      const month = String(date.getMonth() + 1).padStart(2, '0');
-      const year = date.getFullYear();
-      return `${day}/${month}/${year}`;
-    } catch {
-      return dateString;
-    }
-  };
-
 
   // Real-time calculation: Recalculate totals whenever items or formData changes
   const subTotal = items.reduce((sum, item) => {
