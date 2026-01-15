@@ -736,9 +736,10 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
     return `AUTO-${base}-${Date.now()}`;
   };
 
+  const allowAutoBatch = !!entryProduct && entryBatches.length === 0 && !entryBatchesLoading && !entryBatchesError;
+
   const handleAddEntryItem = () => {
     const newEntryErrors: ValidationError = {};
-    const allowAutoBatch = entryProduct && entryBatches.length === 0 && !entryBatchesLoading && !entryBatchesError;
 
     if (!entryProduct) {
       newEntryErrors.entryProduct = 'Select a product';
@@ -1165,21 +1166,24 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
               <div className="relative min-w-0" data-entry-batch-dropdown>
                 <input
                   type="text"
-                  value={entryBatchNo || entryBatchSearch}
+                  value={allowAutoBatch ? 'Auto batch' : (entryBatchNo || entryBatchSearch)}
                   onChange={(e) => {
+                    if (allowAutoBatch) {
+                      return;
+                    }
                     setEntryBatchSearch(e.target.value);
                     setShowEntryBatchDropdown(true);
                   }}
                   onFocus={() => {
-                    if (entryProduct) {
+                    if (entryProduct && !allowAutoBatch) {
                       setShowEntryBatchDropdown(true);
                     }
                   }}
                   className="input-field w-full focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all"
-                  placeholder="Select batch"
-                  disabled={!entryProduct}
+                  placeholder={allowAutoBatch ? 'Auto batch will be created' : 'Select batch'}
+                  disabled={!entryProduct || allowAutoBatch}
                 />
-                {showEntryBatchDropdown && entryProduct && (
+                {showEntryBatchDropdown && entryProduct && !allowAutoBatch && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto z-20">
                     {entryBatchesLoading && (
                       <div className="px-3 py-2 text-xs text-slate-500">Loading batches...</div>
@@ -1242,7 +1246,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                   type="number"
                   inputMode="numeric"
                   min="0"
-                  max={entryBatchStock || 0}
+                  max={allowAutoBatch ? undefined : (entryBatchStock || 0)}
                   value={entryQty === 0 ? '' : entryQty}
                   onChange={(e) => {
                     const next = parseInt(e.target.value || '0', 10);
@@ -1259,7 +1263,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                   }}
                   className="input-field w-full"
                   placeholder="Qty"
-                  disabled={(!entryBatchId && entryBatches.length > 0) || entryBatchStock === 0}
+                  disabled={(!entryBatchId && entryBatches.length > 0) || (entryBatchId && entryBatchStock === 0)}
                 />
                 {entryBatchStock === 0 && entryBatchId && (
                   <p className="text-red-500 text-xs mt-1">Out of stock</p>
@@ -1298,7 +1302,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                 <button
                   type="button"
                   onClick={handleAddEntryItem}
-                  disabled={!entryProduct || (entryBatches.length > 0 && !entryBatchId) || entryBatchStock === 0}
+                  disabled={!entryProduct || (entryBatches.length > 0 && !entryBatchId) || (entryBatchId && entryBatchStock === 0)}
                   className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-medium px-4 py-2 rounded-lg transition-colors"
                 >
                   Add to List
