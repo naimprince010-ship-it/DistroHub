@@ -457,6 +457,8 @@ export function Purchase() {
                 supplier_name: purchase.supplier_name,
                 invoice_number: purchase.invoice_number,
                 warehouse_id: warehouseId,
+                paid_amount: purchase.paid_amount,
+                due_amount: purchase.due_amount,
                 items: purchase.items.map(item => ({
                   product_id: item.product_id,
                   batch_id: (item as any).batch_id || null,
