@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Bell, Search, User, X } from 'lucide-react';
 import { OnlineStatusBadge } from '@/components/OfflineIndicator';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface HeaderProps {
   title: string;
@@ -67,10 +68,42 @@ export function Header({ title }: HeaderProps) {
         </div>
 
         {/* Notification Bell */}
-        <button className="relative h-10 w-10 flex items-center justify-center text-slate-600 hover:bg-slate-100 rounded-lg transition-all duration-200">
-          <Bell className="w-5 h-5" />
-          <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-        </button>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button
+              className="relative h-10 w-10 flex items-center justify-center text-slate-600 hover:bg-slate-100 rounded-lg transition-all duration-200"
+              aria-label="Notifications"
+            >
+              <Bell className="w-5 h-5" />
+              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full"></span>
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-80 p-0">
+            <div className="border-b border-slate-200 px-4 py-3">
+              <p className="text-sm font-semibold text-slate-900">Notifications</p>
+              <p className="text-xs text-slate-500">Quick links to alerts</p>
+            </div>
+            <div className="p-2">
+              <Link
+                to="/expiry"
+                className="flex items-center justify-between rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+              >
+                <span>Expiry Alerts</span>
+                <span className="text-xs text-slate-400">View</span>
+              </Link>
+              <Link
+                to="/receivables"
+                className="flex items-center justify-between rounded-md px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+              >
+                <span>Receivables</span>
+                <span className="text-xs text-slate-400">View</span>
+              </Link>
+              <div className="px-3 py-2 text-xs text-slate-500">
+                No new notifications right now.
+              </div>
+            </div>
+          </PopoverContent>
+        </Popover>
 
         {/* User Profile */}
         <div className="flex items-center gap-2 pl-2 border-l border-slate-200">
