@@ -25,6 +25,7 @@ interface BatchInfo {
   expiry_date: string;
   quantity: number; // available stock
   purchase_price: number;
+  warehouse_id?: string | null;
 }
 
 interface PurchaseItem {
@@ -33,9 +34,9 @@ interface PurchaseItem {
   product_name: string;
   sku: string;
   batch_id: string | null;
-  batch: string;
-  expiry: string;
-  qty: number;
+  batch_number: string;
+  expiry_date: string;
+  quantity: number;
   unit_price: number;
   sub_total: number;
   batch_stock: number; // stock for selected batch
@@ -140,11 +141,13 @@ export function Purchase() {
             product_id: item.product_id || '',
             product_name: item.product_name || '',
             sku: '', // Backend doesn't return this
-            batch: item.batch_number || '',
-            expiry: item.expiry_date ? (typeof item.expiry_date === 'string' ? item.expiry_date.split('T')[0] : item.expiry_date) : '',
-            qty: item.quantity || 0,
+            batch_id: null,
+            batch_number: item.batch_number || '',
+            expiry_date: item.expiry_date ? (typeof item.expiry_date === 'string' ? item.expiry_date.split('T')[0] : item.expiry_date) : '',
+            quantity: item.quantity || 0,
             unit_price: item.unit_price || 0,
             sub_total: item.total || 0,
+            batch_stock: 0,
             current_stock: 0, // Backend doesn't return this
             last_purchase_price: item.unit_price || 0,
           })),
@@ -397,9 +400,9 @@ export function Purchase() {
                     {selectedPurchase.items.map((item, index) => (
                       <tr key={index} className="border-b border-slate-100">
                         <td className="p-2">{item.product_name}</td>
-                        <td className="p-2 font-mono text-sm">{item.batch}</td>
-                        <td className="p-2">{item.expiry}</td>
-                        <td className="p-2 text-right">{item.qty}</td>
+                        <td className="p-2 font-mono text-sm">{item.batch_number}</td>
+                        <td className="p-2">{formatDate(item.expiry_date)}</td>
+                        <td className="p-2 text-right">{item.quantity}</td>
                         <td className="p-2 text-right">৳ {item.unit_price}</td>
                         <td className="p-2 text-right font-medium">৳ {item.sub_total.toLocaleString()}</td>
                       </tr>
@@ -434,12 +437,11 @@ export function Purchase() {
                 warehouse_id: warehouseId,
                 items: purchase.items.map(item => ({
                   product_id: item.product_id,
-                  batch_number: item.batch,
-                  expiry_date: item.expiry,
-                  quantity: item.qty,
-                  unit_price: item.unit_price,
-                  // Include batch_id if available for server-side validation
                   batch_id: (item as any).batch_id || null,
+                  batch_number: item.batch_number,
+                  expiry_date: item.expiry_date,
+                  quantity: item.quantity,
+                  unit_price: item.unit_price,
                 })),
                 notes: `Warehouse: ${purchase.warehouse}, Supplier Invoice: ${purchase.supplier_invoice}`,
               };
@@ -489,18 +491,23 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loadingSuppliers, setLoadingSuppliers] = useState(false);
-  const [productBatches, setProductBatches] = useState<Record<string, BatchInfo[]>>({});
+  const [entryProduct, setEntryProduct] = useState<ProductCatalogItem | null>(null);
   const [entryBatchSearch, setEntryBatchSearch] = useState('');
   const [showEntryBatchDropdown, setShowEntryBatchDropdown] = useState(false);
-  const [entryProduct, setEntryProduct] = useState<ProductCatalogItem | null>(null);
-  const [entryBatch, setEntryBatch] = useState<BatchInfo | null>(null);
+  const [entryBatches, setEntryBatches] = useState<BatchInfo[]>([]);
+  const [entryBatchesLoading, setEntryBatchesLoading] = useState(false);
+  const [entryBatchesError, setEntryBatchesError] = useState<string | null>(null);
+  const [entryBatchId, setEntryBatchId] = useState<string | null>(null);
+  const [entryBatchNo, setEntryBatchNo] = useState('');
+  const [entryExpiry, setEntryExpiry] = useState('');
+  const [entryBatchStock, setEntryBatchStock] = useState(0);
   const [entryQty, setEntryQty] = useState(0);
   const [entryUnitPrice, setEntryUnitPrice] = useState(0);
+  const [entryOverridePrice, setEntryOverridePrice] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState<{ itemId: string; productName: string } | null>(null);
   const [addingProductId, setAddingProductId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const entryBatchDropdownRef = useRef<HTMLDivElement>(null);
 
   // Fetch warehouses from API
   useEffect(() => {
@@ -617,7 +624,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setShowProductDropdown(false);
       }
-      if (entryBatchDropdownRef.current && !entryBatchDropdownRef.current.contains(event.target as Node)) {
+      if (!document.querySelector('[data-entry-batch-dropdown]')?.contains(event.target as Node)) {
         setShowEntryBatchDropdown(false);
       }
     };
@@ -631,48 +638,54 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
     p.barcode.includes(searchTerm)
   );
 
-  // Fetch batches for a product
-  const fetchProductBatches = async (productId: string): Promise<BatchInfo[]> => {
+  const fetchEntryBatches = async (productId: string, warehouseId: string | null) => {
     try {
-      const batchesResponse = await api.get(`/api/products/${productId}/batches`);
-      if (batchesResponse.data && Array.isArray(batchesResponse.data)) {
-        return batchesResponse.data.map((b: any) => ({
-          id: b.id || '',
-          batch_number: b.batch_number || '',
-          expiry_date: b.expiry_date || '',
-          quantity: b.quantity || 0,
-          purchase_price: b.purchase_price || 0,
-        }));
-      }
+      setEntryBatchesLoading(true);
+      setEntryBatchesError(null);
+      const response = await api.get(`/api/products/${productId}/batches`, {
+        params: warehouseId ? { warehouse_id: warehouseId } : undefined,
+      });
+      const batches = Array.isArray(response.data)
+        ? response.data.map((b: any) => ({
+            id: b.id || '',
+            batch_number: b.batch_number || '',
+            expiry_date: b.expiry_date || '',
+            quantity: b.quantity || 0,
+            purchase_price: b.purchase_price || 0,
+            warehouse_id: b.warehouse_id || null,
+          }))
+        : [];
+      setEntryBatches(batches);
+      return batches;
     } catch (error) {
-      console.warn('[Purchase] Could not fetch batches:', error);
+      console.error('[Purchase] Failed to fetch batches:', error);
+      setEntryBatchesError('Failed to load batches');
+      setEntryBatches([]);
+      return [];
+    } finally {
+      setEntryBatchesLoading(false);
     }
-    return [];
   };
 
   const addProductToItems = async (product: ProductCatalogItem) => {
     setAddingProductId(product.id);
 
     try {
-      const [productResponse, batches] = await Promise.all([
-        api.get(`/api/products/${product.id}`).catch(() => ({ data: null })),
-        fetchProductBatches(product.id)
-      ]);
-
+      const productResponse = await api.get(`/api/products/${product.id}`).catch(() => ({ data: null }));
       const fullProduct = productResponse.data || product;
       const unitPrice = fullProduct.purchase_price || product.lastPrice || 0;
 
-      setProductBatches(prev => ({
-        ...prev,
-        [product.id]: batches
-      }));
-
       setEntryProduct(product);
-      setEntryBatch(null);
       setEntryBatchSearch('');
+      setEntryBatchId(null);
+      setEntryBatchNo('');
+      setEntryExpiry('');
+      setEntryBatchStock(0);
       setEntryQty(0);
       setEntryUnitPrice(unitPrice);
+      setEntryOverridePrice(false);
       setEntryErrors({});
+      await fetchEntryBatches(product.id, formData.warehouse_id || null);
     } catch (error) {
       console.error('[Purchase] Error selecting product:', error);
       toast({
@@ -681,19 +694,29 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
         variant: "destructive",
       });
     } finally {
-      setSearchTerm('');
+      setSearchTerm(product.name);
       setShowProductDropdown(false);
       setAddingProductId(null);
     }
   };
 
   const handleEntryBatchSelect = (batch: BatchInfo) => {
-    setEntryBatch(batch);
+    setEntryBatchId(batch.id);
+    setEntryBatchNo(batch.batch_number);
+    setEntryExpiry(batch.expiry_date);
+    setEntryBatchStock(batch.quantity);
     setEntryBatchSearch('');
     setShowEntryBatchDropdown(false);
-    if (batch.purchase_price && batch.purchase_price > 0) {
-      setEntryUnitPrice(batch.purchase_price);
+    if (!entryOverridePrice) {
+      setEntryUnitPrice(batch.purchase_price || entryUnitPrice);
     }
+    console.log('[Purchase] Entry batch selected:', {
+      batch_id: batch.id,
+      batch_number: batch.batch_number,
+      expiry_date: batch.expiry_date,
+      quantity: batch.quantity,
+      purchase_price: batch.purchase_price,
+    });
   };
 
   const handleAddEntryItem = () => {
@@ -702,14 +725,20 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
     if (!entryProduct) {
       newEntryErrors.entryProduct = 'Select a product';
     }
-    if (!entryBatch) {
+    if (!entryBatchId || !entryBatchNo) {
       newEntryErrors.entryBatch = 'Select a batch';
+    }
+    if (!entryExpiry) {
+      newEntryErrors.entryExpiry = 'Expiry is required';
     }
     if (!entryQty || entryQty <= 0) {
       newEntryErrors.entryQty = 'Quantity must be greater than 0';
     }
-    if (entryBatch && entryQty > entryBatch.quantity) {
-      newEntryErrors.entryQty = `Quantity cannot exceed stock (${entryBatch.quantity})`;
+    if (entryBatchStock > 0 && entryQty > entryBatchStock) {
+      newEntryErrors.entryQty = `Quantity cannot exceed stock (${entryBatchStock})`;
+    }
+    if (!entryUnitPrice || entryUnitPrice <= 0) {
+      newEntryErrors.entryUnitPrice = 'Unit price is required';
     }
 
     setEntryErrors(newEntryErrors);
@@ -720,34 +749,80 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
     const unitPrice = entryUnitPrice || entryProduct?.lastPrice || 0;
     const lineTotal = entryQty * unitPrice;
 
-    const newItem: PurchaseItem = {
-      id: `item-${Date.now()}`,
-      product_id: entryProduct!.id,
-      product_name: entryProduct!.name,
-      sku: entryProduct!.sku,
-      batch_id: entryBatch!.id,
-      batch: entryBatch!.batch_number,
-      expiry: entryBatch!.expiry_date,
-      qty: entryQty,
-      unit_price: unitPrice,
-      sub_total: lineTotal,
-      batch_stock: entryBatch!.quantity,
-      current_stock: entryProduct!.stock,
-      last_purchase_price: unitPrice,
-    };
+    setItems(prev => {
+      const existingIndex = prev.findIndex(
+        item => item.product_id === entryProduct!.id && item.batch_id === entryBatchId
+      );
+      if (existingIndex >= 0) {
+        const existing = prev[existingIndex];
+        const mergedQty = existing.quantity + entryQty;
+        if (entryBatchStock > 0 && mergedQty > entryBatchStock) {
+          setEntryErrors({ entryQty: `Total quantity exceeds stock (${entryBatchStock})` });
+          return prev;
+        }
+        const mergedItem = {
+          ...existing,
+          quantity: mergedQty,
+          sub_total: mergedQty * existing.unit_price,
+        };
+        console.log('[Purchase] Merged entry item:', mergedItem);
+        return [
+          ...prev.slice(0, existingIndex),
+          mergedItem,
+          ...prev.slice(existingIndex + 1),
+        ];
+      }
 
-    setItems(prev => [...prev, newItem]);
+      const newItem: PurchaseItem = {
+        id: `item-${Date.now()}`,
+        product_id: entryProduct!.id,
+        product_name: entryProduct!.name,
+        sku: entryProduct!.sku,
+        batch_id: entryBatchId,
+        batch_number: entryBatchNo,
+        expiry_date: entryExpiry,
+        quantity: entryQty,
+        unit_price: unitPrice,
+        sub_total: lineTotal,
+        batch_stock: entryBatchStock,
+        current_stock: entryProduct!.stock,
+        last_purchase_price: unitPrice,
+      };
+      console.log('[Purchase] Added entry item:', newItem);
+      return [...prev, newItem];
+    });
     setEntryProduct(null);
-    setEntryBatch(null);
     setEntryBatchSearch('');
+    setEntryBatchId(null);
+    setEntryBatchNo('');
+    setEntryExpiry('');
+    setEntryBatchStock(0);
     setEntryQty(0);
     setEntryUnitPrice(0);
+    setEntryOverridePrice(false);
     setEntryErrors({});
+    setSearchTerm('');
 
     setTimeout(() => {
       searchInputRef.current?.focus();
     }, 50);
   };
+
+  useEffect(() => {
+    if (entryOverridePrice) {
+      return;
+    }
+    if (entryBatchId) {
+      const selected = entryBatches.find(b => b.id === entryBatchId);
+      if (selected?.purchase_price) {
+        setEntryUnitPrice(selected.purchase_price);
+      }
+      return;
+    }
+    if (entryProduct) {
+      setEntryUnitPrice(entryUnitPrice || entryProduct.lastPrice || 0);
+    }
+  }, [entryOverridePrice, entryBatchId, entryBatches, entryProduct]);
 
   const handleBarcodeScan = (barcode: string) => {
     const product = productCatalog.find(p => p.barcode === barcode);
@@ -799,11 +874,9 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
 
   // Real-time calculation: Recalculate totals whenever items or formData changes
   const subTotal = items.reduce((sum, item) => {
-    // Ensure sub_total is always up-to-date
-    const qty = typeof item.qty === 'number' ? item.qty : parseFloat(String(item.qty)) || 0;
+    const qty = typeof item.quantity === 'number' ? item.quantity : parseFloat(String(item.quantity)) || 0;
     const unitPrice = typeof item.unit_price === 'number' ? item.unit_price : parseFloat(String(item.unit_price)) || 0;
-    const calculatedSubTotal = qty * unitPrice;
-    return sum + calculatedSubTotal;
+    return sum + qty * unitPrice;
   }, 0);
   
   const discountAmount = formData.discount_type === 'percent' 
@@ -817,11 +890,9 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
   // Real-time update: Sync item sub_totals when qty or unit_price changes
   useEffect(() => {
     const updatedItems = items.map(item => {
-      const qty = typeof item.qty === 'number' ? item.qty : parseFloat(String(item.qty)) || 0;
+      const qty = typeof item.quantity === 'number' ? item.quantity : parseFloat(String(item.quantity)) || 0;
       const unitPrice = typeof item.unit_price === 'number' ? item.unit_price : parseFloat(String(item.unit_price)) || 0;
-      // Line Total should be 0 if quantity is 0
       const calculatedSubTotal = qty > 0 ? qty * unitPrice : 0;
-      // Only update if sub_total is different to avoid infinite loops
       if (Math.abs(item.sub_total - calculatedSubTotal) > 0.01) {
         return { ...item, sub_total: calculatedSubTotal };
       }
@@ -835,7 +906,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
     if (hasChanges) {
       setItems(updatedItems);
     }
-  }, [items.map(i => `${i.id}-${i.qty}-${i.unit_price}`).join(',')]);
+  }, [items.map(i => `${i.id}-${i.quantity}-${i.unit_price}`).join(',')]);
 
   const validateForm = (): boolean => {
     const newErrors: ValidationError = {};
@@ -845,11 +916,14 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
     }
     
     items.forEach((item, index) => {
-      if (!item.batch || !item.batch_id) {
+      if (!item.batch_number || !item.batch_id) {
         newErrors[`batch_${index}`] = 'Batch is required';
       }
-      if (item.qty <= 0) {
+      if (item.quantity <= 0) {
         newErrors[`qty_${index}`] = 'Quantity must be greater than 0';
+      }
+      if (item.batch_stock > 0 && item.quantity > item.batch_stock) {
+        newErrors[`qty_${index}`] = `Quantity cannot exceed stock (${item.batch_stock})`;
       }
       if (item.unit_price <= 0) {
         newErrors[`price_${index}`] = 'Price must be greater than 0';
@@ -1034,8 +1108,8 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
             <label className="block text-sm font-medium text-slate-700 mb-2">
               Data Entry Row
             </label>
-            <div className="grid grid-cols-1 lg:grid-cols-[2fr_1.5fr_1fr_1fr_1fr_auto] gap-2 items-start">
-              <div className="relative" ref={dropdownRef}>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-[2fr_1.5fr_1fr_1fr_1fr_auto] gap-2 items-start">
+              <div className="relative min-w-0" ref={dropdownRef}>
                 <input
                   ref={searchInputRef}
                   type="text"
@@ -1082,10 +1156,10 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                 )}
               </div>
 
-              <div className="relative" ref={entryBatchDropdownRef}>
+              <div className="relative min-w-0" data-entry-batch-dropdown>
                 <input
                   type="text"
-                  value={entryBatch?.batch_number || entryBatchSearch}
+                  value={entryBatchNo || entryBatchSearch}
                   onChange={(e) => {
                     setEntryBatchSearch(e.target.value);
                     setShowEntryBatchDropdown(true);
@@ -1101,7 +1175,16 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                 />
                 {showEntryBatchDropdown && entryProduct && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-48 overflow-y-auto z-20">
-                    {(productBatches[entryProduct.id] || [])
+                    {entryBatchesLoading && (
+                      <div className="px-3 py-2 text-xs text-slate-500">Loading batches...</div>
+                    )}
+                    {!entryBatchesLoading && entryBatchesError && (
+                      <div className="px-3 py-2 text-xs text-red-500">{entryBatchesError}</div>
+                    )}
+                    {!entryBatchesLoading && !entryBatchesError && entryBatches.length === 0 && (
+                      <div className="px-3 py-2 text-xs text-slate-500">No batches found</div>
+                    )}
+                    {!entryBatchesLoading && !entryBatchesError && entryBatches
                       .filter(b => b.batch_number.toLowerCase().includes(entryBatchSearch.toLowerCase()) || b.expiry_date.includes(entryBatchSearch))
                       .map(batch => (
                         <button
@@ -1123,52 +1206,84 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                 )}
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <input
                   type="text"
-                  value={entryBatch ? formatDate(entryBatch.expiry_date) : 'Select batch first'}
+                  value={entryExpiry ? formatDate(entryExpiry) : 'Select batch first'}
                   readOnly
                   className="input-field w-full bg-slate-50 cursor-not-allowed"
                 />
+                {!entryExpiry && (
+                  <p className="text-xs text-slate-500 mt-1">Select batch first</p>
+                )}
+                {entryErrors.entryExpiry && (
+                  <p className="text-red-500 text-xs mt-1">{entryErrors.entryExpiry}</p>
+                )}
               </div>
 
-              <div>
+              <div className="min-w-0">
                 <input
                   type="number"
                   inputMode="numeric"
                   min="0"
-                  max={entryBatch?.quantity || 0}
+                  max={entryBatchStock || 0}
                   value={entryQty === 0 ? '' : entryQty}
-                  onChange={(e) => setEntryQty(parseInt(e.target.value || '0', 10))}
+                  onChange={(e) => {
+                    const next = parseInt(e.target.value || '0', 10);
+                    if (!entryBatchStock) {
+                      setEntryQty(next);
+                      return;
+                    }
+                    setEntryQty(Math.min(next, entryBatchStock));
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleAddEntryItem();
+                    }
+                  }}
                   className="input-field w-full"
                   placeholder="Qty"
-                  disabled={!entryBatch || entryBatch.quantity === 0}
+                  disabled={!entryBatchId || entryBatchStock === 0}
                 />
+                {entryBatchStock === 0 && entryBatchId && (
+                  <p className="text-red-500 text-xs mt-1">Out of stock</p>
+                )}
                 {entryErrors.entryQty && (
                   <p className="text-red-500 text-xs mt-1">{entryErrors.entryQty}</p>
                 )}
-                {entryBatch && entryBatch.quantity === 0 && (
-                  <p className="text-red-500 text-xs mt-1">Out of stock</p>
+              </div>
+
+              <div className="relative min-w-0">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">৳</span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  value={entryUnitPrice === 0 ? '' : entryUnitPrice}
+                  onChange={(e) => setEntryUnitPrice(parseFloat(e.target.value || '0'))}
+                  className="input-field w-full pl-8 text-right"
+                  placeholder="0.00"
+                  disabled={!entryProduct || !entryOverridePrice}
+                />
+                <label className="mt-1 text-xs text-slate-600 flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={entryOverridePrice}
+                    onChange={(e) => setEntryOverridePrice(e.target.checked)}
+                  />
+                  Override price
+                </label>
+                {entryErrors.entryUnitPrice && (
+                  <p className="text-red-500 text-xs mt-1">{entryErrors.entryUnitPrice}</p>
                 )}
               </div>
 
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-sm font-medium">৳</span>
-                <input
-                  type="text"
-                  value={entryUnitPrice ? entryUnitPrice.toFixed(2) : ''}
-                  readOnly
-                  className="input-field w-full pl-8 text-right bg-slate-50 cursor-not-allowed"
-                  placeholder="0.00"
-                />
-              </div>
-
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 min-w-0">
                 <BarcodeScanButton onScan={handleBarcodeScan} />
                 <button
                   type="button"
                   onClick={handleAddEntryItem}
-                  className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium px-4 py-2 rounded-lg transition-colors"
+                  disabled={!entryProduct || !entryBatchId || entryBatchStock === 0}
+                  className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-medium px-4 py-2 rounded-lg transition-colors"
                 >
                   Add to List
                 </button>
@@ -1215,9 +1330,9 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
                           <p className="text-xs text-slate-500 leading-tight">{item.sku}</p>
                         </div>
                       </td>
-                      <td className="px-2 py-3 align-middle text-sm text-slate-700">{item.batch}</td>
-                      <td className="px-2 py-3 align-middle text-sm text-slate-700">{formatDate(item.expiry)}</td>
-                      <td className="px-2 py-3 align-middle text-sm text-slate-700 text-right">{item.qty}</td>
+                      <td className="px-2 py-3 align-middle text-sm text-slate-700">{item.batch_number}</td>
+                      <td className="px-2 py-3 align-middle text-sm text-slate-700">{formatDate(item.expiry_date)}</td>
+                      <td className="px-2 py-3 align-middle text-sm text-slate-700 text-right">{item.quantity}</td>
                       <td className="px-2 py-3 align-middle text-sm text-slate-700 text-right">৳{item.unit_price.toFixed(2)}</td>
                       <td className="px-2 py-3 text-right align-middle">
                         <span className="font-bold text-sm text-slate-900">৳{item.sub_total.toLocaleString()}</span>

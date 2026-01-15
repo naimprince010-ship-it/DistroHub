@@ -192,8 +192,11 @@ class SupabaseDatabase:
             print(f"[DB] Error deleting product {product_id}: {e}")
             raise
     
-    def get_batches_by_product(self, product_id: str) -> List[dict]:
-        result = self.client.table("product_batches").select("*").eq("product_id", product_id).execute()
+    def get_batches_by_product(self, product_id: str, warehouse_id: Optional[str] = None) -> List[dict]:
+        query = self.client.table("product_batches").select("*").eq("product_id", product_id)
+        if warehouse_id:
+            query = query.eq("warehouse_id", warehouse_id)
+        result = query.execute()
         return result.data or []
     
     def get_batch(self, batch_id: str) -> Optional[dict]:
@@ -404,8 +407,35 @@ class SupabaseDatabase:
             product = self.get_product(item["product_id"])
             if not product:
                 continue
-            
-            # Create batch with warehouse_id
+
+            batch_id = item.get("batch_id")
+            if batch_id:
+                existing_batch = self.get_batch(batch_id)
+                if existing_batch:
+                    # Update existing batch quantity
+                    self.update_batch_quantity(batch_id, item["quantity"])
+                    batch_number = existing_batch.get("batch_number", item["batch_number"])
+                    expiry_date = existing_batch.get("expiry_date", item["expiry_date"])
+                    purchase_price = existing_batch.get("purchase_price", item["unit_price"])
+                    if warehouse_id:
+                        self.update_warehouse_stock(warehouse_id, item["product_id"], item["quantity"])
+                    item_total = item["quantity"] * item["unit_price"]
+                    purchase_item_data = {
+                        "id": str(uuid.uuid4()),
+                        "purchase_id": purchase_id,
+                        "product_id": item["product_id"],
+                        "product_name": product["name"],
+                        "batch_number": batch_number,
+                        "expiry_date": expiry_date,
+                        "quantity": item["quantity"],
+                        "unit_price": item["unit_price"],
+                        "total": item_total
+                    }
+                    item_result = self.client.table("purchase_items").insert(purchase_item_data).execute()
+                    purchase_items.append(item_result.data[0] if item_result.data else purchase_item_data)
+                    continue
+
+            # Create new batch with warehouse_id
             batch_data = {
                 "product_id": item["product_id"],
                 "batch_number": item["batch_number"],
@@ -415,11 +445,11 @@ class SupabaseDatabase:
                 "warehouse_id": warehouse_id  # Link batch to warehouse
             }
             batch = self.create_batch(batch_data)
-            
+
             # Update warehouse_stock summary
             if warehouse_id and batch:
                 self.update_warehouse_stock(warehouse_id, item["product_id"], item["quantity"])
-            
+
             # Create purchase item
             item_total = item["quantity"] * item["unit_price"]
             purchase_item_data = {

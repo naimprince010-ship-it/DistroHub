@@ -103,6 +103,7 @@ class Retailer(RetailerBase):
 
 class PurchaseItemCreate(BaseModel):
     product_id: str
+    batch_id: Optional[str] = None
     batch_number: str
     expiry_date: date
     quantity: int

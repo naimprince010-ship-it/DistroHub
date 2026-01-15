@@ -728,8 +728,8 @@ async def delete_product(product_id: str, current_user: dict = Depends(get_curre
         raise HTTPException(status_code=500, detail=f"Failed to delete product: {str(e)}")
 
 @app.get("/api/products/{product_id}/batches", response_model=List[ProductBatch])
-async def get_product_batches(product_id: str, current_user: dict = Depends(get_current_user)):
-    batches = db.get_batches_by_product(product_id)
+async def get_product_batches(product_id: str, warehouse_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    batches = db.get_batches_by_product(product_id, warehouse_id)
     return [ProductBatch(**b) for b in batches]
 
 @app.post("/api/products/{product_id}/batches", response_model=ProductBatch)
