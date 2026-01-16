@@ -24,6 +24,7 @@ import {
 import api from '@/lib/api';
 import { logger } from '@/lib/logger';
 import * as smsApi from '@/lib/smsApi';
+import { toast } from '@/hooks/use-toast';
 import type {
   SmsSettings,
   SmsSettingsCreate,
@@ -1732,50 +1733,129 @@ function ProfileSettings() {
 }
 
 function BusinessSettings() {
+  const storageKey = 'distrohub_business_settings';
+  const [isSaving, setIsSaving] = useState(false);
+  const [formData, setFormData] = useState({
+    businessName: 'DistroHub Dealership',
+    address: '123 Main Street, Dhaka, Bangladesh',
+    phone: '01712345678',
+    email: 'contact@distrohub.com',
+    currency: 'BDT',
+    timezone: 'Asia/Dhaka',
+  });
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(storageKey);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        setFormData((prev) => ({
+          ...prev,
+          ...parsed,
+        }));
+      }
+    } catch (error) {
+      console.warn('[BusinessSettings] Failed to load saved settings:', error);
+    }
+  }, []);
+
+  const handleSave = () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(formData));
+      toast({
+        title: 'Saved',
+        description: 'Business settings saved successfully.',
+      });
+    } catch (error) {
+      console.error('[BusinessSettings] Failed to save settings:', error);
+      toast({
+        title: 'Save failed',
+        description: 'Could not save settings. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div className="max-w-2xl space-y-3">
       <h3 className="text-lg font-semibold text-slate-900">Business Settings</h3>
 
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Business Name</label>
-        <input type="text" className="input-field" defaultValue="DistroHub Dealership" />
+        <input
+          type="text"
+          className="input-field"
+          value={formData.businessName}
+          onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
+        />
       </div>
 
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Address</label>
-        <textarea className="input-field" rows={3} defaultValue="123 Main Street, Dhaka, Bangladesh" />
+        <textarea
+          className="input-field"
+          rows={3}
+          value={formData.address}
+          onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+        />
       </div>
 
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
-          <input type="tel" className="input-field" defaultValue="01712345678" />
+          <input
+            type="tel"
+            className="input-field"
+            value={formData.phone}
+            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+          />
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-          <input type="email" className="input-field" defaultValue="contact@distrohub.com" />
+          <input
+            type="email"
+            className="input-field"
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+          />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Currency</label>
-          <select className="input-field">
+          <select
+            className="input-field"
+            value={formData.currency}
+            onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
+          >
             <option value="BDT">BDT (৳)</option>
             <option value="USD">USD ($)</option>
           </select>
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Timezone</label>
-          <select className="input-field">
+          <select
+            className="input-field"
+            value={formData.timezone}
+            onChange={(e) => setFormData({ ...formData, timezone: e.target.value })}
+          >
             <option value="Asia/Dhaka">Asia/Dhaka (GMT+6)</option>
           </select>
         </div>
       </div>
 
-      <button className="btn-primary flex items-center gap-2">
+      <button
+        className="btn-primary flex items-center gap-2 disabled:opacity-50"
+        onClick={handleSave}
+        disabled={isSaving}
+      >
         <Save className="w-4 h-4" />
-        Save Changes
+        {isSaving ? 'Saving...' : 'Save Changes'}
       </button>
     </div>
   );
