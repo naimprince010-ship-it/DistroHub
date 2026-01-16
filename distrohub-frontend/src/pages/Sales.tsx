@@ -57,6 +57,43 @@ interface SalesOrder {
   payments?: Payment[];
 }
 
+const mapApiSaleToRecord = (sale: any, synced: boolean): SaleRecord => ({
+  id: sale.id || '',
+  retailer_id: sale.retailer_id || '',
+  retailer_name: sale.retailer_name || '',
+  items: (sale.items || []).map((item: any) => ({
+    product_id: item.product_id || '',
+    product_name: item.product_name || item.product || '',
+    quantity: item.quantity || item.qty || 0,
+    unit_price: item.unit_price || item.price || 0,
+    total: (item.quantity || item.qty || 0) * (item.unit_price || item.price || 0),
+  })),
+  total_amount: sale.total_amount || 0,
+  paid_amount: sale.paid_amount || 0,
+  payment_method: sale.payment_method || 'cash',
+  sale_date: sale.created_at ? sale.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
+  synced,
+  lastModified: Date.now(),
+});
+
+const mapRecordToOrder = (sale: SaleRecord): SalesOrder => ({
+  id: sale.id,
+  order_number: sale.id,
+  retailer_name: sale.retailer_name,
+  retailer_id: sale.retailer_id,
+  order_date: sale.sale_date,
+  delivery_date: sale.sale_date,
+  status: 'pending',
+  payment_status: sale.paid_amount >= sale.total_amount ? 'paid' : sale.paid_amount > 0 ? 'partial' : 'unpaid',
+  total_amount: sale.total_amount,
+  paid_amount: sale.paid_amount,
+  items: sale.items.map((item) => ({
+    product: item.product_name,
+    qty: item.quantity,
+    price: item.unit_price,
+  })),
+});
+
 const statusConfig = {
   pending: { icon: Clock, color: 'bg-yellow-100 text-yellow-700', label: 'Pending' },
   confirmed: { icon: CheckCircle, color: 'bg-blue-100 text-blue-700', label: 'Confirmed' },
@@ -81,43 +118,6 @@ export function Sales() {
   const [editOrder, setEditOrder] = useState<SalesOrder | null>(null);
   const [printChallanOrder, setPrintChallanOrder] = useState<SalesOrder | null>(null);
   const [collectionOrder, setCollectionOrder] = useState<SalesOrder | null>(null);
-
-  const mapApiSaleToRecord = (sale: any, synced: boolean): SaleRecord => ({
-    id: sale.id || '',
-    retailer_id: sale.retailer_id || '',
-    retailer_name: sale.retailer_name || '',
-    items: (sale.items || []).map((item: any) => ({
-      product_id: item.product_id || '',
-      product_name: item.product_name || item.product || '',
-      quantity: item.quantity || item.qty || 0,
-      unit_price: item.unit_price || item.price || 0,
-      total: (item.quantity || item.qty || 0) * (item.unit_price || item.price || 0),
-    })),
-    total_amount: sale.total_amount || 0,
-    paid_amount: sale.paid_amount || 0,
-    payment_method: sale.payment_method || 'cash',
-    sale_date: sale.created_at ? sale.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
-    synced,
-    lastModified: Date.now(),
-  });
-
-  const mapRecordToOrder = (sale: SaleRecord): SalesOrder => ({
-    id: sale.id,
-    order_number: sale.id,
-    retailer_name: sale.retailer_name,
-    retailer_id: sale.retailer_id,
-    order_date: sale.sale_date,
-    delivery_date: sale.sale_date,
-    status: 'pending',
-    payment_status: sale.paid_amount >= sale.total_amount ? 'paid' : sale.paid_amount > 0 ? 'partial' : 'unpaid',
-    total_amount: sale.total_amount,
-    paid_amount: sale.paid_amount,
-    items: sale.items.map((item) => ({
-      product: item.product_name,
-      qty: item.quantity,
-      price: item.unit_price,
-    })),
-  });
 
   // Fetch sales from API
   const fetchSales = async () => {

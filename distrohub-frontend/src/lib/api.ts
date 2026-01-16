@@ -139,9 +139,9 @@ export async function postWithOfflineQueue<T extends Record<string, unknown>>(
   payload: T,
   options?: {
     queueData?: Record<string, unknown>;
-    localRecord?: Record<string, unknown>;
-    onOfflineSave?: (record: Record<string, unknown>) => Promise<void>;
-    onOnlineSave?: (record: Record<string, unknown>) => Promise<void>;
+    localRecord?: unknown;
+    onOfflineSave?: (record: unknown) => Promise<void>;
+    onOnlineSave?: (record: unknown) => Promise<void>;
   }
 ) {
   const queueData = options?.queueData ?? payload;
@@ -172,9 +172,9 @@ export async function putWithOfflineQueue<T extends Record<string, unknown>>(
   url: string,
   payload: T,
   options?: {
-    localRecord?: Record<string, unknown>;
-    onOfflineSave?: (record: Record<string, unknown>) => Promise<void>;
-    onOnlineSave?: (record: Record<string, unknown>) => Promise<void>;
+    localRecord?: unknown;
+    onOfflineSave?: (record: unknown) => Promise<void>;
+    onOnlineSave?: (record: unknown) => Promise<void>;
   }
 ) {
   const localRecord = options?.localRecord ?? payload;

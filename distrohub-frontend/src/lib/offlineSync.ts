@@ -15,7 +15,6 @@ import {
 } from '@/lib/offlineDb';
 
 type SyncEntity = PendingSyncRecord['entity'];
-type SyncType = PendingSyncRecord['type'];
 
 const entityApiBase: Record<SyncEntity, string> = {
   products: '/api/products',
