@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
+import { Link } from 'react-router-dom';
 import {
   TrendingUp,
   TrendingDown,
@@ -122,6 +123,7 @@ export function Dashboard() {
       icon: TrendingUp,
       color: 'bg-green-500',
       tint: stats.sales_this_month > 0 ? 'bg-green-50 border-green-100' : 'bg-white border-slate-100',
+      to: '/sales-report',
     },
     {
       title: 'Receivable',
@@ -131,6 +133,7 @@ export function Dashboard() {
       icon: TrendingDown,
       color: 'bg-red-500',
       tint: stats.receivable_from_customers > 0 ? 'bg-red-50 border-red-100' : 'bg-white border-slate-100',
+      to: '/accounts/receivable',
     },
     {
       title: 'Total Products',
@@ -140,6 +143,7 @@ export function Dashboard() {
       icon: Package,
       color: 'bg-blue-500',
       tint: 'bg-white border-slate-100',
+      to: '/products',
     },
     {
       title: 'Active Retailers',
@@ -149,6 +153,7 @@ export function Dashboard() {
       icon: Users,
       color: 'bg-purple-500',
       tint: 'bg-white border-slate-100',
+      to: '/retailers',
     },
     {
       title: 'Low Stock',
@@ -158,6 +163,7 @@ export function Dashboard() {
       icon: AlertTriangle,
       color: 'bg-orange-500',
       tint: stats.low_stock_count > 0 ? 'bg-orange-50 border-orange-100' : 'bg-white border-slate-100',
+      to: '/inventory?filter=low-stock',
     },
     {
       title: 'Expiring Soon',
@@ -167,6 +173,7 @@ export function Dashboard() {
       icon: AlertTriangle,
       color: 'bg-yellow-500',
       tint: stats.expiring_soon_count > 0 ? 'bg-yellow-50 border-yellow-100' : 'bg-white border-slate-100',
+      to: '/expiry',
     },
     {
       title: 'Payable to Suppliers',
@@ -176,6 +183,7 @@ export function Dashboard() {
       icon: ShoppingCart,
       color: 'bg-indigo-500',
       tint: stats.payable_to_supplier > 0 ? 'bg-indigo-50 border-indigo-100' : 'bg-white border-slate-100',
+      to: '/purchase',
     },
     {
       title: 'Total Categories',
@@ -185,6 +193,7 @@ export function Dashboard() {
       icon: FolderOpen,
       color: 'bg-teal-500',
       tint: 'bg-white border-slate-100',
+      to: '/products',
     },
   ] : [];
 
@@ -205,9 +214,10 @@ export function Dashboard() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
             {displayStats.map((stat) => (
-              <div
+              <Link
                 key={stat.title}
-                className={`rounded-xl p-4 shadow-sm border card-hover ${stat.tint}`}
+                to={stat.to}
+                className={`rounded-xl p-4 shadow-sm border card-hover hover:shadow-lg transition-shadow cursor-pointer ${stat.tint}`}
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className={`w-10 h-10 ${stat.color} rounded-lg flex items-center justify-center`}>
@@ -230,7 +240,7 @@ export function Dashboard() {
                   {stat.value}
                 </h3>
                 <p className="text-slate-600 text-sm font-medium">{stat.title}</p>
-              </div>
+              </Link>
             ))}
           </div>
         )}
