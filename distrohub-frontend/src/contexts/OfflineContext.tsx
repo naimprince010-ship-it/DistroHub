@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
+import { toast } from '@/hooks/use-toast';
 import { getUnsyncedCount } from '@/lib/offlineDb';
 import { runOfflineSync } from '@/lib/offlineSync';
 
@@ -22,12 +23,48 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const syncData = useCallback(async () => {
-    if (!navigator.onLine || isSyncing) return;
+    if (!navigator.onLine || isSyncing) {
+      if (!navigator.onLine) {
+        toast({
+          title: 'Offline mode',
+          description: 'Sync requires internet connection.',
+        });
+      }
+      return;
+    }
 
     setIsSyncing(true);
     try {
-      await runOfflineSync();
+      const result = await runOfflineSync();
       await updatePendingCount();
+      if (result.skipped) {
+        toast({
+          title: 'Sync skipped',
+          description: 'You are offline. Connect to sync data.',
+        });
+        return;
+      }
+      if (result.remaining === 0 && result.synced > 0) {
+        toast({
+          title: 'Sync complete',
+          description: `Synced ${result.synced} item(s).`,
+        });
+        return;
+      }
+      if (result.synced > 0 && result.remaining > 0) {
+        toast({
+          title: 'Partial sync',
+          description: `Synced ${result.synced}. ${result.remaining} remaining.`,
+        });
+        return;
+      }
+      if (result.remaining > 0) {
+        toast({
+          title: 'Sync failed',
+          description: result.error || 'Some items could not be synced.',
+          variant: 'destructive',
+        });
+      }
     } finally {
       setIsSyncing(false);
     }

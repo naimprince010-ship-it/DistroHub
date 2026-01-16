@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import time
+import uuid
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -40,12 +41,43 @@ from app.auth import create_access_token, get_current_user
 from app.sms_service import SmsService, SmsTemplateRenderer, SmsQueueManager
 from app.sms_worker import start_sms_worker
 from fastapi.responses import JSONResponse
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
 
 app = FastAPI(
     title="DistroHub API",
     description="Grocery Dealership Management System API",
     version="1.0.0"
 )
+
+SENTRY_DSN = os.environ.get("SENTRY_DSN")
+if SENTRY_DSN:
+    traces_sample_rate = float(os.environ.get("SENTRY_TRACES_SAMPLE_RATE", "0.1"))
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[FastApiIntegration()],
+        traces_sample_rate=traces_sample_rate,
+        send_default_pii=True,
+    )
+
+@app.middleware("http")
+async def request_logging_middleware(request: Request, call_next):
+    request_id = request.headers.get("x-request-id") or str(uuid.uuid4())
+    start_time = time.time()
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = (time.time() - start_time) * 1000
+        logger.error(
+            f"[REQ] {request_id} {request.method} {request.url.path} -> 500 in {duration_ms:.1f}ms"
+        )
+        raise
+    duration_ms = (time.time() - start_time) * 1000
+    response.headers["x-request-id"] = request_id
+    logger.info(
+        f"[REQ] {request_id} {request.method} {request.url.path} -> {response.status_code} in {duration_ms:.1f}ms"
+    )
+    return response
 
 RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("LOGIN_RATE_LIMIT_WINDOW_SECONDS", "300"))
 RATE_LIMIT_MAX_ATTEMPTS = int(os.environ.get("LOGIN_RATE_LIMIT_MAX_ATTEMPTS", "5"))

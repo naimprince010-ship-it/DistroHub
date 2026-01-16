@@ -145,16 +145,17 @@ async function buildSalesPayload(payload: Record<string, unknown>) {
 
 export async function runOfflineSync() {
   if (!isOnline()) {
-    return { synced: 0, remaining: 0, skipped: true };
+    return { synced: 0, remaining: 0, skipped: true, error: null as string | null };
   }
 
   const pending = await getPendingSync();
   if (pending.length === 0) {
-    return { synced: 0, remaining: 0, skipped: false };
+    return { synced: 0, remaining: 0, skipped: false, error: null as string | null };
   }
 
   const sorted = [...pending].sort((a, b) => a.timestamp - b.timestamp);
   let syncedCount = 0;
+  let lastError: string | null = null;
 
   for (const action of sorted) {
     try {
@@ -163,12 +164,13 @@ export async function runOfflineSync() {
       syncedCount += 1;
     } catch (error) {
       console.warn('[offlineSync] Failed action, keeping in queue:', action, error);
+      lastError = error instanceof Error ? error.message : 'Sync failed';
       break;
     }
   }
 
   const remaining = (await getPendingSync()).length;
-  return { synced: syncedCount, remaining, skipped: false };
+  return { synced: syncedCount, remaining, skipped: false, error: lastError };
 }
 
 export function initOfflineSync() {
