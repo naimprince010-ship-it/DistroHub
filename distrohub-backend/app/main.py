@@ -7,6 +7,7 @@ import asyncio
 import logging
 import os
 import re
+import time
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -45,6 +46,56 @@ app = FastAPI(
     description="Grocery Dealership Management System API",
     version="1.0.0"
 )
+
+RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("LOGIN_RATE_LIMIT_WINDOW_SECONDS", "300"))
+RATE_LIMIT_MAX_ATTEMPTS = int(os.environ.get("LOGIN_RATE_LIMIT_MAX_ATTEMPTS", "5"))
+_login_attempts: Dict[str, List[float]] = {}
+
+def _prune_attempts(attempts: List[float], now: float) -> List[float]:
+    cutoff = now - RATE_LIMIT_WINDOW_SECONDS
+    return [ts for ts in attempts if ts >= cutoff]
+
+def _is_rate_limited(client_ip: str) -> bool:
+    now = time.time()
+    attempts = _login_attempts.get(client_ip, [])
+    attempts = _prune_attempts(attempts, now)
+    _login_attempts[client_ip] = attempts
+    return len(attempts) >= RATE_LIMIT_MAX_ATTEMPTS
+
+def _record_login_failure(client_ip: str) -> None:
+    now = time.time()
+    attempts = _login_attempts.get(client_ip, [])
+    attempts = _prune_attempts(attempts, now)
+    attempts.append(now)
+    _login_attempts[client_ip] = attempts
+
+def _clear_login_failures(client_ip: str) -> None:
+    _login_attempts.pop(client_ip, None)
+
+def _log_audit_event(
+    action: str,
+    request: Request,
+    actor_id: Optional[str] = None,
+    entity_type: Optional[str] = None,
+    entity_id: Optional[str] = None,
+    metadata: Optional[dict] = None,
+) -> None:
+    if not hasattr(db, "log_audit_event"):
+        return
+    client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "unknown")
+    try:
+        db.log_audit_event(
+            actor_id=actor_id,
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            metadata=metadata or {},
+            ip_address=client_ip,
+            user_agent=user_agent,
+        )
+    except Exception as e:
+        print(f"[AUDIT] Failed to log audit event: {e}")
 
 # Global exception handler to ensure JSON responses (must be before middleware)
 from fastapi.exceptions import RequestValidationError
@@ -220,6 +271,16 @@ async def login(credentials: UserLogin, request: Request):
         user_agent = request.headers.get("user-agent", "unknown")
         client_host = request.client.host if request.client else "unknown"
         print(f"[LOGIN] Attempt from origin: {origin}, IP: {client_host}, User-Agent: {user_agent[:50]}")
+        if _is_rate_limited(client_host):
+            _log_audit_event(
+                action="login_rate_limited",
+                request=request,
+                metadata={"email": credentials.email},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many login attempts. Please try again later."
+            )
         # #region agent log
         try:
             import json
@@ -232,6 +293,12 @@ async def login(credentials: UserLogin, request: Request):
         user = db.get_user_by_email(credentials.email)
         if not user:
             print(f"[LOGIN] Failed: User not found for email: {credentials.email}")
+            _record_login_failure(client_host)
+            _log_audit_event(
+                action="login_failed",
+                request=request,
+                metadata={"email": credentials.email, "reason": "user_not_found"},
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password"
@@ -240,6 +307,13 @@ async def login(credentials: UserLogin, request: Request):
         password_valid = db.verify_password(credentials.password, user["password_hash"])
         if not password_valid:
             print(f"[LOGIN] Failed: Invalid password for email: {credentials.email}")
+            _record_login_failure(client_host)
+            _log_audit_event(
+                action="login_failed",
+                request=request,
+                actor_id=user.get("id"),
+                metadata={"email": credentials.email, "reason": "invalid_password"},
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password"
@@ -247,6 +321,13 @@ async def login(credentials: UserLogin, request: Request):
         
         access_token = create_access_token(data={"sub": user["id"]})
         print(f"[LOGIN] Success: User {user['email']} logged in from origin: {origin}")
+        _clear_login_failures(client_host)
+        _log_audit_event(
+            action="login_success",
+            request=request,
+            actor_id=user.get("id"),
+            metadata={"email": user.get("email")},
+        )
         return Token(
             access_token=access_token,
             user=User(
@@ -270,7 +351,7 @@ async def login(credentials: UserLogin, request: Request):
         )
 
 @app.post("/api/auth/register", response_model=Token)
-async def register(user_data: UserCreate):
+async def register(user_data: UserCreate, request: Request):
     existing = db.get_user_by_email(user_data.email)
     if existing:
         raise HTTPException(
@@ -287,6 +368,14 @@ async def register(user_data: UserCreate):
     )
     
     access_token = create_access_token(data={"sub": user["id"]})
+    _log_audit_event(
+        action="user_registered",
+        request=request,
+        actor_id=user.get("id"),
+        entity_type="user",
+        entity_id=user.get("id"),
+        metadata={"email": user.get("email")},
+    )
     return Token(
         access_token=access_token,
         user=User(
@@ -890,7 +979,7 @@ async def get_purchases(current_user: dict = Depends(get_current_user)):
     return [Purchase(**p) for p in purchases]
 
 @app.post("/api/purchases", response_model=Purchase, status_code=status.HTTP_201_CREATED)
-async def create_purchase(purchase_data: PurchaseCreate, current_user: dict = Depends(get_current_user)):
+async def create_purchase(purchase_data: PurchaseCreate, request: Request, current_user: dict = Depends(get_current_user)):
     """
     Create a new purchase.
     
@@ -943,6 +1032,14 @@ async def create_purchase(purchase_data: PurchaseCreate, current_user: dict = De
             items
         )
         print(f"[API] Purchase created in DB: {purchase.get('id', 'no-id')}")
+        _log_audit_event(
+            action="purchase_created",
+            request=request,
+            actor_id=current_user.get("id"),
+            entity_type="purchase",
+            entity_id=purchase.get("id"),
+            metadata={"invoice_number": purchase.get("invoice_number")},
+        )
         
         # Check for expiry alerts in purchase items
         from datetime import date, timedelta
@@ -1091,7 +1188,7 @@ async def update_sale(
         )
 
 @app.post("/api/sales", response_model=Sale, status_code=status.HTTP_201_CREATED)
-async def create_sale(sale_data: SaleCreate, current_user: dict = Depends(get_current_user)):
+async def create_sale(sale_data: SaleCreate, request: Request, current_user: dict = Depends(get_current_user)):
     """
     Create a new sale.
     
@@ -1119,6 +1216,14 @@ async def create_sale(sale_data: SaleCreate, current_user: dict = Depends(get_cu
             items
         )
         print(f"[API] Sale created in DB: {sale.get('id', 'no-id')}")
+        _log_audit_event(
+            action="sale_created",
+            request=request,
+            actor_id=current_user.get("id"),
+            entity_type="sale",
+            entity_id=sale.get("id"),
+            metadata={"invoice_number": sale.get("invoice_number")},
+        )
         
         # Trigger new order SMS notification
         retailer = db.get_retailer(sale_data.retailer_id)

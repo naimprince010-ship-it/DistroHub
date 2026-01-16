@@ -28,6 +28,31 @@ class SupabaseDatabase:
     
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         return self.hash_password(plain_password) == hashed_password
+
+    def log_audit_event(
+        self,
+        actor_id: Optional[str],
+        action: str,
+        entity_type: Optional[str],
+        entity_id: Optional[str],
+        metadata: dict,
+        ip_address: str,
+        user_agent: str,
+    ) -> Optional[dict]:
+        if not self.client:
+            return None
+        audit_record = {
+            "actor_id": actor_id,
+            "action": action,
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "metadata": metadata,
+            "ip_address": ip_address,
+            "user_agent": user_agent,
+            "created_at": datetime.now().isoformat(),
+        }
+        result = self.client.table("audit_logs").insert(audit_record).execute()
+        return result.data[0] if result.data else audit_record
     
     def get_user_by_email(self, email: str) -> Optional[dict]:
         result = self.client.table("users").select("*").eq("email", email).execute()

@@ -26,6 +26,7 @@ class InMemoryDatabase:
         self.categories: Dict[str, dict] = {}
         self.suppliers: Dict[str, dict] = {}
         self.units: Dict[str, dict] = {}
+        self.audit_logs: List[dict] = []
         self._seed_data()
     
     def _seed_data(self):
@@ -156,6 +157,30 @@ class InMemoryDatabase:
     
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
         return self.hash_password(plain_password) == hashed_password
+
+    def log_audit_event(
+        self,
+        actor_id: Optional[str],
+        action: str,
+        entity_type: Optional[str],
+        entity_id: Optional[str],
+        metadata: dict,
+        ip_address: str,
+        user_agent: str,
+    ) -> dict:
+        log_entry = {
+            "id": generate_id(),
+            "actor_id": actor_id,
+            "action": action,
+            "entity_type": entity_type,
+            "entity_id": entity_id,
+            "metadata": metadata,
+            "ip_address": ip_address,
+            "user_agent": user_agent,
+            "created_at": datetime.now(),
+        }
+        self.audit_logs.append(log_entry)
+        return log_entry
     
     def get_user_by_email(self, email: str) -> Optional[dict]:
         for user in self.users.values():
