@@ -10,6 +10,7 @@ import {
   ArrowDownRight,
   ShoppingCart,
   FolderOpen,
+  CheckCircle2,
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, LabelList } from 'recharts';
 import api from '@/lib/api';
@@ -120,6 +121,7 @@ export function Dashboard() {
       trend: 'up' as const,
       icon: TrendingUp,
       color: 'bg-green-500',
+      tint: stats.sales_this_month > 0 ? 'bg-green-50 border-green-100' : 'bg-white border-slate-100',
     },
     {
       title: 'Receivable',
@@ -128,6 +130,7 @@ export function Dashboard() {
       trend: stats.receivable_from_customers > 0 ? 'down' as const : 'up' as const,
       icon: TrendingDown,
       color: 'bg-red-500',
+      tint: stats.receivable_from_customers > 0 ? 'bg-red-50 border-red-100' : 'bg-white border-slate-100',
     },
     {
       title: 'Total Products',
@@ -136,6 +139,7 @@ export function Dashboard() {
       trend: 'up' as const,
       icon: Package,
       color: 'bg-blue-500',
+      tint: 'bg-white border-slate-100',
     },
     {
       title: 'Active Retailers',
@@ -144,6 +148,7 @@ export function Dashboard() {
       trend: 'up' as const,
       icon: Users,
       color: 'bg-purple-500',
+      tint: 'bg-white border-slate-100',
     },
     {
       title: 'Low Stock',
@@ -152,6 +157,7 @@ export function Dashboard() {
       trend: stats.low_stock_count > 0 ? 'down' as const : 'up' as const,
       icon: AlertTriangle,
       color: 'bg-orange-500',
+      tint: stats.low_stock_count > 0 ? 'bg-orange-50 border-orange-100' : 'bg-white border-slate-100',
     },
     {
       title: 'Expiring Soon',
@@ -160,6 +166,7 @@ export function Dashboard() {
       trend: stats.expiring_soon_count > 0 ? 'down' as const : 'up' as const,
       icon: AlertTriangle,
       color: 'bg-yellow-500',
+      tint: stats.expiring_soon_count > 0 ? 'bg-yellow-50 border-yellow-100' : 'bg-white border-slate-100',
     },
     {
       title: 'Payable to Suppliers',
@@ -168,6 +175,7 @@ export function Dashboard() {
       trend: stats.payable_to_supplier > 0 ? 'down' as const : 'up' as const,
       icon: ShoppingCart,
       color: 'bg-indigo-500',
+      tint: stats.payable_to_supplier > 0 ? 'bg-indigo-50 border-indigo-100' : 'bg-white border-slate-100',
     },
     {
       title: 'Total Categories',
@@ -176,6 +184,7 @@ export function Dashboard() {
       trend: 'up' as const,
       icon: FolderOpen,
       color: 'bg-teal-500',
+      tint: 'bg-white border-slate-100',
     },
   ] : [];
 
@@ -198,11 +207,11 @@ export function Dashboard() {
             {displayStats.map((stat) => (
               <div
                 key={stat.title}
-                className="bg-white rounded-xl p-4 shadow-sm card-hover"
+                className={`rounded-xl p-4 shadow-sm border card-hover ${stat.tint}`}
               >
                 <div className="flex items-center justify-between mb-3">
-                  <div className={`w-12 h-12 ${stat.color} rounded-xl flex items-center justify-center`}>
-                    <stat.icon className="w-6 h-6 text-white" />
+                  <div className={`w-10 h-10 ${stat.color} rounded-lg flex items-center justify-center`}>
+                    <stat.icon className="w-5 h-5 text-white" />
                   </div>
                   <span
                     className={`flex items-center gap-1 text-sm font-medium ${
@@ -217,7 +226,9 @@ export function Dashboard() {
                     )}
                   </span>
                 </div>
-                <h3 className="text-2xl font-bold text-slate-900 mb-1">{stat.value}</h3>
+                <h3 className="text-2xl md:text-3xl font-extrabold text-slate-900 mb-1 tracking-tight">
+                  {stat.value}
+                </h3>
                 <p className="text-slate-600 text-sm font-medium">{stat.title}</p>
               </div>
             ))}
@@ -342,18 +353,25 @@ export function Dashboard() {
               </a>
             </div>
             <div className="divide-y divide-slate-100">
-              {expiringProducts.map((product, index) => (
-                <div key={index} className="p-2 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                  <div>
-                    <p className="font-medium text-slate-900">{product.name}</p>
-                    <p className="text-sm text-slate-500">Batch: {product.batch}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-orange-600">{product.expiry}</p>
-                    <p className="text-sm text-slate-500">{product.qty} units</p>
-                  </div>
+              {stats?.expiring_soon_count === 0 ? (
+                <div className="p-6 flex items-center justify-center gap-2 text-sm text-green-700 bg-green-50">
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  No products expiring soon.
                 </div>
-              ))}
+              ) : (
+                expiringProducts.map((product, index) => (
+                  <div key={index} className="p-2 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                    <div>
+                      <p className="font-medium text-slate-900">{product.name}</p>
+                      <p className="text-sm text-slate-500">Batch: {product.batch}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-orange-600">{product.expiry}</p>
+                      <p className="text-sm text-slate-500">{product.qty} units</p>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
