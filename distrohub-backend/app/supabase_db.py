@@ -352,11 +352,12 @@ class SupabaseDatabase:
     
     def get_purchases(self) -> List[dict]:
         # Order by created_at descending to show latest first
-        result = self.client.table("purchases").select("*").order("created_at", desc=True).execute()
+        result = self.client.table("purchases").select("*, purchase_items(*)").order("created_at", desc=True).execute()
         purchases = result.data or []
         for purchase in purchases:
-            items_result = self.client.table("purchase_items").select("*").eq("purchase_id", purchase["id"]).execute()
-            purchase["items"] = items_result.data or []
+            purchase["items"] = purchase.get("purchase_items") or []
+            if "purchase_items" in purchase:
+                purchase.pop("purchase_items")
         return purchases
     
     def create_purchase(self, data: dict, items: List[dict]) -> dict:
@@ -480,13 +481,14 @@ class SupabaseDatabase:
         return purchase
     
     def get_sales(self) -> List[dict]:
-        result = self.client.table("sales").select("*").order("created_at", desc=True).execute()
+        result = self.client.table("sales").select("*, sale_items(*)").order("created_at", desc=True).execute()
         sales = result.data or []
         for sale in sales:
             sale["payment_status"] = PaymentStatus(sale["payment_status"]) if sale.get("payment_status") else PaymentStatus.DUE
             sale["status"] = OrderStatus(sale["status"]) if sale.get("status") else OrderStatus.PENDING
-            items_result = self.client.table("sale_items").select("*").eq("sale_id", sale["id"]).execute()
-            sale["items"] = items_result.data or []
+            sale["items"] = sale.get("sale_items") or []
+            if "sale_items" in sale:
+                sale.pop("sale_items")
         return sales
     
     def create_sale(self, data: dict, items: List[dict]) -> dict:
@@ -1762,18 +1764,24 @@ class SupabaseDatabase:
         receivables = []
         retailers = self.get_retailers()
         payments = self.get_payments()
+        last_payment_by_retailer: Dict[str, datetime] = {}
+
+        for payment in payments:
+            payment_date = payment.get("created_at")
+            if isinstance(payment_date, str):
+                payment_date = datetime.fromisoformat(payment_date.replace("Z", "+00:00"))
+            if not payment_date:
+                continue
+            retailer_id = payment.get("retailer_id")
+            if not retailer_id:
+                continue
+            current = last_payment_by_retailer.get(retailer_id)
+            if current is None or payment_date > current:
+                last_payment_by_retailer[retailer_id] = payment_date
         
         for retailer in retailers:
             if float(retailer.get("total_due", 0)) > 0:
-                last_payment = None
-                for payment in payments:
-                    if payment["retailer_id"] == retailer["id"]:
-                        payment_date = payment.get("created_at")
-                        if isinstance(payment_date, str):
-                            payment_date = datetime.fromisoformat(payment_date.replace("Z", "+00:00"))
-                        if last_payment is None or (payment_date and payment_date > last_payment):
-                            last_payment = payment_date
-                
+                last_payment = last_payment_by_retailer.get(retailer["id"])
                 receivables.append({
                     "retailer_id": retailer["id"],
                     "retailer_name": retailer["name"],
