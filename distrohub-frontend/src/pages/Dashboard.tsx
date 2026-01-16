@@ -123,7 +123,7 @@ export function Dashboard() {
       icon: TrendingUp,
       color: 'bg-green-500',
       tint: stats.sales_this_month > 0 ? 'bg-green-50 border-green-100' : 'bg-white border-slate-100',
-      to: '/sales-report',
+      to: '/sales',
     },
     {
       title: 'Receivable',
@@ -133,7 +133,7 @@ export function Dashboard() {
       icon: TrendingDown,
       color: 'bg-red-500',
       tint: stats.receivable_from_customers > 0 ? 'bg-red-50 border-red-100' : 'bg-white border-slate-100',
-      to: '/accounts/receivable',
+      to: '/receivables',
     },
     {
       title: 'Total Products',
