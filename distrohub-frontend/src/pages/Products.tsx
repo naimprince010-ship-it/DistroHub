@@ -18,8 +18,15 @@ import {
 // @ts-ignore - exceljs types may not be available in build
 import { Workbook } from 'exceljs';
 import { BarcodeScanButton } from '@/components/BarcodeScanner';
-import api from '@/lib/api';
+import api, { deleteWithOfflineQueue, postWithOfflineQueue, putWithOfflineQueue } from '@/lib/api';
 import { logger } from '@/lib/logger';
+import {
+  bulkSaveProducts,
+  deleteRecord,
+  getProducts as getOfflineProducts,
+  saveProduct,
+  type ProductRecord,
+} from '@/lib/offlineDb';
 
 interface Product {
   id: string;
@@ -69,6 +76,39 @@ export function Products() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
   const [suppliers, setSuppliers] = useState<string[]>([]);
+
+  const mapApiProductToRecord = (p: any, synced: boolean): ProductRecord => ({
+    id: p.id,
+    name: p.name,
+    sku: p.sku,
+    category: p.category,
+    unit_price: p.selling_price ?? 0,
+    stock_quantity: p.stock_quantity ?? 0,
+    expiry_date: p.expiry_date ?? '',
+    synced,
+    lastModified: Date.now(),
+  });
+
+  const mapRecordToProduct = (p: ProductRecord): Product => ({
+    id: p.id,
+    name: p.name,
+    sku: p.sku,
+    barcode: '',
+    category: p.category,
+    unit: 'Pack',
+    pack_size: 1,
+    pieces_per_carton: 1,
+    purchase_price: 0,
+    selling_price: p.unit_price,
+    stock_quantity: p.stock_quantity,
+    reorder_level: 0,
+    batch_number: '',
+    expiry_date: p.expiry_date,
+    supplier: '',
+    vat_inclusive: false,
+    vat_rate: 0,
+    image_url: '',
+  });
 
   // Fetch categories and suppliers from API
   const fetchCategoriesAndSuppliers = async () => {
@@ -181,6 +221,7 @@ export function Products() {
           image_url: p.image_url || '',
         }));
         setProducts(mappedProducts);
+        await bulkSaveProducts(response.data.map((p: ApiProduct) => mapApiProductToRecord(p, true)));
         logger.log('[Products] Products mapped and set:', mappedProducts.length);
       }
     } catch (error: any) {
@@ -195,9 +236,16 @@ export function Products() {
         logger.warn('[Products] 401 Unauthorized - token may be expired');
         return;
       }
-      
-      // On error, use empty array
-      setProducts([]);
+
+      const isOfflineError =
+        !navigator.onLine || error?.isNetworkError || error?.code === 'ERR_NETWORK' || error?.message?.includes('Network');
+      if (isOfflineError) {
+        const offlineProducts = await getOfflineProducts();
+        setProducts(offlineProducts.map(mapRecordToProduct));
+      } else {
+        // On other errors, use empty array
+        setProducts([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -401,7 +449,10 @@ export function Products() {
 
       try {
         logger.log('[Products] Deleting product:', id);
-        await api.delete(`/api/products/${id}`);
+        await deleteWithOfflineQueue('products', `/api/products/${id}`, { id }, {
+          onOfflineDelete: async () => deleteRecord('products', id),
+          onOnlineDelete: async () => deleteRecord('products', id),
+        });
         logger.log('[Products] Product deleted successfully');
         
         // Refetch products from API
@@ -686,18 +737,52 @@ export function Products() {
 
                         logger.log('[Products] API payload:', payload);
 
-                        let response;
                         if (editingProduct) {
-                          // Update existing product
+                          const localRecord: ProductRecord = {
+                            id: editingProduct.id,
+                            name: product.name,
+                            sku: product.sku,
+                            category: product.category,
+                            unit_price: product.selling_price,
+                            stock_quantity: product.stock_quantity || 0,
+                            expiry_date: product.expiry_date || '',
+                            synced: false,
+                            lastModified: Date.now(),
+                          };
                           logger.log('[Products] Updating product via PUT:', `/api/products/${editingProduct.id}`);
-                          response = await api.put(`/api/products/${editingProduct.id}`, payload);
-                          logger.log('[Products] Product updated successfully:', response.data);
+                          await putWithOfflineQueue('products', `/api/products/${editingProduct.id}`, payload, {
+                            localRecord,
+                            onOfflineSave: async (record) => saveProduct(record as ProductRecord),
+                            onOnlineSave: async (data) => {
+                              const mapped = mapApiProductToRecord(data, true);
+                              await saveProduct(mapped);
+                            },
+                          });
+                          logger.log('[Products] Product updated successfully');
                         } else {
-                          // Create new product
+                          const tempId = `offline-product-${Date.now()}`;
+                          const localRecord: ProductRecord = {
+                            id: tempId,
+                            name: product.name,
+                            sku: product.sku,
+                            category: product.category,
+                            unit_price: product.selling_price,
+                            stock_quantity: product.stock_quantity || 0,
+                            expiry_date: product.expiry_date || '',
+                            synced: false,
+                            lastModified: Date.now(),
+                          };
                           logger.log('[Products] Creating product via POST:', '/api/products');
-                          response = await api.post('/api/products', payload);
-                          logger.log('[Products] Product created successfully:', response.data);
-                          logger.log('[Products] New product ID:', response.data?.id);
+                          await postWithOfflineQueue('products', '/api/products', payload, {
+                            queueData: { ...payload, _local_id: tempId },
+                            localRecord,
+                            onOfflineSave: async (record) => saveProduct(record as ProductRecord),
+                            onOnlineSave: async (data) => {
+                              const mapped = mapApiProductToRecord(data, true);
+                              await saveProduct(mapped);
+                            },
+                          });
+                          logger.log('[Products] Product created successfully');
                         }
 
                         // Refetch products from API to get latest data

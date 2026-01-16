@@ -44,16 +44,35 @@ export interface SaleRecord {
   lastModified: number;
 }
 
+export interface PurchaseRecord {
+  id: string;
+  supplier_id: string;
+  supplier_name: string;
+  items: Array<{
+    product_id: string;
+    product_name: string;
+    quantity: number;
+    unit_price: number;
+    total: number;
+  }>;
+  total_amount: number;
+  paid_amount: number;
+  due_amount: number;
+  purchase_date: string;
+  synced: boolean;
+  lastModified: number;
+}
+
 export interface PendingSyncRecord {
   id: string;
   type: 'create' | 'update' | 'delete';
-  entity: 'products' | 'retailers' | 'sales';
+  entity: 'products' | 'retailers' | 'sales' | 'purchases';
   data: unknown;
   timestamp: number;
 }
 
 const DB_NAME = 'distrohub-offline';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 async function getDb() {
   return openDB(DB_NAME, DB_VERSION, {
@@ -71,6 +90,11 @@ async function getDb() {
       if (!db.objectStoreNames.contains('sales')) {
         const salesStore = db.createObjectStore('sales', { keyPath: 'id' });
         salesStore.createIndex('by-synced', 'synced');
+      }
+
+      if (!db.objectStoreNames.contains('purchases')) {
+        const purchaseStore = db.createObjectStore('purchases', { keyPath: 'id' });
+        purchaseStore.createIndex('by-synced', 'synced');
       }
 
       if (!db.objectStoreNames.contains('pendingSync')) {
@@ -108,6 +132,21 @@ export async function saveSale(sale: SaleRecord) {
 export async function getSales(): Promise<SaleRecord[]> {
   const db = await getDb();
   return db.getAll('sales');
+}
+
+export async function savePurchase(purchase: PurchaseRecord) {
+  const db = await getDb();
+  await db.put('purchases', { ...purchase, lastModified: Date.now() });
+}
+
+export async function getPurchases(): Promise<PurchaseRecord[]> {
+  const db = await getDb();
+  return db.getAll('purchases');
+}
+
+export async function deleteRecord(storeName: 'products' | 'retailers' | 'sales' | 'purchases', id: string) {
+  const db = await getDb();
+  await db.delete(storeName, id);
 }
 
 export async function addPendingSync(action: Omit<PendingSyncRecord, 'id' | 'timestamp'>) {
@@ -149,6 +188,24 @@ export async function bulkSaveRetailers(retailers: RetailerRecord[]) {
   const tx = db.transaction('retailers', 'readwrite');
   await Promise.all([
     ...retailers.map(r => tx.store.put({ ...r, synced: true, lastModified: Date.now() })),
+    tx.done,
+  ]);
+}
+
+export async function bulkSaveSales(sales: SaleRecord[]) {
+  const db = await getDb();
+  const tx = db.transaction('sales', 'readwrite');
+  await Promise.all([
+    ...sales.map(s => tx.store.put({ ...s, synced: true, lastModified: Date.now() })),
+    tx.done,
+  ]);
+}
+
+export async function bulkSavePurchases(purchases: PurchaseRecord[]) {
+  const db = await getDb();
+  const tx = db.transaction('purchases', 'readwrite');
+  await Promise.all([
+    ...purchases.map(p => tx.store.put({ ...p, synced: true, lastModified: Date.now() })),
     tx.done,
   ]);
 }

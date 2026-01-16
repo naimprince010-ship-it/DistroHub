@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Bell, Search, User, X } from 'lucide-react';
+import { Bell, RefreshCw, Search, User, X } from 'lucide-react';
 import { OnlineStatusBadge } from '@/components/OfflineIndicator';
+import { useOffline } from '@/contexts/OfflineContext';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 interface HeaderProps {
@@ -11,6 +12,7 @@ interface HeaderProps {
 export function Header({ title }: HeaderProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [localSearch, setLocalSearch] = useState(searchParams.get('q') || '');
+  const { pendingSyncCount, syncData, isSyncing, isOnline } = useOffline();
 
   useEffect(() => {
     setLocalSearch(searchParams.get('q') || '');
@@ -42,6 +44,17 @@ export function Header({ title }: HeaderProps) {
         <div className="flex items-center">
           <OnlineStatusBadge />
         </div>
+        {pendingSyncCount > 0 && (
+          <button
+            onClick={syncData}
+            disabled={!isOnline || isSyncing}
+            className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 transition-colors disabled:opacity-50"
+            title="Sync offline data"
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
+            Sync ({pendingSyncCount})
+          </button>
+        )}
       </div>
 
       {/* Right: Search, Notification, User Profile */}

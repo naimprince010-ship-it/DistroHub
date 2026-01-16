@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
-import { getUnsyncedCount, getPendingSync, clearPendingSync } from '@/lib/offlineDb';
+import { getUnsyncedCount } from '@/lib/offlineDb';
+import { runOfflineSync } from '@/lib/offlineSync';
 
 interface OfflineContextType {
   isOnline: boolean;
@@ -25,51 +26,7 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
 
     setIsSyncing(true);
     try {
-      const pendingItems = await getPendingSync();
-      
-      for (const item of pendingItems) {
-        try {
-          const baseUrl = import.meta.env.VITE_API_URL || 
-            (import.meta.env.DEV ? 'http://localhost:8000' : 'https://distrohub-backend.onrender.com');
-          let endpoint = '';
-          let method = 'POST';
-
-          switch (item.entity) {
-            case 'products':
-              endpoint = '/api/products';
-              break;
-            case 'retailers':
-              endpoint = '/api/retailers';
-              break;
-            case 'sales':
-              endpoint = '/api/sales';
-              break;
-          }
-
-          if (item.type === 'update') {
-            method = 'PUT';
-            endpoint += `/${(item.data as { id: string }).id}`;
-          } else if (item.type === 'delete') {
-            method = 'DELETE';
-            endpoint += `/${(item.data as { id: string }).id}`;
-          }
-
-          const response = await fetch(`${baseUrl}${endpoint}`, {
-            method,
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: item.type !== 'delete' ? JSON.stringify(item.data) : undefined,
-          });
-
-          if (response.ok) {
-            await clearPendingSync(item.id);
-          }
-        } catch (error) {
-          console.error('Failed to sync item:', item.id, error);
-        }
-      }
-
+      await runOfflineSync();
       await updatePendingCount();
     } finally {
       setIsSyncing(false);
@@ -87,10 +44,12 @@ export function OfflineProvider({ children }: { children: ReactNode }) {
     window.addEventListener('offline', handleOffline);
 
     updatePendingCount();
+    const interval = window.setInterval(updatePendingCount, 5000);
 
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.clearInterval(interval);
     };
   }, [syncData, updatePendingCount]);
 

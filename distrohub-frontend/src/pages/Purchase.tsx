@@ -17,7 +17,14 @@ import {
 } from 'lucide-react';
 import { BarcodeScanButton } from '@/components/BarcodeScanner';
 import { useToast } from '@/hooks/use-toast';
-import api from '@/lib/api';
+import api, { postWithOfflineQueue } from '@/lib/api';
+import {
+  bulkSavePurchases,
+  getProducts as getOfflineProducts,
+  getPurchases as getOfflinePurchases,
+  savePurchase,
+  type PurchaseRecord,
+} from '@/lib/offlineDb';
 
 interface BatchInfo {
   id: string;
@@ -115,6 +122,58 @@ export function Purchase() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [selectedPurchase, setSelectedPurchase] = useState<Purchase | null>(null);
 
+  const mapApiPurchaseToRecord = (p: any, synced: boolean): PurchaseRecord => ({
+    id: p.id || '',
+    supplier_id: p.supplier_id || '',
+    supplier_name: p.supplier_name || '',
+    items: (p.items || []).map((item: any) => ({
+      product_id: item.product_id || '',
+      product_name: item.product_name || '',
+      quantity: item.quantity || 0,
+      unit_price: item.unit_price || 0,
+      total: item.total || 0,
+    })),
+    total_amount: p.total_amount || 0,
+    paid_amount: p.paid_amount || 0,
+    due_amount: p.due_amount || 0,
+    purchase_date: p.created_at ? p.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
+    synced,
+    lastModified: Date.now(),
+  });
+
+  const mapRecordToPurchase = (p: PurchaseRecord): Purchase => ({
+    id: p.id,
+    invoice_number: p.id,
+    supplier_invoice: '',
+    supplier_name: p.supplier_name,
+    warehouse: 'Main Warehouse',
+    purchase_date: p.purchase_date,
+    sub_total: p.total_amount,
+    discount_type: 'percent',
+    discount_value: 0,
+    discount_amount: 0,
+    tax_percent: 0,
+    tax_amount: 0,
+    total_amount: p.total_amount,
+    paid_amount: p.paid_amount,
+    due_amount: p.due_amount,
+    items: p.items.map((item) => ({
+      id: item.product_id,
+      product_id: item.product_id,
+      product_name: item.product_name,
+      sku: '',
+      batch_id: null,
+      batch_number: '',
+      expiry_date: '',
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      sub_total: item.total,
+      batch_stock: 0,
+      current_stock: 0,
+      last_purchase_price: item.unit_price,
+    })),
+  });
+
   // Fetch purchases from API
   const fetchPurchases = async () => {
     const token = localStorage.getItem('token');
@@ -175,6 +234,7 @@ export function Purchase() {
           });
         });
         setPurchases(mappedPurchases);
+        await bulkSavePurchases(response.data.map((p: any) => mapApiPurchaseToRecord(p, true)));
         console.log('[Purchase] Purchases mapped and set:', mappedPurchases.length);
       }
     } catch (error: any) {
@@ -191,8 +251,15 @@ export function Purchase() {
         return;
       }
       
-      // On error, use empty array
-      setPurchases([]);
+      const isOfflineError =
+        !navigator.onLine || error?.isNetworkError || error?.code === 'ERR_NETWORK' || error?.message?.includes('Network');
+      if (isOfflineError) {
+        const offlinePurchases = await getOfflinePurchases();
+        setPurchases(offlinePurchases.map(mapRecordToPurchase));
+      } else {
+        // On error, use empty array
+        setPurchases([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -471,7 +538,31 @@ export function Purchase() {
               };
               
               console.log('[Purchase] Sending purchase payload:', purchasePayload);
-              const response = await api.post('/api/purchases', purchasePayload);
+              const tempId = `offline-purchase-${Date.now()}`;
+              const localRecord: PurchaseRecord = {
+                id: tempId,
+                supplier_id: '',
+                supplier_name: purchase.supplier_name,
+                items: purchase.items.map((item) => ({
+                  product_id: item.product_id,
+                  product_name: item.product_name,
+                  quantity: item.quantity,
+                  unit_price: item.unit_price,
+                  total: item.quantity * item.unit_price,
+                })),
+                total_amount: purchase.total_amount,
+                paid_amount: purchase.paid_amount,
+                due_amount: purchase.due_amount,
+                purchase_date: purchase.purchase_date,
+                synced: false,
+                lastModified: Date.now(),
+              };
+              const response = await postWithOfflineQueue('purchases', '/api/purchases', purchasePayload, {
+                queueData: { ...purchasePayload, _local_id: tempId },
+                localRecord,
+                onOfflineSave: async (record) => savePurchase(record as PurchaseRecord),
+                onOnlineSave: async (data) => savePurchase(mapApiPurchaseToRecord(data, true)),
+              });
               console.log('[Purchase] Purchase created successfully:', response.data);
               
               // Refetch purchases to get the latest data
@@ -633,8 +724,22 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
         return;
       }
       
-      // On error, use empty array
-      setProductCatalog([]);
+      const isOfflineError =
+        !navigator.onLine || error?.isNetworkError || error?.code === 'ERR_NETWORK' || error?.message?.includes('Network');
+      if (isOfflineError) {
+        const offlineProducts = await getOfflineProducts();
+        setProductCatalog(offlineProducts.map((p) => ({
+          id: p.id,
+          name: p.name,
+          sku: p.sku,
+          barcode: '',
+          stock: p.stock_quantity,
+          lastPrice: 0,
+        })));
+      } else {
+        // On error, use empty array
+        setProductCatalog([]);
+      }
     } finally {
       setLoadingProducts(false);
     }

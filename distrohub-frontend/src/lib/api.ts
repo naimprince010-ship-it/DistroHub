@@ -1,4 +1,7 @@
 import axios from 'axios';
+import { addPendingSync } from '@/lib/offlineDb';
+
+export type OfflineEntity = 'products' | 'retailers' | 'sales' | 'purchases';
 
 // Get API URL from environment variable with fallback for development
 const API_URL = import.meta.env.VITE_API_URL || 
@@ -106,3 +109,121 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+function isOffline() {
+  return !navigator.onLine;
+}
+
+function isNetworkFailure(error: any) {
+  return error?.code === 'ERR_NETWORK' || error?.isNetworkError || error?.message?.includes('Network Error');
+}
+
+export async function getWithOfflineFallback<T>(url: string, fallback: () => Promise<T>) {
+  if (isOffline()) {
+    return fallback();
+  }
+  try {
+    const response = await api.get<T>(url);
+    return response.data;
+  } catch (error: any) {
+    if (isNetworkFailure(error)) {
+      return fallback();
+    }
+    throw error;
+  }
+}
+
+export async function postWithOfflineQueue<T extends Record<string, unknown>>(
+  entity: OfflineEntity,
+  url: string,
+  payload: T,
+  options?: {
+    queueData?: Record<string, unknown>;
+    localRecord?: Record<string, unknown>;
+    onOfflineSave?: (record: Record<string, unknown>) => Promise<void>;
+    onOnlineSave?: (record: Record<string, unknown>) => Promise<void>;
+  }
+) {
+  const queueData = options?.queueData ?? payload;
+  const localRecord = options?.localRecord ?? payload;
+
+  if (isOffline()) {
+    await options?.onOfflineSave?.(localRecord);
+    await addPendingSync({ entity, type: 'create', data: queueData });
+    return { data: localRecord, offline: true };
+  }
+
+  try {
+    const response = await api.post(url, payload);
+    await options?.onOnlineSave?.(response.data ?? payload);
+    return { data: response.data ?? payload, offline: false };
+  } catch (error: any) {
+    if (isNetworkFailure(error)) {
+      await options?.onOfflineSave?.(localRecord);
+      await addPendingSync({ entity, type: 'create', data: queueData });
+      return { data: localRecord, offline: true };
+    }
+    throw error;
+  }
+}
+
+export async function putWithOfflineQueue<T extends Record<string, unknown>>(
+  entity: OfflineEntity,
+  url: string,
+  payload: T,
+  options?: {
+    localRecord?: Record<string, unknown>;
+    onOfflineSave?: (record: Record<string, unknown>) => Promise<void>;
+    onOnlineSave?: (record: Record<string, unknown>) => Promise<void>;
+  }
+) {
+  const localRecord = options?.localRecord ?? payload;
+
+  if (isOffline()) {
+    await options?.onOfflineSave?.(localRecord);
+    await addPendingSync({ entity, type: 'update', data: localRecord });
+    return { data: localRecord, offline: true };
+  }
+
+  try {
+    const response = await api.put(url, payload);
+    await options?.onOnlineSave?.(response.data ?? payload);
+    return { data: response.data ?? payload, offline: false };
+  } catch (error: any) {
+    if (isNetworkFailure(error)) {
+      await options?.onOfflineSave?.(localRecord);
+      await addPendingSync({ entity, type: 'update', data: localRecord });
+      return { data: localRecord, offline: true };
+    }
+    throw error;
+  }
+}
+
+export async function deleteWithOfflineQueue(
+  entity: OfflineEntity,
+  url: string,
+  payload: { id: string },
+  options?: {
+    onOfflineDelete?: (record: { id: string }) => Promise<void>;
+    onOnlineDelete?: (record: { id: string }) => Promise<void>;
+  }
+) {
+  if (isOffline()) {
+    await options?.onOfflineDelete?.(payload);
+    await addPendingSync({ entity, type: 'delete', data: payload });
+    return { offline: true };
+  }
+
+  try {
+    await api.delete(url);
+    await options?.onOnlineDelete?.(payload);
+    return { offline: false };
+  } catch (error: any) {
+    if (isNetworkFailure(error)) {
+      await options?.onOfflineDelete?.(payload);
+      await addPendingSync({ entity, type: 'delete', data: payload });
+      return { offline: true };
+    }
+    throw error;
+  }
+}

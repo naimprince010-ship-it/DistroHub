@@ -17,8 +17,17 @@ import {
 import { ChallanPrint } from '@/components/print/ChallanPrint';
 import { BarcodeScanButton } from '@/components/BarcodeScanner';
 import { PaymentHistory } from '@/components/payments/PaymentHistory';
-import api from '@/lib/api';
+import api, { deleteWithOfflineQueue, postWithOfflineQueue, putWithOfflineQueue } from '@/lib/api';
 import { formatDateBD } from '@/lib/utils';
+import {
+  bulkSaveSales,
+  deleteRecord,
+  getProducts as getOfflineProducts,
+  getRetailers as getOfflineRetailers,
+  getSales as getOfflineSales,
+  saveSale,
+  type SaleRecord,
+} from '@/lib/offlineDb';
 
 interface Payment {
   id: string;
@@ -72,6 +81,43 @@ export function Sales() {
   const [editOrder, setEditOrder] = useState<SalesOrder | null>(null);
   const [printChallanOrder, setPrintChallanOrder] = useState<SalesOrder | null>(null);
   const [collectionOrder, setCollectionOrder] = useState<SalesOrder | null>(null);
+
+  const mapApiSaleToRecord = (sale: any, synced: boolean): SaleRecord => ({
+    id: sale.id || '',
+    retailer_id: sale.retailer_id || '',
+    retailer_name: sale.retailer_name || '',
+    items: (sale.items || []).map((item: any) => ({
+      product_id: item.product_id || '',
+      product_name: item.product_name || item.product || '',
+      quantity: item.quantity || item.qty || 0,
+      unit_price: item.unit_price || item.price || 0,
+      total: (item.quantity || item.qty || 0) * (item.unit_price || item.price || 0),
+    })),
+    total_amount: sale.total_amount || 0,
+    paid_amount: sale.paid_amount || 0,
+    payment_method: sale.payment_method || 'cash',
+    sale_date: sale.created_at ? sale.created_at.split('T')[0] : new Date().toISOString().split('T')[0],
+    synced,
+    lastModified: Date.now(),
+  });
+
+  const mapRecordToOrder = (sale: SaleRecord): SalesOrder => ({
+    id: sale.id,
+    order_number: sale.id,
+    retailer_name: sale.retailer_name,
+    retailer_id: sale.retailer_id,
+    order_date: sale.sale_date,
+    delivery_date: sale.sale_date,
+    status: 'pending',
+    payment_status: sale.paid_amount >= sale.total_amount ? 'paid' : sale.paid_amount > 0 ? 'partial' : 'unpaid',
+    total_amount: sale.total_amount,
+    paid_amount: sale.paid_amount,
+    items: sale.items.map((item) => ({
+      product: item.product_name,
+      qty: item.quantity,
+      price: item.unit_price,
+    })),
+  });
 
   // Fetch sales from API
   const fetchSales = async () => {
@@ -141,6 +187,7 @@ export function Sales() {
           };
         });
         setOrders(mappedOrders);
+        await bulkSaveSales(response.data.map((sale: any) => mapApiSaleToRecord(sale, true)));
         console.log('[Sales] Sales mapped and set:', mappedOrders.length);
       }
     } catch (error: any) {
@@ -157,8 +204,15 @@ export function Sales() {
         return;
       }
       
-      // On error, use empty array
-      setOrders([]);
+      const isOfflineError =
+        !navigator.onLine || error?.isNetworkError || error?.code === 'ERR_NETWORK' || error?.message?.includes('Network');
+      if (isOfflineError) {
+        const offlineSales = await getOfflineSales();
+        setOrders(offlineSales.map(mapRecordToOrder));
+      } else {
+        // On error, use empty array
+        setOrders([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -178,7 +232,10 @@ export function Sales() {
 
     try {
       console.log('[Sales] Deleting sale:', order.id);
-      await api.delete(`/api/sales/${order.id}`);
+      await deleteWithOfflineQueue('sales', `/api/sales/${order.id}`, { id: order.id }, {
+        onOfflineDelete: async () => deleteRecord('sales', order.id),
+        onOnlineDelete: async () => deleteRecord('sales', order.id),
+      });
       console.log('[Sales] Sale deleted successfully');
       await fetchSales(); // Refresh the list
     } catch (error: any) {
@@ -389,6 +446,55 @@ export function Sales() {
           onSave={async (order) => {
             try {
               console.log('[Sales] Creating sale order:', order);
+
+              if (!navigator.onLine) {
+                if (!order.retailer_id) {
+                  alert('Retailer ID not found. Please select a retailer from the list.');
+                  return;
+                }
+
+                const tempId = `offline-sale-${Date.now()}`;
+                const localRecord: SaleRecord = {
+                  id: tempId,
+                  retailer_id: order.retailer_id,
+                  retailer_name: order.retailer_name,
+                  items: order.items.map((item) => ({
+                    product_id: '',
+                    product_name: item.product,
+                    quantity: item.qty,
+                    unit_price: item.price,
+                    total: item.qty * item.price,
+                  })),
+                  total_amount: order.total_amount,
+                  paid_amount: order.paid_amount || 0,
+                  payment_method: 'cash',
+                  sale_date: order.order_date,
+                  synced: false,
+                  lastModified: Date.now(),
+                };
+
+                await postWithOfflineQueue('sales', '/api/sales', {
+                  retailer_id: order.retailer_id,
+                  items: order.items.map((item) => ({
+                    product_name: item.product,
+                    quantity: item.qty,
+                    unit_price: item.price,
+                  })),
+                  payment_type: 'cash',
+                  paid_amount: order.paid_amount || 0,
+                  notes: `Delivery date: ${order.delivery_date}`,
+                  assigned_to: order.assigned_to,
+                  _local_id: tempId,
+                  _offline_items: true,
+                }, {
+                  localRecord,
+                  onOfflineSave: async (record) => saveSale(record as SaleRecord),
+                });
+
+                await fetchSales();
+                setShowAddModal(false);
+                return;
+              }
               
               // Fetch retailers to get retailer_id from retailer_name
               const retailersResponse = await api.get('/api/retailers');
@@ -476,6 +582,7 @@ export function Sales() {
               console.log('[Sales] Sending sale payload:', salePayload);
               const response = await api.post('/api/sales', salePayload);
               console.log('[Sales] Sale created successfully:', response.data);
+              await saveSale(mapApiSaleToRecord(response.data, true));
               
               // Refetch sales to get the latest data
               await fetchSales();
@@ -852,7 +959,29 @@ function EditSaleModal({
       }
 
       console.log('[EditSaleModal] Updating sale:', order.id, updatePayload);
-      await api.put(`/api/sales/${order.id}`, updatePayload);
+      const localRecord: SaleRecord = {
+        id: order.id,
+        retailer_id: order.retailer_id || '',
+        retailer_name: order.retailer_name,
+        items: order.items.map((item) => ({
+          product_id: '',
+          product_name: item.product,
+          quantity: item.qty,
+          unit_price: item.price,
+          total: item.qty * item.price,
+        })),
+        total_amount: order.total_amount,
+        paid_amount: formData.paid_amount,
+        payment_method: 'cash',
+        sale_date: order.order_date,
+        synced: false,
+        lastModified: Date.now(),
+      };
+      await putWithOfflineQueue('sales', `/api/sales/${order.id}`, updatePayload, {
+        localRecord,
+        onOfflineSave: async (record) => saveSale(record as SaleRecord),
+        onOnlineSave: async (data) => saveSale(mapApiSaleToRecord(data, true)),
+      });
       console.log('[EditSaleModal] Sale updated successfully');
 
       alert('Order updated successfully!');
@@ -1016,6 +1145,7 @@ function EditSaleModal({
 function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (order: SalesOrder) => void | Promise<void> }) {
   const [formData, setFormData] = useState({
     retailer_name: '',
+    retailer_id: '',
     delivery_date: '',
     assigned_to: '',
     items: [{ product: '', qty: 0, price: 0 }],
@@ -1090,9 +1220,33 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
           url: error?.config?.url
         });
         
-        // Show user-friendly error message
-        const errorMsg = error?.response?.data?.detail || error?.message || 'Failed to load data';
-        alert(`Error loading dropdown data: ${errorMsg}\n\nPlease check:\n1. Backend is running\n2. API URL is correct\n3. You are logged in`);
+        const isOfflineError =
+          !navigator.onLine || error?.isNetworkError || error?.code === 'ERR_NETWORK' || error?.message?.includes('Network');
+        if (isOfflineError) {
+          const [offlineRetailers, offlineProducts] = await Promise.all([
+            getOfflineRetailers(),
+            getOfflineProducts(),
+          ]);
+          setRetailers(
+            offlineRetailers.map((r) => ({
+              id: r.id,
+              name: r.name,
+              shop_name: r.shop_name,
+            }))
+          );
+          setProducts(
+            offlineProducts.map((p) => ({
+              id: p.id,
+              name: p.name,
+              selling_price: p.unit_price,
+            }))
+          );
+          setSalesReps([]);
+        } else {
+          // Show user-friendly error message
+          const errorMsg = error?.response?.data?.detail || error?.message || 'Failed to load data';
+          alert(`Error loading dropdown data: ${errorMsg}\n\nPlease check:\n1. Backend is running\n2. API URL is correct\n3. You are logged in`);
+        }
       } finally {
         setLoadingRetailers(false);
         setLoadingProducts(false);
@@ -1136,6 +1290,7 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
         id: '',
         order_number: `ORD-${Date.now()}`,
         retailer_name: formData.retailer_name,
+        retailer_id: formData.retailer_id,
         order_date: new Date().toISOString().split('T')[0],
         delivery_date: formData.delivery_date,
         status: 'pending' as const,
@@ -1245,7 +1400,11 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
                           <div
                             key={retailer.id}
                             onClick={() => {
-                              setFormData({ ...formData, retailer_name: retailer.shop_name || retailer.name });
+                              setFormData({ 
+                                ...formData, 
+                                retailer_name: retailer.shop_name || retailer.name,
+                                retailer_id: retailer.id,
+                              });
                               setShowRetailerDropdown(false);
                               setRetailerSearchTerm('');
                             }}

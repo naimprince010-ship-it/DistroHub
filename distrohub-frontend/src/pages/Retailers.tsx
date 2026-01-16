@@ -12,7 +12,14 @@ import {
   Filter,
   X,
 } from 'lucide-react';
-import api from '@/lib/api';
+import api, { deleteWithOfflineQueue, postWithOfflineQueue, putWithOfflineQueue } from '@/lib/api';
+import {
+  bulkSaveRetailers,
+  deleteRecord,
+  getRetailers as getOfflineRetailers,
+  saveRetailer,
+  type RetailerRecord,
+} from '@/lib/offlineDb';
 
 interface Retailer {
   id: string;
@@ -35,6 +42,31 @@ export function Retailers() {
   const [dueFilter, setDueFilter] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingRetailer, setEditingRetailer] = useState<Retailer | null>(null);
+
+  const mapApiRetailerToRecord = (r: any, synced: boolean): RetailerRecord => ({
+    id: r.id,
+    name: r.name || '',
+    shop_name: r.shop_name || '',
+    phone: r.phone || '',
+    area: r.area || '',
+    address: r.address || '',
+    credit_limit: r.credit_limit || 0,
+    current_due: r.total_due || 0,
+    synced,
+    lastModified: Date.now(),
+  });
+
+  const mapRecordToRetailer = (r: RetailerRecord): Retailer => ({
+    id: r.id,
+    name: r.name,
+    shop_name: r.shop_name,
+    phone: r.phone,
+    address: r.address,
+    area: r.area,
+    district: 'N/A',
+    credit_limit: r.credit_limit,
+    current_due: r.current_due,
+  });
 
   // Fetch retailers from API
   const fetchRetailers = async () => {
@@ -66,6 +98,7 @@ export function Retailers() {
           current_due: r.total_due || 0, // Backend uses total_due
         }));
         setRetailers(mappedRetailers);
+        await bulkSaveRetailers(response.data.map((r: any) => mapApiRetailerToRecord(r, true)));
         console.log('[Retailers] Retailers mapped and set:', mappedRetailers.length);
       }
     } catch (error: any) {
@@ -81,9 +114,16 @@ export function Retailers() {
         // Interceptor will handle redirect to login
         return;
       }
-      
-      // On error, use empty array
-      setRetailers([]);
+
+      const isOfflineError =
+        !navigator.onLine || error?.isNetworkError || error?.code === 'ERR_NETWORK' || error?.message?.includes('Network');
+      if (isOfflineError) {
+        const offlineRetailers = await getOfflineRetailers();
+        setRetailers(offlineRetailers.map(mapRecordToRetailer));
+      } else {
+        // On error, use empty array
+        setRetailers([]);
+      }
     } finally {
       setLoading(false);
     }
@@ -130,7 +170,10 @@ export function Retailers() {
 
     try {
       console.log('[Retailers] Deleting retailer:', id);
-      await api.delete(`/api/retailers/${id}`);
+      await deleteWithOfflineQueue('retailers', `/api/retailers/${id}`, { id }, {
+        onOfflineDelete: async () => deleteRecord('retailers', id),
+        onOnlineDelete: async () => deleteRecord('retailers', id),
+      });
       console.log('[Retailers] Retailer deleted successfully');
       // Refetch retailers to get latest data
       await fetchRetailers();
@@ -345,16 +388,49 @@ export function Retailers() {
                 retailerPayload.district = retailer.district;
               }
               
-              let response;
               if (editingRetailer) {
+                const localRecord: RetailerRecord = {
+                  id: editingRetailer.id,
+                  name: retailer.name,
+                  shop_name: retailer.shop_name,
+                  phone: retailer.phone,
+                  address: retailer.address,
+                  area: retailer.area,
+                  credit_limit: retailer.credit_limit,
+                  current_due: retailer.current_due || 0,
+                  synced: false,
+                  lastModified: Date.now(),
+                };
                 console.log('[Retailers] Updating retailer:', editingRetailer.id);
-                response = await api.put(`/api/retailers/${editingRetailer.id}`, retailerPayload);
+                await putWithOfflineQueue('retailers', `/api/retailers/${editingRetailer.id}`, retailerPayload, {
+                  localRecord,
+                  onOfflineSave: async (record) => saveRetailer(record as RetailerRecord),
+                  onOnlineSave: async (data) => saveRetailer(mapApiRetailerToRecord(data, true)),
+                });
               } else {
+                const tempId = `offline-retailer-${Date.now()}`;
+                const localRecord: RetailerRecord = {
+                  id: tempId,
+                  name: retailer.name,
+                  shop_name: retailer.shop_name,
+                  phone: retailer.phone,
+                  address: retailer.address,
+                  area: retailer.area,
+                  credit_limit: retailer.credit_limit,
+                  current_due: retailer.current_due || 0,
+                  synced: false,
+                  lastModified: Date.now(),
+                };
                 console.log('[Retailers] Creating new retailer');
-                response = await api.post('/api/retailers', retailerPayload);
+                await postWithOfflineQueue('retailers', '/api/retailers', retailerPayload, {
+                  queueData: { ...retailerPayload, _local_id: tempId },
+                  localRecord,
+                  onOfflineSave: async (record) => saveRetailer(record as RetailerRecord),
+                  onOnlineSave: async (data) => saveRetailer(mapApiRetailerToRecord(data, true)),
+                });
               }
               
-              console.log('[Retailers] Retailer saved successfully:', response.data);
+              console.log('[Retailers] Retailer saved successfully');
               
               // Refetch retailers to get the latest data
               await fetchRetailers();
