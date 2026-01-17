@@ -905,6 +905,14 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
     return baseUnits;
   }, [units, formData.unit]);
 
+  const generateBatchNumber = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
+    return `B${year}${month}-${rand}`;
+  };
+
   const generateSKU = () => {
     if (!formData.name || !formData.category) return;
     const nameCode = formData.name.substring(0, 3).toUpperCase().replace(/\s/g, '');
@@ -966,18 +974,26 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
     ? ((profitAmount / formData.purchase_price) * 100).toFixed(1) 
     : '0';
 
-    const batchHasValue = !!(formData.batch_number && formData.batch_number.trim() !== '');
-    const expiryRequired = batchHasValue;
+  const batchHasValue = !!(formData.batch_number && formData.batch_number.trim() !== '');
+  const expiryRequired = batchHasValue;
 
   const handleSubmit = (e: React.FormEvent, addAnother = false) => {
     e.preventDefault();
-    
-    if (batchHasValue && !formData.expiry_date) {
+
+    let nextFormData = formData;
+    if (!batchHasValue && formData.expiry_date) {
+      const generatedBatch = generateBatchNumber();
+      nextFormData = { ...formData, batch_number: generatedBatch };
+      setFormData(nextFormData);
+    }
+
+    const hasBatch = !!(nextFormData.batch_number && nextFormData.batch_number.trim() !== '');
+    if (hasBatch && !nextFormData.expiry_date) {
       setErrors({ ...errors, expiry_date: 'Expiry date is required when batch number is provided' });
       return;
     }
     
-    onSave(formData as Product, addAnother);
+    onSave(nextFormData as Product, addAnother);
     
     if (addAnother) {
       setFormData({
@@ -1276,6 +1292,11 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                 className="input-field w-full"
                 placeholder="e.g., BT-2024-001"
               />
+              {!batchHasValue && (
+                <p className="text-xs text-slate-500 mt-1">
+                  Leave empty to auto-generate on save (when expiry is set).
+                </p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
