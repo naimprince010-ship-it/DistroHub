@@ -64,6 +64,13 @@ interface Supplier {
   phone?: string;
 }
 
+interface Unit {
+  id: string;
+  name: string;
+  abbreviation?: string;
+  description?: string;
+}
+
 export function Products() {
   const [searchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[]>([]);
@@ -76,6 +83,7 @@ export function Products() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [categories, setCategories] = useState<string[]>([]);
   const [suppliers, setSuppliers] = useState<string[]>([]);
+  const [units, setUnits] = useState<string[]>([]);
 
   const mapApiProductToRecord = (p: any, synced: boolean): ProductRecord => ({
     id: p.id,
@@ -110,7 +118,7 @@ export function Products() {
     image_url: '',
   });
 
-  // Fetch categories and suppliers from API
+  // Fetch categories, suppliers, and units from API
   const fetchCategoriesAndSuppliers = async () => {
     // Check if token exists before making request
     const token = localStorage.getItem('token');
@@ -118,14 +126,16 @@ export function Products() {
       console.warn('[Products] No token found, skipping API fetch');
       setCategories([]);
       setSuppliers([]);
+      setUnits([]);
       return;
     }
 
     try {
-      logger.log('[Products] Fetching categories and suppliers...');
-      const [categoriesRes, suppliersRes] = await Promise.all([
+      logger.log('[Products] Fetching categories, suppliers, and units...');
+      const [categoriesRes, suppliersRes, unitsRes] = await Promise.all([
         api.get('/api/categories'),
-        api.get('/api/suppliers')
+        api.get('/api/suppliers'),
+        api.get('/api/units')
       ]);
       
       // Always use API data, even if empty (removes reliance on defaults)
@@ -139,6 +149,12 @@ export function Products() {
         const supplierNames = suppliersRes.data.map((s: Supplier) => s.name);
         setSuppliers(supplierNames);
         logger.log('[Products] Suppliers loaded:', supplierNames.length, supplierNames);
+      }
+
+      if (unitsRes.data) {
+        const unitNames = unitsRes.data.map((u: Unit) => u.name);
+        setUnits(unitNames);
+        logger.log('[Products] Units loaded:', unitNames.length, unitNames);
       }
     } catch (error: any) {
       console.error('[Products] Error fetching categories/suppliers:', error);
@@ -159,6 +175,7 @@ export function Products() {
       // On other errors, use empty arrays (no defaults) to force API retry
       setCategories([]);
       setSuppliers([]);
+      setUnits([]);
     }
   };
 
@@ -711,6 +728,7 @@ export function Products() {
           product={editingProduct}
           categories={categories}
           suppliers={suppliers}
+          units={units}
           onRefreshCategories={fetchCategoriesAndSuppliers}
           onClose={() => {
             setShowAddModal(false);
@@ -838,6 +856,7 @@ interface ProductModalProps {
   onSave: (product: Product, addAnother?: boolean) => void;
   categories: string[];
   suppliers: string[];
+  units: string[];
   onRefreshCategories?: () => void;
 }
 
@@ -845,7 +864,7 @@ interface ValidationErrors {
   [key: string]: string;
 }
 
-function ProductModal({ product, onClose, onSave, categories, suppliers, onRefreshCategories }: ProductModalProps) {
+function ProductModal({ product, onClose, onSave, categories, suppliers, units, onRefreshCategories }: ProductModalProps) {
   // Refetch categories when modal opens to ensure latest data
   useEffect(() => {
     if (onRefreshCategories) {
@@ -876,6 +895,15 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, onRefre
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [imagePreview, setImagePreview] = useState<string>(product?.image_url || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const unitOptions = useMemo(() => {
+    const fallbackUnits = ['Pack', 'Bag', 'Box', 'Piece', 'Carton'];
+    const baseUnits = units.length > 0 ? units : fallbackUnits;
+    const currentUnit = formData.unit;
+    if (currentUnit && !baseUnits.includes(currentUnit)) {
+      return [currentUnit, ...baseUnits];
+    }
+    return baseUnits;
+  }, [units, formData.unit]);
 
   const generateSKU = () => {
     if (!formData.name || !formData.category) return;
@@ -1097,11 +1125,11 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, onRefre
                 onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
                 className="input-field w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
               >
-                <option value="Pack">Pack</option>
-                <option value="Bag">Bag</option>
-                <option value="Box">Box</option>
-                <option value="Piece">Piece</option>
-                <option value="Carton">Carton</option>
+                {unitOptions.map((unit) => (
+                  <option key={unit} value={unit}>
+                    {unit}
+                  </option>
+                ))}
               </select>
             </div>
             <div>
