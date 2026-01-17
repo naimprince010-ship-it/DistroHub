@@ -58,8 +58,18 @@ class ProductBase(BaseModel):
     category: str
     unit: str
     pack_size: int = 1
+    pieces_per_carton: int = 12
     purchase_price: float
     selling_price: float
+    barcode: Optional[str] = None
+    stock_quantity: int = 0
+    reorder_level: int = 10
+    supplier: Optional[str] = None
+    vat_inclusive: bool = False
+    vat_rate: float = 0
+    image_url: Optional[str] = None
+    batch_number: Optional[str] = None
+    expiry_date: Optional[date] = None
 
 class ProductCreate(ProductBase):
     pass
@@ -80,7 +90,7 @@ class ProductBatch(BaseModel):
 
 class ProductBatchCreate(BaseModel):
     product_id: str
-    batch_number: str
+    batch_number: Optional[str] = None
     expiry_date: date
     quantity: int
     purchase_price: float

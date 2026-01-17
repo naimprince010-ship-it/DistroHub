@@ -9,7 +9,7 @@ import os
 import re
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 
 logger = logging.getLogger(__name__)
 
@@ -100,6 +100,43 @@ def _record_login_failure(client_ip: str) -> None:
     attempts = _prune_attempts(attempts, now)
     attempts.append(now)
     _login_attempts[client_ip] = attempts
+
+def _generate_batch_number() -> str:
+    year = datetime.now().strftime("%Y")
+    month = datetime.now().strftime("%m")
+    rand = uuid.uuid4().hex[:4].upper()
+    return f"B{year}{month}-{rand}"
+
+def _batch_sort_key(batch: dict) -> datetime:
+    created_at = batch.get("created_at")
+    if isinstance(created_at, datetime):
+        return created_at
+    if isinstance(created_at, str):
+        try:
+            return datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+        except ValueError:
+            pass
+    expiry_date = batch.get("expiry_date")
+    if isinstance(expiry_date, date):
+        return datetime.combine(expiry_date, datetime.min.time())
+    if isinstance(expiry_date, str):
+        try:
+            return datetime.fromisoformat(expiry_date)
+        except ValueError:
+            pass
+    return datetime.min
+
+def _attach_latest_batch(product: dict) -> dict:
+    try:
+        batches = db.get_batches_by_product(product["id"])
+    except Exception:
+        return product
+    if not batches:
+        return product
+    latest_batch = max(batches, key=_batch_sort_key)
+    product["batch_number"] = latest_batch.get("batch_number")
+    product["expiry_date"] = latest_batch.get("expiry_date")
+    return product
 
 def _clear_login_failures(client_ip: str) -> None:
     _login_attempts.pop(client_ip, None)
@@ -690,14 +727,14 @@ async def get_me(current_user: dict = Depends(get_current_user)):
 @app.get("/api/products", response_model=List[Product])
 async def get_products(current_user: dict = Depends(get_current_user)):
     products = db.get_products()
-    return [Product(**p) for p in products]
+    return [Product(**_attach_latest_batch(p)) for p in products]
 
 @app.get("/api/products/{product_id}", response_model=Product)
 async def get_product(product_id: str, current_user: dict = Depends(get_current_user)):
     product = db.get_product(product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    return Product(**product)
+    return Product(**_attach_latest_batch(product))
 
 @app.post("/api/products", response_model=Product, status_code=status.HTTP_201_CREATED)
 async def create_product(product_data: ProductCreate, current_user: dict = Depends(get_current_user)):
@@ -714,11 +751,28 @@ async def create_product(product_data: ProductCreate, current_user: dict = Depen
     """
     try:
         data = product_data.model_dump()
+        batch_number = data.pop("batch_number", None)
+        expiry_date = data.pop("expiry_date", None)
+        if batch_number and not expiry_date:
+            raise ValueError("Expiry date is required when batch number is provided")
         print(f"[API] Creating product with data: {data}")
         print(f"[API] User: {current_user.get('email', 'unknown')}")
         
         product = db.create_product(data)
         print(f"[API] Product created in DB: {product.get('id', 'no-id')}")
+
+        if expiry_date:
+            if not batch_number:
+                batch_number = _generate_batch_number()
+            batch = db.create_batch({
+                "product_id": product["id"],
+                "batch_number": batch_number,
+                "expiry_date": expiry_date,
+                "quantity": max(0, int(data.get("stock_quantity", 0))),
+                "purchase_price": data.get("purchase_price", 0),
+            })
+            product["batch_number"] = batch.get("batch_number")
+            product["expiry_date"] = batch.get("expiry_date")
         
         # Check for low stock and trigger SMS if needed
         stock_quantity = product.get("stock_quantity", 0)
@@ -783,6 +837,8 @@ async def update_product(product_id: str, product_data: ProductCreate, current_u
     """
     try:
         data = product_data.model_dump()
+        data.pop("batch_number", None)
+        data.pop("expiry_date", None)
         print(f"[API] Updating product {product_id} with data: {data}")
         print(f"[API] User: {current_user.get('email', 'unknown')}")
         
@@ -805,7 +861,7 @@ async def update_product(product_id: str, product_data: ProductCreate, current_u
             ))
         
         print(f"[API] Product updated successfully: {product.get('id', 'no-id')}")
-        return Product(**product)
+        return Product(**_attach_latest_batch(product))
     except HTTPException:
         raise
     except ValueError as e:
@@ -858,10 +914,11 @@ async def create_product_batch(product_id: str, batch_data: ProductBatchCreate, 
     product = db.get_product(product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    
+
+    batch_number = batch_data.batch_number or _generate_batch_number()
     batch = db.create_batch({
         "product_id": product_id,
-        "batch_number": batch_data.batch_number,
+        "batch_number": batch_number,
         "expiry_date": batch_data.expiry_date,
         "quantity": batch_data.quantity,
         "purchase_price": batch_data.purchase_price
@@ -1680,8 +1737,23 @@ async def get_collection_report(
 async def import_products(products: List[ProductCreate], current_user: dict = Depends(get_current_user)):
     imported = []
     for product_data in products:
-        product = db.create_product(product_data.model_dump())
-        imported.append(Product(**product))
+        data = product_data.model_dump()
+        batch_number = data.pop("batch_number", None)
+        expiry_date = data.pop("expiry_date", None)
+        if batch_number and not expiry_date:
+            raise HTTPException(status_code=400, detail="Expiry date is required when batch number is provided")
+        product = db.create_product(data)
+        if expiry_date:
+            if not batch_number:
+                batch_number = _generate_batch_number()
+            db.create_batch({
+                "product_id": product["id"],
+                "batch_number": batch_number,
+                "expiry_date": expiry_date,
+                "quantity": max(0, int(data.get("stock_quantity", 0))),
+                "purchase_price": data.get("purchase_price", 0),
+            })
+        imported.append(Product(**_attach_latest_batch(product)))
     return {"imported": len(imported), "products": imported}
 
 # Category endpoints

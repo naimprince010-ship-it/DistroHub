@@ -746,11 +746,21 @@ export function Products() {
                         const payload = {
                           name: product.name,
                           sku: product.sku,
+                          barcode: product.barcode || '',
                           category: product.category,
                           unit: product.unit,
                           pack_size: product.pack_size || 1,
+                          pieces_per_carton: product.pieces_per_carton || product.pack_size || 1,
                           purchase_price: product.purchase_price,
                           selling_price: product.selling_price,
+                          stock_quantity: product.stock_quantity || 0,
+                          reorder_level: product.reorder_level || 0,
+                          batch_number: product.batch_number || '',
+                          expiry_date: product.expiry_date || undefined,
+                          supplier: product.supplier || '',
+                          vat_inclusive: product.vat_inclusive || false,
+                          vat_rate: product.vat_rate || 0,
+                          image_url: product.image_url || '',
                         };
 
                         logger.log('[Products] API payload:', payload);
