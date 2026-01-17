@@ -1197,6 +1197,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                   }}
                   className={`input-field w-full ${errors.purchase_price ? 'border-red-500' : ''}`}
                   min="0"
+                  step="0.01"
                   required
                 />
                 {errors.purchase_price && <p className="text-red-500 text-xs mt-1">{errors.purchase_price}</p>}
@@ -1214,6 +1215,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                   }}
                   className={`input-field w-full ${errors.selling_price ? 'border-red-500' : ''}`}
                   min="0"
+                  step="0.01"
                   required
                 />
                 {errors.selling_price && <p className="text-red-500 text-xs mt-1">{errors.selling_price}</p>}
