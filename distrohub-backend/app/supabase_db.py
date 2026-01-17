@@ -199,6 +199,16 @@ class SupabaseDatabase:
     def update_product(self, product_id: str, data: dict) -> Optional[dict]:
         result = self.client.table("products").update(data).eq("id", product_id).execute()
         return result.data[0] if result.data else None
+
+    def update_product_stock(self, product_id: str, quantity_change: int) -> Optional[dict]:
+        product = self.get_product(product_id)
+        if not product:
+            return None
+        current_qty = int(product.get("stock_quantity", 0) or 0)
+        new_qty = current_qty + int(quantity_change)
+        if new_qty < 0:
+            new_qty = 0
+        return self.update_product(product_id, {"stock_quantity": new_qty})
     
     def delete_product(self, product_id: str) -> bool:
         """Delete a product and its associated batches"""
@@ -448,6 +458,7 @@ class SupabaseDatabase:
                 if existing_batch:
                     # Update existing batch quantity
                     self.update_batch_quantity(batch_id, item["quantity"])
+                    self.update_product_stock(item["product_id"], item["quantity"])
                     batch_number = existing_batch.get("batch_number", item["batch_number"])
                     expiry_date = existing_batch.get("expiry_date", item["expiry_date"])
                     purchase_price = existing_batch.get("purchase_price", item["unit_price"])
@@ -479,6 +490,7 @@ class SupabaseDatabase:
                 "warehouse_id": warehouse_id  # Link batch to warehouse
             }
             batch = self.create_batch(batch_data)
+            self.update_product_stock(item["product_id"], item["quantity"])
 
             # Update warehouse_stock summary
             if warehouse_id and batch:
@@ -653,6 +665,7 @@ class SupabaseDatabase:
             
             # Update batch quantity
             self.update_batch_quantity(item["batch_id"], -item["quantity"])
+            self.update_product_stock(item["product_id"], -item["quantity"])
             
             # Create sale item
             sale_item_data = {

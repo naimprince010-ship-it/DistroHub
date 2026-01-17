@@ -223,6 +223,16 @@ class InMemoryDatabase:
             self.products[product_id].update(data)
             return self.products[product_id]
         return None
+
+    def update_product_stock(self, product_id: str, quantity_change: int) -> Optional[dict]:
+        if product_id not in self.products:
+            return None
+        current_qty = int(self.products[product_id].get("stock_quantity", 0) or 0)
+        new_qty = current_qty + int(quantity_change)
+        if new_qty < 0:
+            new_qty = 0
+        self.products[product_id]["stock_quantity"] = new_qty
+        return self.products[product_id]
     
     def delete_product(self, product_id: str) -> bool:
         if product_id in self.products:
@@ -310,6 +320,8 @@ class InMemoryDatabase:
                 "quantity": item["quantity"],
                 "purchase_price": item["unit_price"]
             })
+
+            self.update_product_stock(item["product_id"], item["quantity"])
             
             purchase_items.append({
                 "id": generate_id(),
@@ -367,6 +379,7 @@ class InMemoryDatabase:
             total_discount += item_discount
             
             self.update_batch_quantity(item["batch_id"], -item["quantity"])
+            self.update_product_stock(item["product_id"], -item["quantity"])
             
             sale_items.append({
                 "id": generate_id(),
