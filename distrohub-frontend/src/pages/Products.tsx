@@ -902,6 +902,8 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
       image_url: '',
     }
   );
+  const [cartonCount, setCartonCount] = useState(0);
+  const [autoCalcStock, setAutoCalcStock] = useState(!product);
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [imagePreview, setImagePreview] = useState<string>(product?.image_url || '');
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -984,6 +986,21 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
     ? ((profitAmount / formData.purchase_price) * 100).toFixed(1) 
     : '0';
 
+  const updateStockFromCartons = (nextCartonCount: number, nextPiecesPerCarton: number) => {
+    const cartons = Number(nextCartonCount) || 0;
+    const pieces = Number(nextPiecesPerCarton) || 0;
+    if (cartons <= 0 || pieces <= 0) {
+      return;
+    }
+    const nextStock = Math.max(0, cartons * pieces);
+    setFormData((prev) => (prev.stock_quantity === nextStock ? prev : { ...prev, stock_quantity: nextStock }));
+  };
+
+  useEffect(() => {
+    if (!autoCalcStock) return;
+    updateStockFromCartons(cartonCount, formData.pieces_per_carton || 0);
+  }, [autoCalcStock, cartonCount, formData.pieces_per_carton]);
+
   const batchHasValue = !!(formData.batch_number && formData.batch_number.trim() !== '');
   const expiryRequired = batchHasValue;
 
@@ -1025,6 +1042,8 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
         vat_rate: formData.vat_rate,
         image_url: '',
       });
+      setCartonCount(0);
+      setAutoCalcStock(true);
       setImagePreview('');
       setErrors({});
     }
@@ -1267,7 +1286,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
           </div>
 
           {/* Stock & Reorder Level */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 Stock Quantity<RequiredMark />
@@ -1282,10 +1301,35 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                 className={`input-field w-full ${errors.stock_quantity ? 'border-red-500' : ''}`}
                 min="0"
                 placeholder="১০ কার্টন = ২৪০"
+                readOnly={autoCalcStock && cartonCount > 0}
                 required
               />
               {errors.stock_quantity && <p className="text-red-500 text-xs mt-1">{errors.stock_quantity}</p>}
               {!errors.stock_quantity && <p className="text-xs text-slate-500 mt-1">মোট পিস (যেমন: ২৪০)</p>}
+              <label className="flex items-center gap-2 mt-2 text-xs text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={autoCalcStock}
+                  onChange={(e) => setAutoCalcStock(e.target.checked)}
+                  className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
+                />
+                কার্টন সংখ্যা থেকে অটো হিসাব
+              </label>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Carton Count</label>
+              <input
+                type="number"
+                value={cartonCount}
+                onChange={(e) => {
+                  const nextCartons = Number(e.target.value);
+                  setCartonCount(Number.isNaN(nextCartons) ? 0 : nextCartons);
+                }}
+                className="input-field w-full"
+                min="0"
+                placeholder="যেমন: ১০"
+              />
+              <p className="text-xs text-slate-500 mt-1">কার্টন সংখ্যা</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
