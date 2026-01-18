@@ -1054,10 +1054,19 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
       <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
-        <div className="p-4 border-b border-slate-200">
+        <div className="p-4 border-b border-slate-200 flex items-center justify-between gap-2">
           <h2 className="text-xl font-semibold text-slate-900">
             {product ? 'Edit Product' : 'Add New Product'}
           </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            aria-label="Close"
+            title="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         <form onSubmit={(e) => handleSubmit(e, false)} className="p-4 space-y-4">
