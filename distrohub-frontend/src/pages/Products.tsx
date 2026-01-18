@@ -1157,6 +1157,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                   </option>
                 ))}
               </select>
+              <p className="text-xs text-slate-500 mt-1">বিক্রির একক</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Pack Size</label>
@@ -1167,6 +1168,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                 className="input-field w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                 min="1"
               />
+              <p className="text-xs text-slate-500 mt-1">প্যাকে পিস সংখ্যা</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Pieces/Carton</label>
@@ -1176,8 +1178,9 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                 onChange={(e) => setFormData({ ...formData, pieces_per_carton: Number(e.target.value) })}
                 className="input-field w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                 min="1"
-                placeholder="e.g., 12"
+                placeholder="যেমন: ২৪"
               />
+              <p className="text-xs text-slate-500 mt-1">কার্টনে মোট পিস</p>
             </div>
           </div>
 
@@ -1198,9 +1201,11 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                   className={`input-field w-full ${errors.purchase_price ? 'border-red-500' : ''}`}
                   min="0"
                   step="0.01"
+                  placeholder="কার্টন দাম ÷ পিস"
                   required
                 />
                 {errors.purchase_price && <p className="text-red-500 text-xs mt-1">{errors.purchase_price}</p>}
+                {!errors.purchase_price && <p className="text-xs text-slate-500 mt-1">প্রতি পিসের কেনা দাম</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -1219,6 +1224,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                   required
                 />
                 {errors.selling_price && <p className="text-red-500 text-xs mt-1">{errors.selling_price}</p>}
+                {!errors.selling_price && <p className="text-xs text-slate-500 mt-1">প্রতি পিসের বিক্রয়মূল্য</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Profit Margin</label>
@@ -1228,6 +1234,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                     ৳{profitAmount} ({profitPercent}%)
                   </span>
                 </div>
+                <p className="text-xs text-slate-500 mt-1">লাভের হিসাব</p>
               </div>
             </div>
             
@@ -1274,9 +1281,11 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                 }}
                 className={`input-field w-full ${errors.stock_quantity ? 'border-red-500' : ''}`}
                 min="0"
+                placeholder="১০ কার্টন = ২৪০"
                 required
               />
               {errors.stock_quantity && <p className="text-red-500 text-xs mt-1">{errors.stock_quantity}</p>}
+              {!errors.stock_quantity && <p className="text-xs text-slate-500 mt-1">মোট পিস (যেমন: ২৪০)</p>}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -1288,8 +1297,9 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                 onChange={(e) => setFormData({ ...formData, reorder_level: Number(e.target.value) })}
                 className="input-field w-full"
                 min="0"
-                placeholder="Alert when stock falls below"
+                placeholder="কম হলে সতর্কতা"
               />
+              <p className="text-xs text-slate-500 mt-1">কম স্টকের সতর্কবার্তা</p>
             </div>
           </div>
 
@@ -1302,8 +1312,9 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                 value={formData.batch_number}
                 onChange={(e) => setFormData({ ...formData, batch_number: e.target.value })}
                 className="input-field w-full"
-                placeholder="e.g., BT-2024-001"
+                placeholder="যেমন: BT-2024-001"
               />
+              <p className="text-xs text-slate-500 mt-1">ব্যাচ বা লট আইডি</p>
               {!batchHasValue && (
                 <p className="text-xs text-slate-500 mt-1">
                   Leave empty to auto-generate on save (when expiry is set).
@@ -1329,6 +1340,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                 required={expiryRequired}
               />
               {errors.expiry_date && <p className="text-red-500 text-xs mt-1">{errors.expiry_date}</p>}
+              {!errors.expiry_date && <p className="text-xs text-slate-500 mt-1">মেয়াদের শেষ তারিখ</p>}
             </div>
           </div>
 
