@@ -304,6 +304,13 @@ export function Purchase() {
   const totalPurchases = purchases.reduce((sum, p) => sum + p.total_amount, 0);
   const totalDue = purchases.reduce((sum, p) => sum + (p.total_amount - p.paid_amount), 0);
 
+  const formatPurchaseProducts = (items: PurchaseItem[]) => {
+    const names = Array.from(new Set(items.map(item => item.product_name).filter(Boolean)));
+    if (names.length === 0) return '-';
+    if (names.length <= 2) return names.join(', ');
+    return `${names.slice(0, 2).join(', ')} +${names.length - 2}`;
+  };
+
   return (
     <div className="min-h-screen">
       <Header title="Purchase / Stock-In" />
@@ -407,6 +414,7 @@ export function Purchase() {
                       <th className="text-left p-2 font-semibold text-slate-700">Invoice #</th>
                       <th className="text-left p-2 font-semibold text-slate-700">Supplier</th>
                       <th className="text-left p-2 font-semibold text-slate-700">Date</th>
+                      <th className="text-left p-2 font-semibold text-slate-700">Products</th>
                       <th className="text-right p-2 font-semibold text-slate-700">Total</th>
                       <th className="text-right p-2 font-semibold text-slate-700">Paid</th>
                       <th className="text-right p-2 font-semibold text-slate-700">Due</th>
@@ -419,6 +427,9 @@ export function Purchase() {
                         <td className="p-2 font-medium text-primary-600">{purchase.invoice_number}</td>
                         <td className="p-2 text-slate-900">{purchase.supplier_name}</td>
                         <td className="p-2 text-slate-600">{purchase.purchase_date}</td>
+                        <td className="p-2 text-slate-600">
+                          {formatPurchaseProducts(purchase.items)}
+                        </td>
                         <td className="p-2 text-right font-medium text-slate-900">
                           ৳ {purchase.total_amount.toLocaleString()}
                         </td>
@@ -621,6 +632,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
   const [entryOverridePrice, setEntryOverridePrice] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState<{ itemId: string; productName: string } | null>(null);
   const [addingProductId, setAddingProductId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -1057,8 +1069,12 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent, shouldPrint = false) => {
+  const handleSubmit = async (e: React.FormEvent, shouldPrint = false) => {
     e.preventDefault();
+
+    if (isSaving) {
+      return;
+    }
     
     if (!validateForm()) {
       toast({
@@ -1068,6 +1084,8 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
       });
       return;
     }
+
+    setIsSaving(true);
     
     const purchase: Purchase & { warehouse_id?: string } = {
       id: '',
@@ -1089,7 +1107,12 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
       items: items,
     };
     
-    onSave(purchase);
+    try {
+      await onSave(purchase);
+    } catch (error) {
+      setIsSaving(false);
+      return;
+    }
     
     toast({
       title: "✅ Stock Added Successfully",
@@ -1101,6 +1124,7 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
         window.print();
       }, 100);
     }
+    setIsSaving(false);
   };
 
   // Keyboard shortcuts
@@ -1649,10 +1673,10 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
               </div>
               <button 
                 type="submit" 
-                disabled={items.length === 0 || !formData.warehouse_id}
+                disabled={isSaving || items.length === 0 || !formData.warehouse_id}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-semibold px-4 py-3 rounded-lg transition-all duration-200 shadow-md hover:shadow-lg mt-2"
               >
-                Save Purchase
+                {isSaving ? 'Saving...' : 'Save Purchase'}
               </button>
             </div>
           </div>
@@ -1666,9 +1690,10 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
               type="button"
               onClick={(e) => handleSubmit(e as unknown as React.FormEvent, true)}
               className="btn-secondary flex items-center gap-2"
+              disabled={isSaving || items.length === 0 || !formData.warehouse_id}
             >
               <Printer className="w-4 h-4" />
-              Save & Print
+              {isSaving ? 'Saving...' : 'Save & Print'}
             </button>
           </div>
         </form>
