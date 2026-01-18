@@ -58,6 +58,7 @@ export function Settings() {
     { id: 'suppliers', label: 'Suppliers', icon: Truck },
     { id: 'categories', label: 'Categories', icon: Tags },
     { id: 'units', label: 'Units', icon: Ruler },
+    { id: 'market-routes', label: 'Routes/Areas', icon: MapPin },
     { id: 'sales-reps', label: 'Sales Reps', icon: User },
     { id: 'profile', label: 'Profile', icon: User },
     { id: 'business', label: 'Business', icon: Building },
@@ -98,6 +99,7 @@ export function Settings() {
             {activeTab === 'suppliers' && <SupplierManagement />}
             {activeTab === 'categories' && <CategoryManagement />}
             {activeTab === 'units' && <UnitManagement />}
+            {activeTab === 'market-routes' && <MarketRouteManagement />}
             {activeTab === 'sales-reps' && <SalesRepManagement />}
             {activeTab === 'profile' && <ProfileSettings />}
             {activeTab === 'business' && <BusinessSettings />}
@@ -1374,6 +1376,302 @@ interface Unit {
   abbreviation: string;
   description?: string;
   created_at: string;
+}
+
+interface MarketRoute {
+  id: string;
+  name: string;
+  sub_area?: string | null;
+  market_day?: string | null;
+  notes?: string | null;
+  created_at: string;
+}
+
+function MarketRouteManagement() {
+  const [routes, setRoutes] = useState<MarketRoute[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [editingRoute, setEditingRoute] = useState<MarketRoute | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [formData, setFormData] = useState({ name: '', sub_area: '', market_day: '', notes: '' });
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchMarketRoutes();
+  }, []);
+
+  const fetchMarketRoutes = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      setRoutes([]);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await api.get('/api/market-routes');
+      setRoutes(response.data || []);
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || err?.message || 'Failed to load routes');
+      setRoutes([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filteredRoutes = useMemo(() => {
+    return routes.filter((route) =>
+      route.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (route.sub_area || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (route.market_day || '').toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [routes, searchTerm]);
+
+  const handleSubmit = async () => {
+    if (!formData.name.trim()) {
+      alert('Route name is required');
+      return;
+    }
+
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setError(null);
+
+    const payload = {
+      name: formData.name.trim(),
+      sub_area: formData.sub_area.trim() || null,
+      market_day: formData.market_day.trim() || null,
+      notes: formData.notes.trim() || null,
+    };
+
+    try {
+      if (editingRoute) {
+        await api.put(`/api/market-routes/${editingRoute.id}`, payload);
+      } else {
+        await api.post('/api/market-routes', payload);
+      }
+      await fetchMarketRoutes();
+      setShowModal(false);
+      setEditingRoute(null);
+      setFormData({ name: '', sub_area: '', market_day: '', notes: '' });
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || err?.message || 'Failed to save route';
+      setError(message);
+      alert(`Failed to save route: ${message}`);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleEdit = (route: MarketRoute) => {
+    setEditingRoute(route);
+    setFormData({
+      name: route.name,
+      sub_area: route.sub_area || '',
+      market_day: route.market_day || '',
+      notes: route.notes || '',
+    });
+    setShowModal(true);
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await api.delete(`/api/market-routes/${id}`);
+      await fetchMarketRoutes();
+      setDeleteConfirm(null);
+    } catch (err: any) {
+      const message = err?.response?.data?.detail || err?.message || 'Failed to delete route';
+      alert(`Failed to delete route: ${message}`);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-slate-900">Routes / Areas</h3>
+        </div>
+        <div className="text-center py-8 text-slate-500">Loading routes...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-semibold text-slate-900">Routes / Areas</h3>
+        <button
+          onClick={() => {
+            setEditingRoute(null);
+            setFormData({ name: '', sub_area: '', market_day: '', notes: '' });
+            setShowModal(true);
+          }}
+          className="btn-primary flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          Add Route
+        </button>
+      </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-700 text-sm">
+          {error}
+        </div>
+      )}
+
+      <div className="relative max-w-md">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <input
+          type="text"
+          placeholder="Search routes..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="input-field pl-10"
+        />
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead>
+            <tr className="bg-slate-50">
+              <th className="text-left p-2 font-medium text-slate-600">Route/Area</th>
+              <th className="text-left p-2 font-medium text-slate-600">Sub-area</th>
+              <th className="text-left p-2 font-medium text-slate-600">Market Day</th>
+              <th className="text-left p-2 font-medium text-slate-600">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredRoutes.map((route) => (
+              <tr key={route.id} className="border-b border-slate-100 hover:bg-slate-50">
+                <td className="p-2">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
+                      <MapPin className="w-4 h-4 text-primary-600" />
+                    </div>
+                    <span className="font-medium text-slate-900">{route.name}</span>
+                  </div>
+                </td>
+                <td className="p-2 text-slate-600">{route.sub_area || '-'}</td>
+                <td className="p-2 text-slate-600">{route.market_day || '-'}</td>
+                <td className="p-2">
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => handleEdit(route)}
+                      className="p-1 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                      title="Edit"
+                    >
+                      <Edit className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setDeleteConfirm(route.id)}
+                      className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                      title="Delete"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+            {filteredRoutes.length === 0 && (
+              <tr>
+                <td colSpan={4} className="p-4 text-center text-slate-500">
+                  No routes found.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
+            <div className="p-3 border-b border-slate-200 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-slate-900">
+                {editingRoute ? 'Edit Route' : 'Add Route'}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setShowModal(false)}
+                className="p-2 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+                aria-label="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3 space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Route/Area Name</label>
+                <input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="input-field"
+                  required
+                />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Sub-area</label>
+                  <input
+                    type="text"
+                    value={formData.sub_area}
+                    onChange={(e) => setFormData({ ...formData, sub_area: e.target.value })}
+                    className="input-field"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Market Day</label>
+                  <input
+                    type="text"
+                    value={formData.market_day}
+                    onChange={(e) => setFormData({ ...formData, market_day: e.target.value })}
+                    className="input-field"
+                    placeholder="যেমন: সোমবার"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                  className="input-field min-h-[80px]"
+                />
+              </div>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">
+                  Cancel
+                </button>
+                <button type="button" onClick={handleSubmit} className="btn-primary" disabled={isSubmitting}>
+                  {editingRoute ? 'Update Route' : 'Add Route'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-4 w-full max-w-md">
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">Delete Route?</h3>
+            <p className="text-slate-600 mb-4">This will remove the route from the list.</p>
+            <div className="flex gap-2">
+              <button onClick={() => setDeleteConfirm(null)} className="btn-secondary flex-1">Cancel</button>
+              <button onClick={() => handleDelete(deleteConfirm)} className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 flex-1">Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function UnitManagement() {

@@ -285,6 +285,26 @@ class SupabaseDatabase:
     def delete_retailer(self, retailer_id: str) -> bool:
         self.client.table("retailers").delete().eq("id", retailer_id).execute()
         return True
+
+    def get_market_routes(self) -> List[dict]:
+        result = self.client.table("market_routes").select("*").order("name").execute()
+        return result.data or []
+
+    def get_market_route(self, route_id: str) -> Optional[dict]:
+        result = self.client.table("market_routes").select("*").eq("id", route_id).execute()
+        return result.data[0] if result.data else None
+
+    def create_market_route(self, data: dict) -> dict:
+        result = self.client.table("market_routes").insert(data).execute()
+        return result.data[0] if result.data else data
+
+    def update_market_route(self, route_id: str, data: dict) -> Optional[dict]:
+        result = self.client.table("market_routes").update(data).eq("id", route_id).execute()
+        return result.data[0] if result.data else None
+
+    def delete_market_route(self, route_id: str) -> bool:
+        self.client.table("market_routes").delete().eq("id", route_id).execute()
+        return True
     
     # Warehouse methods
     def get_warehouses(self) -> List[dict]:

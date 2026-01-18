@@ -19,6 +19,7 @@ export interface RetailerRecord {
   phone: string;
   area: string;
   address: string;
+  market_route_id?: string | null;
   credit_limit: number;
   current_due: number;
   synced: boolean;

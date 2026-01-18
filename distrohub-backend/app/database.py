@@ -20,6 +20,7 @@ class InMemoryDatabase:
         self.products: Dict[str, dict] = {}
         self.batches: Dict[str, dict] = {}
         self.retailers: Dict[str, dict] = {}
+        self.market_routes: Dict[str, dict] = {}
         self.purchases: Dict[str, dict] = {}
         self.sales: Dict[str, dict] = {}
         self.payments: Dict[str, dict] = {}
@@ -294,6 +295,34 @@ class InMemoryDatabase:
     def delete_retailer(self, retailer_id: str) -> bool:
         if retailer_id in self.retailers:
             del self.retailers[retailer_id]
+            return True
+        return False
+
+    def get_market_routes(self) -> List[dict]:
+        return list(self.market_routes.values())
+
+    def get_market_route(self, route_id: str) -> Optional[dict]:
+        return self.market_routes.get(route_id)
+
+    def create_market_route(self, data: dict) -> dict:
+        route_id = generate_id()
+        route = {
+            "id": route_id,
+            **data,
+            "created_at": datetime.now()
+        }
+        self.market_routes[route_id] = route
+        return route
+
+    def update_market_route(self, route_id: str, data: dict) -> Optional[dict]:
+        if route_id in self.market_routes:
+            self.market_routes[route_id].update(data)
+            return self.market_routes[route_id]
+        return None
+
+    def delete_market_route(self, route_id: str) -> bool:
+        if route_id in self.market_routes:
+            del self.market_routes[route_id]
             return True
         return False
     

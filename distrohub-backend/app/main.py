@@ -34,6 +34,7 @@ from app.models import (
     SaleUpdate, CollectionReport, CollectionReportSummary,
     RouteCreate, Route, RouteUpdate, RouteWithSales, RouteStatus,
     RouteReconciliationCreate, RouteReconciliation, RouteReconciliationUpdate,
+    MarketRouteCreate, MarketRoute,
     SrAccountability
 )
 from app.database import db
@@ -999,6 +1000,29 @@ async def delete_retailer(retailer_id: str, current_user: dict = Depends(get_cur
     if not db.delete_retailer(retailer_id):
         raise HTTPException(status_code=404, detail="Retailer not found")
     return {"message": "Retailer deleted"}
+
+@app.get("/api/market-routes", response_model=List[MarketRoute])
+async def get_market_routes(current_user: dict = Depends(get_current_user)):
+    routes = db.get_market_routes()
+    return [MarketRoute(**r) for r in routes]
+
+@app.post("/api/market-routes", response_model=MarketRoute)
+async def create_market_route(route_data: MarketRouteCreate, current_user: dict = Depends(get_current_user)):
+    route = db.create_market_route(route_data.model_dump())
+    return MarketRoute(**route)
+
+@app.put("/api/market-routes/{route_id}", response_model=MarketRoute)
+async def update_market_route(route_id: str, route_data: MarketRouteCreate, current_user: dict = Depends(get_current_user)):
+    route = db.update_market_route(route_id, route_data.model_dump())
+    if not route:
+        raise HTTPException(status_code=404, detail="Market route not found")
+    return MarketRoute(**route)
+
+@app.delete("/api/market-routes/{route_id}")
+async def delete_market_route(route_id: str, current_user: dict = Depends(get_current_user)):
+    if not db.delete_market_route(route_id):
+        raise HTTPException(status_code=404, detail="Market route not found")
+    return {"message": "Market route deleted"}
 
 @app.post("/api/admin/delete-demo-retailers")
 async def delete_demo_retailers(current_user: dict = Depends(get_current_user)):

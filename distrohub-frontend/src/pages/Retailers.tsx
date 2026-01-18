@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import {
@@ -28,9 +28,18 @@ interface Retailer {
   phone: string;
   address: string;
   area: string;
+  market_route_id?: string | null;
   district: string;
   credit_limit: number;
   current_due: number;
+}
+
+interface MarketRoute {
+  id: string;
+  name: string;
+  sub_area?: string | null;
+  market_day?: string | null;
+  notes?: string | null;
 }
 
 export function Retailers() {
@@ -42,6 +51,7 @@ export function Retailers() {
   const [dueFilter, setDueFilter] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingRetailer, setEditingRetailer] = useState<Retailer | null>(null);
+  const [marketRoutes, setMarketRoutes] = useState<MarketRoute[]>([]);
 
   const mapApiRetailerToRecord = (r: any, synced: boolean): RetailerRecord => ({
     id: r.id,
@@ -50,6 +60,7 @@ export function Retailers() {
     phone: r.phone || '',
     area: r.area || '',
     address: r.address || '',
+    market_route_id: r.market_route_id || null,
     credit_limit: r.credit_limit || 0,
     current_due: r.total_due || 0,
     synced,
@@ -63,6 +74,7 @@ export function Retailers() {
     phone: r.phone,
     address: r.address,
     area: r.area,
+    market_route_id: r.market_route_id || null,
     district: 'N/A',
     credit_limit: r.credit_limit,
     current_due: r.current_due,
@@ -93,6 +105,7 @@ export function Retailers() {
           phone: r.phone || '',
           address: r.address || '',
           area: r.area || '',
+          market_route_id: r.market_route_id || null,
           district: r.district || 'N/A', // Backend may not have district, use default
           credit_limit: r.credit_limit || 0,
           current_due: r.total_due || 0, // Backend uses total_due
@@ -129,8 +142,26 @@ export function Retailers() {
     }
   };
 
+  const fetchMarketRoutes = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      console.warn('[Retailers] No token found, skipping market routes fetch');
+      setMarketRoutes([]);
+      return;
+    }
+
+    try {
+      const response = await api.get('/api/market-routes');
+      setMarketRoutes(response.data || []);
+    } catch (error: any) {
+      console.error('[Retailers] Failed to fetch market routes:', error);
+      setMarketRoutes([]);
+    }
+  };
+
   useEffect(() => {
     fetchRetailers();
+    fetchMarketRoutes();
     const globalSearch = searchParams.get('q') || '';
     setSearchTerm(globalSearch);
   }, [searchParams]);
@@ -364,6 +395,7 @@ export function Retailers() {
       {(showAddModal || editingRetailer) && (
         <RetailerModal
           retailer={editingRetailer}
+          marketRoutes={marketRoutes}
           onClose={() => {
             setShowAddModal(false);
             setEditingRetailer(null);
@@ -380,6 +412,7 @@ export function Retailers() {
                 phone: retailer.phone,
                 address: retailer.address,
                 area: retailer.area,
+                market_route_id: retailer.market_route_id || null,
                 credit_limit: retailer.credit_limit,
               };
               
@@ -396,6 +429,7 @@ export function Retailers() {
                   phone: retailer.phone,
                   address: retailer.address,
                   area: retailer.area,
+                  market_route_id: retailer.market_route_id || null,
                   credit_limit: retailer.credit_limit,
                   current_due: retailer.current_due || 0,
                   synced: false,
@@ -416,6 +450,7 @@ export function Retailers() {
                   phone: retailer.phone,
                   address: retailer.address,
                   area: retailer.area,
+                  market_route_id: retailer.market_route_id || null,
                   credit_limit: retailer.credit_limit,
                   current_due: retailer.current_due || 0,
                   synced: false,
@@ -449,11 +484,12 @@ export function Retailers() {
 
 interface RetailerModalProps {
   retailer: Retailer | null;
+  marketRoutes: MarketRoute[];
   onClose: () => void;
   onSave: (retailer: Retailer) => void;
 }
 
-function RetailerModal({ retailer, onClose, onSave }: RetailerModalProps) {
+function RetailerModal({ retailer, marketRoutes, onClose, onSave }: RetailerModalProps) {
   const [formData, setFormData] = useState<Partial<Retailer>>(
     retailer || {
       name: '',
@@ -461,11 +497,21 @@ function RetailerModal({ retailer, onClose, onSave }: RetailerModalProps) {
       phone: '',
       address: '',
       area: '',
+      market_route_id: null,
       district: '',
       credit_limit: 0,
       current_due: 0,
     }
   );
+  const selectedRoute = useMemo(() => {
+    if (formData.market_route_id) {
+      return marketRoutes.find((route) => route.id === formData.market_route_id) || null;
+    }
+    if (formData.area) {
+      return marketRoutes.find((route) => route.name === formData.area) || null;
+    }
+    return null;
+  }, [formData.area, formData.market_route_id, marketRoutes]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -529,14 +575,35 @@ function RetailerModal({ retailer, onClose, onSave }: RetailerModalProps) {
 
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Area</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Route/Area (Bazar)</label>
               <input
                 type="text"
+                list="market-route-options"
                 value={formData.area}
-                onChange={(e) => setFormData({ ...formData, area: e.target.value })}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  const match = marketRoutes.find((route) => route.name === value);
+                  setFormData({
+                    ...formData,
+                    area: value,
+                    market_route_id: match?.id || null,
+                  });
+                }}
                 className="input-field"
                 required
               />
+              <datalist id="market-route-options">
+                {marketRoutes.map((route) => (
+                  <option
+                    key={route.id}
+                    value={route.name}
+                    label={route.sub_area ? `${route.name} - ${route.sub_area}` : route.name}
+                  />
+                ))}
+              </datalist>
+              {selectedRoute?.market_day && (
+                <p className="text-xs text-slate-500 mt-1">Market day: {selectedRoute.market_day}</p>
+              )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">District</label>

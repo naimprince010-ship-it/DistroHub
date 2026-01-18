@@ -101,6 +101,7 @@ class RetailerBase(BaseModel):
     phone: str
     address: str
     area: str
+    market_route_id: Optional[str] = None
     credit_limit: float = 0
 
 class RetailerCreate(RetailerBase):
@@ -109,6 +110,19 @@ class RetailerCreate(RetailerBase):
 class Retailer(RetailerBase):
     id: str
     total_due: float = 0
+    created_at: datetime
+
+class MarketRouteBase(BaseModel):
+    name: str
+    sub_area: Optional[str] = None
+    market_day: Optional[str] = None
+    notes: Optional[str] = None
+
+class MarketRouteCreate(MarketRouteBase):
+    pass
+
+class MarketRoute(MarketRouteBase):
+    id: str
     created_at: datetime
 
 class PurchaseItemCreate(BaseModel):

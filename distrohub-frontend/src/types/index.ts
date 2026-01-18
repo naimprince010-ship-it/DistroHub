@@ -30,6 +30,7 @@ export interface Retailer {
   phone: string;
   address: string;
   area: string;
+  market_route_id?: string;
   district: string;
   credit_limit: number;
   current_due: number;
