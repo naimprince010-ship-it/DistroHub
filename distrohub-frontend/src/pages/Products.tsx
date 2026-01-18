@@ -1288,6 +1288,21 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
           {/* Stock & Reorder Level */}
           <div className="grid grid-cols-3 gap-3">
             <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">Carton Count</label>
+              <input
+                type="number"
+                value={cartonCount}
+                onChange={(e) => {
+                  const nextCartons = Number(e.target.value);
+                  setCartonCount(Number.isNaN(nextCartons) ? 0 : nextCartons);
+                }}
+                className="input-field w-full"
+                min="0"
+                placeholder="যেমন: ১০"
+              />
+              <p className="text-xs text-slate-500 mt-1">কার্টন সংখ্যা</p>
+            </div>
+            <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
                 Stock Quantity<RequiredMark />
               </label>
@@ -1315,21 +1330,6 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                 />
                 কার্টন সংখ্যা থেকে অটো হিসাব
               </label>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Carton Count</label>
-              <input
-                type="number"
-                value={cartonCount}
-                onChange={(e) => {
-                  const nextCartons = Number(e.target.value);
-                  setCartonCount(Number.isNaN(nextCartons) ? 0 : nextCartons);
-                }}
-                className="input-field w-full"
-                min="0"
-                placeholder="যেমন: ১০"
-              />
-              <p className="text-xs text-slate-500 mt-1">কার্টন সংখ্যা</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
