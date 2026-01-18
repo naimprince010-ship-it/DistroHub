@@ -1086,7 +1086,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
               />
             </div>
             
-            <div className="flex-1 grid grid-cols-2 gap-3">
+            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Product Name<RequiredMark />
@@ -1129,7 +1129,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
           </div>
 
           {/* Barcode */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Barcode</label>
               <div className="flex gap-2">
@@ -1162,7 +1162,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
           </div>
 
           {/* Unit & Pack Size */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Unit</label>
               <select
@@ -1205,7 +1205,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
 
           {/* Pricing with Profit Display */}
           <div className="bg-slate-50 rounded-xl p-3">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   Purchase Price (৳)<RequiredMark />
@@ -1286,7 +1286,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
           </div>
 
           {/* Stock & Reorder Level */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Carton Count</label>
               <input
@@ -1348,7 +1348,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
           </div>
 
           {/* Batch & Expiry */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">Batch Number</label>
               <input
