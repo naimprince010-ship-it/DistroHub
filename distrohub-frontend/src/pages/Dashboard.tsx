@@ -49,13 +49,12 @@ interface DashboardStats {
   collections_this_month: number;
 }
 
-const recentOrders = [
-  { id: 'ORD-001', retailer: 'Rahim Store', amount: 15000, status: 'delivered' },
-  { id: 'ORD-002', retailer: 'Karim Traders', amount: 22500, status: 'pending' },
-  { id: 'ORD-003', retailer: 'Hasan Shop', amount: 8750, status: 'confirmed' },
-  { id: 'ORD-004', retailer: 'Molla Enterprise', amount: 31000, status: 'delivered' },
-  { id: 'ORD-005', retailer: 'Akbar Store', amount: 12000, status: 'pending' },
-];
+const recentOrders: Array<{
+  id: string;
+  retailer: string;
+  amount: number;
+  status: 'delivered' | 'pending' | 'confirmed';
+}> = [];
 
 const expiringProducts = [
   { name: 'Power Milk 400g', batch: 'BT-2024-001', expiry: '2025-01-15', qty: 50 },
@@ -326,28 +325,34 @@ export function Dashboard() {
               </a>
             </div>
             <div className="divide-y divide-slate-100">
-              {recentOrders.map((order) => (
-                <div key={order.id} className="p-2 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                  <div>
-                    <p className="font-medium text-slate-900">{order.id}</p>
-                    <p className="text-sm text-slate-500">{order.retailer}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-slate-900">{formatCurrency(order.amount)}</p>
-                    <span
-                      className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${
-                        order.status === 'delivered'
-                          ? 'bg-green-100 text-green-700'
-                          : order.status === 'confirmed'
-                          ? 'bg-blue-100 text-blue-700'
-                          : 'bg-yellow-100 text-yellow-700'
-                      }`}
-                    >
-                      {order.status}
-                    </span>
-                  </div>
+              {recentOrders.length === 0 ? (
+                <div className="p-6 text-center text-sm text-slate-500">
+                  No recent orders yet.
                 </div>
-              ))}
+              ) : (
+                recentOrders.map((order) => (
+                  <div key={order.id} className="p-2 flex items-center justify-between hover:bg-slate-50 transition-colors">
+                    <div>
+                      <p className="font-medium text-slate-900">{order.id}</p>
+                      <p className="text-sm text-slate-500">{order.retailer}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-slate-900">{formatCurrency(order.amount)}</p>
+                      <span
+                        className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${
+                          order.status === 'delivered'
+                            ? 'bg-green-100 text-green-700'
+                            : order.status === 'confirmed'
+                            ? 'bg-blue-100 text-blue-700'
+                            : 'bg-yellow-100 text-yellow-700'
+                        }`}
+                      >
+                        {order.status}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </div>
 
