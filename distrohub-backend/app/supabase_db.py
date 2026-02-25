@@ -1460,41 +1460,42 @@ class SupabaseDatabase:
             traceback.print_exc()
             raise ValueError(f"Failed to create sale return: {error_type}: {error_msg}")
     
-    def get_payments(self, sale_id: Optional[str] = None, user_id: Optional[str] = None, route_id: Optional[str] = None, from_date: Optional[str] = None, to_date: Optional[str] = None) -> List[dict]:
+    def get_payments(self, sale_id: Optional[str] = None, user_id: Optional[str] = None, route_id: Optional[str] = None, from_date: Optional[str] = None, to_date: Optional[str] = None, enrich_routes: bool = True) -> List[dict]:
         """
         Get payments with optional filters.
-        
-        Note: For Collection Report, user_id filtering is done in the API endpoint
-        with fallback logic (sale.assigned_to or route.assigned_to).
-        This method only filters by payments.collected_by directly.
         """
         query = self.client.table("payments").select("*")
         
         if sale_id:
             query = query.eq("sale_id", sale_id)
         if user_id:
-            # Direct filter by collected_by (used for /api/users/{user_id}/payments)
             query = query.eq("collected_by", user_id)
         if route_id:
             query = query.eq("route_id", route_id)
         if from_date:
             query = query.gte("created_at", from_date)
         if to_date:
-            # Add one day to include the end date
             from datetime import timedelta
-            end_datetime = datetime.fromisoformat(to_date.replace('Z', '+00:00')) + timedelta(days=1)
-            query = query.lt("created_at", end_datetime.isoformat())
+            try:
+                end_datetime = datetime.fromisoformat(to_date.replace('Z', '+00:00')) + timedelta(days=1)
+                query = query.lt("created_at", end_datetime.isoformat())
+            except:
+                pass
         
         result = query.order("created_at", desc=True).execute()
         payments = result.data or []
         
-        # Enrich with route information if route_id exists
-        for payment in payments:
-            if payment.get("route_id"):
+        # Performance Fix: Batch enrichment of routes if requested
+        if enrich_routes and payments:
+            route_ids = list(set(p["route_id"] for p in payments if p.get("route_id")))
+            if route_ids:
                 try:
-                    route = self.get_route(payment["route_id"])
-                    if route:
-                        payment["route_number"] = route.get("route_number")
+                    routes_result = self.client.table("routes").select("id, route_number").in_("id", route_ids).execute()
+                    routes_map = {r["id"]: r["route_number"] for r in (routes_result.data or [])}
+                    for payment in payments:
+                        rid = payment.get("route_id")
+                        if rid and rid in routes_map:
+                            payment["route_number"] = routes_map[rid]
                 except:
                     pass
         
@@ -1653,16 +1654,34 @@ class SupabaseDatabase:
     def get_inventory(self) -> List[InventoryItem]:
         inventory = []
         products = self.get_products()
+        
+        # Batch Fetch Optimization: Get ALL batches in ONE call instead of per-product
+        all_batches_result = self.client.table("product_batches").select("*").execute()
+        all_batches = all_batches_result.data or []
+        
+        # Group batches by product_id locally
+        batches_by_product = {}
+        for b in all_batches:
+            pid = b.get("product_id")
+            if pid:
+                if pid not in batches_by_product:
+                    batches_by_product[pid] = []
+                batches_by_product[pid].append(b)
+
         for product in products:
-            batches = self.get_batches_by_product(product["id"])
-            total_stock = sum(b["quantity"] for b in batches)
+            pid = product["id"]
+            product_batches = batches_by_product.get(pid, [])
+            total_stock = sum(b["quantity"] for b in product_batches)
             batch_objects = []
-            for b in batches:
+            for b in product_batches:
                 if isinstance(b.get("expiry_date"), str):
-                    b["expiry_date"] = date.fromisoformat(b["expiry_date"])
+                    try:
+                        b["expiry_date"] = date.fromisoformat(b["expiry_date"])
+                    except:
+                        pass
                 batch_objects.append(ProductBatch(**b))
             inventory.append(InventoryItem(
-                product_id=product["id"],
+                product_id=pid,
                 product_name=product["name"],
                 sku=product["sku"],
                 category=product["category"],
@@ -1676,15 +1695,32 @@ class SupabaseDatabase:
         today = date.today()
         products = self.get_products()
         
+        # Optimization: Fetch ALL batches once instead of per-product
+        all_batches_result = self.client.table("product_batches").select("*").execute()
+        all_batches = all_batches_result.data or []
+        
+        # Group batches by product_id
+        batches_by_product = {}
+        for b in all_batches:
+            pid = b.get("product_id")
+            if pid:
+                if pid not in batches_by_product:
+                    batches_by_product[pid] = []
+                batches_by_product[pid].append(b)
+        
         for product in products:
-            batches = self.get_batches_by_product(product["id"])
-            for batch in batches:
+            pid = product["id"]
+            product_batches = batches_by_product.get(pid, [])
+            for batch in product_batches:
                 if batch["quantity"] <= 0:
                     continue
                 
                 expiry_date = batch["expiry_date"]
                 if isinstance(expiry_date, str):
-                    expiry_date = date.fromisoformat(expiry_date)
+                    try:
+                        expiry_date = date.fromisoformat(expiry_date)
+                    except:
+                        continue
                 
                 days_until_expiry = (expiry_date - today).days
                 
@@ -1714,98 +1750,106 @@ class SupabaseDatabase:
     
     def get_dashboard_stats(self) -> DashboardStats:
         """
-        Calculate dashboard statistics by aggregating data from multiple tables.
-        
-        Returns:
-            DashboardStats: Aggregated statistics including:
-            - total_products, total_categories, total_purchases
-            - total_sales, receivable_from_customers, payable_to_supplier
-            - low_stock_count, expiring_soon_count
-            - active_retailers, sales_this_month, collections_this_month
+        Calculate dashboard statistics with high performance by minimizing round-trips.
         """
-        print("[Supabase] get_dashboard_stats: Starting aggregation...")
+        print("[Supabase] get_dashboard_stats: Starting optimized aggregation...")
         
-        # Fetch all required data
+        # Consolidate fetches to minimize Round-Trip Time (RTT)
         sales = self.get_sales()
         retailers = self.get_retailers()
         products = self.get_products()
-        categories = self.get_categories()
+        # Minimal fetch for categories count
+        categories_result = self.client.table("categories").select("id").execute()
+        total_categories = len(categories_result.data or [])
+        
         purchases = self.get_purchases()
         suppliers = self.get_suppliers()
-        payments = self.get_payments()
-        inventory = self.get_inventory()
-        expiry_alerts = self.get_expiry_alerts()
+        payments = self.get_payments(enrich_routes=False) # Performance: skip route enrichment
+        
+        # Performance: Bulk fetch ALL batches in ONE call
+        all_batches_result = self.client.table("product_batches").select("*").execute()
+        all_batches = all_batches_result.data or []
+        
+        # Local grouping for processing
+        batches_by_product = {}
+        for b in all_batches:
+            pid = b.get("product_id")
+            if pid:
+                if pid not in batches_by_product:
+                    batches_by_product[pid] = []
+                batches_by_product[pid].append(b)
         
         # Basic counts
         total_products = len(products)
-        total_categories = len(categories)
         total_purchases = len(purchases)
         active_retailers = len(retailers)
-        
-        # Financial metrics
         total_sales = sum(float(s.get("total_amount", 0)) for s in sales)
         receivable_from_customers = sum(float(r.get("total_due", 0)) for r in retailers)
         
-        # Payable to suppliers (sum of supplier dues if they have a due field)
-        # If suppliers don't have a due field, calculate from purchases
         payable_to_supplier = 0.0
-        for supplier in suppliers:
-            # Check if supplier has a due/payable field
-            supplier_due = supplier.get("total_due") or supplier.get("payable") or supplier.get("due_amount") or 0
-            payable_to_supplier += float(supplier_due)
+        for s in suppliers:
+            due = s.get("total_due") or s.get("payable") or s.get("due_amount") or 0
+            payable_to_supplier += float(due)
         
-        # If no supplier due field, calculate from unpaid purchases
         if payable_to_supplier == 0:
-            for purchase in purchases:
-                # Check if purchase is unpaid (simplified: assume all purchases are payable)
-                # In production, you'd check payment_status
-                purchase_total = float(purchase.get("total_amount", 0))
-                paid_amount = float(purchase.get("paid_amount", 0))
-                payable_to_supplier += max(0, purchase_total - paid_amount)
+            for p in purchases:
+                payable_to_supplier += float(p.get("total_amount", 0)) - float(p.get("paid_amount", 0))
         
-        # Stock metrics
+        # Calculate stock and alerts in-memory from bulk data
         low_stock_count = 0
-        for inv_item in inventory:
-            # Consider low stock if total_stock < 50 (threshold can be configurable)
-            if inv_item.total_stock < 50:
+        for product in products:
+            pid = product["id"]
+            p_batches = batches_by_product.get(pid, [])
+            total_stock = sum(b.get("quantity", 0) for b in p_batches)
+            if total_stock < 50:
                 low_stock_count += 1
         
-        # Expiring soon count (within 30 days)
         expiring_soon_count = 0
         today = date.today()
-        for alert in expiry_alerts:
-            if alert.status == ExpiryStatus.CRITICAL and alert.days_until_expiry >= 0:
-                expiring_soon_count += 1
+        for batch in all_batches:
+            if batch.get("quantity", 0) <= 0:
+                continue
+            expiry_date = batch.get("expiry_date")
+            if isinstance(expiry_date, str):
+                try:
+                    expiry_date = date.fromisoformat(expiry_date)
+                except:
+                    continue
+            if expiry_date:
+                days_until = (expiry_date - today).days
+                if 0 <= days_until <= 30:
+                    expiring_soon_count += 1
         
-        # Monthly metrics
-        this_month = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        # Monthly metrics calculation in-memory
+        this_month_start = datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        
         sales_this_month = 0
         for s in sales:
-            created_at = s.get("created_at")
-            if isinstance(created_at, str):
-                created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-            if created_at and created_at.replace(tzinfo=None) >= this_month:
-                sales_this_month += float(s.get("total_amount", 0))
+            c_at = s.get("created_at")
+            if isinstance(c_at, str):
+                try:
+                    dt = datetime.fromisoformat(c_at.replace("Z", "+00:00")).replace(tzinfo=None)
+                    if dt >= this_month_start:
+                        sales_this_month += float(s.get("total_amount", 0))
+                except:
+                    pass
         
         collections_this_month = 0
         for p in payments:
-            created_at = p.get("created_at")
-            if isinstance(created_at, str):
-                created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
-            if created_at and created_at.replace(tzinfo=None) >= this_month:
-                collections_this_month += float(p.get("amount", 0))
+            c_at = p.get("created_at")
+            if isinstance(c_at, str):
+                try:
+                    dt = datetime.fromisoformat(c_at.replace("Z", "+00:00")).replace(tzinfo=None)
+                    if dt >= this_month_start:
+                        collections_this_month += float(p.get("amount", 0))
+                except:
+                    pass
         
-        # Legacy field for backward compatibility
-        total_due = receivable_from_customers
-        
-        print(f"[Supabase] get_dashboard_stats: Calculated stats - "
-              f"products={total_products}, categories={total_categories}, "
-              f"purchases={total_purchases}, sales={total_sales:.2f}, "
-              f"low_stock={low_stock_count}, expiring={expiring_soon_count}")
+        print(f"[Supabase] get_dashboard_stats: Optimized calculation complete.")
         
         return DashboardStats(
             total_sales=total_sales,
-            total_due=total_due,  # Legacy field
+            total_due=receivable_from_customers,
             total_products=total_products,
             total_categories=total_categories,
             total_purchases=total_purchases,
