@@ -1,0 +1,17 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="512" height="512" fill="#4F46E5" rx="80"/>
+  
+  <!-- Cube/Box Icon (DistroHub Logo) -->
+  <g transform="translate(128, 128)">
+    <!-- Front face -->
+    <path d="M128 64 L192 96 L192 192 L128 160 Z" fill="#FFFFFF" opacity="0.9"/>
+    <!-- Top face -->
+    <path d="M128 64 L192 96 L256 64 L192 32 Z" fill="#FFFFFF" opacity="0.7"/>
+    <!-- Right face -->
+    <path d="M192 96 L256 64 L256 160 L192 192 Z" fill="#FFFFFF" opacity="0.8"/>
+  </g>
+  
+  <!-- Text "DH" (optional, can be removed if too small) -->
+  <text x="256" y="380" font-family="Arial, sans-serif" font-size="120" font-weight="bold" fill="#FFFFFF" text-anchor="middle">DH</text>
+</svg>

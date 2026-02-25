@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, LabelList } from 'recharts';
 import api from '@/lib/api';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 const salesData = [
   { name: 'Jan', sales: 4000, collections: 2400 },
@@ -66,6 +67,7 @@ export function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useLanguage();
 
   useEffect(() => {
     const fetchDashboardStats = async () => {
@@ -85,7 +87,7 @@ export function Dashboard() {
         setStats(response.data);
       } catch (err: any) {
         console.error('[Dashboard] Error fetching stats:', err);
-        
+
         // Handle timeout errors with user-friendly message
         if (err.isTimeout || err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
           setError('Backend is starting up (cold start). This may take 30-60 seconds. Please wait and refresh the page.');
@@ -94,7 +96,7 @@ export function Dashboard() {
         } else {
           setError(err.response?.data?.detail || err.message || 'Failed to load dashboard stats');
         }
-        
+
         if (err.response?.status === 401) {
           // Interceptor will handle redirect to login
           return;
@@ -115,7 +117,7 @@ export function Dashboard() {
   // Format stats for display
   const displayStats = stats ? [
     {
-      title: 'Total Sales',
+      title: t('dashboard.total_sales'),
       value: formatCurrency(stats.total_sales),
       change: stats.sales_this_month > 0 ? `+${formatCurrency(stats.sales_this_month)}` : formatCurrency(0),
       trend: 'up' as const,
@@ -125,7 +127,7 @@ export function Dashboard() {
       to: '/sales',
     },
     {
-      title: 'Receivable',
+      title: t('dashboard.receivable'),
       value: formatCurrency(stats.receivable_from_customers),
       change: stats.collections_this_month > 0 ? `+${formatCurrency(stats.collections_this_month)}` : formatCurrency(0),
       trend: stats.receivable_from_customers > 0 ? 'down' as const : 'up' as const,
@@ -135,9 +137,9 @@ export function Dashboard() {
       to: '/receivables',
     },
     {
-      title: 'Total Products',
+      title: t('dashboard.total_products'),
       value: stats.total_products.toString(),
-      change: `Categories: ${stats.total_categories}`,
+      change: `${t('dashboard.total_categories')}: ${stats.total_categories}`,
       trend: 'up' as const,
       icon: Package,
       color: 'bg-blue-500',
@@ -145,9 +147,9 @@ export function Dashboard() {
       to: '/products',
     },
     {
-      title: 'Active Retailers',
+      title: t('dashboard.active_retailers'),
       value: stats.active_retailers.toString(),
-      change: `Purchases: ${stats.total_purchases}`,
+      change: `${t('common.purchase')}: ${stats.total_purchases}`,
       trend: 'up' as const,
       icon: Users,
       color: 'bg-purple-500',
@@ -155,9 +157,9 @@ export function Dashboard() {
       to: '/retailers',
     },
     {
-      title: 'Low Stock',
+      title: t('dashboard.low_stock'),
       value: stats.low_stock_count.toString(),
-      change: 'Items',
+      change: t('dashboard.items'),
       trend: stats.low_stock_count > 0 ? 'down' as const : 'up' as const,
       icon: AlertTriangle,
       color: 'bg-orange-500',
@@ -165,9 +167,9 @@ export function Dashboard() {
       to: '/inventory?filter=low-stock',
     },
     {
-      title: 'Expiring Soon',
+      title: t('dashboard.expiring_soon'),
       value: stats.expiring_soon_count.toString(),
-      change: 'Within 30 days',
+      change: t('dashboard.within_30_days'),
       trend: stats.expiring_soon_count > 0 ? 'down' as const : 'up' as const,
       icon: AlertTriangle,
       color: 'bg-yellow-500',
@@ -175,9 +177,9 @@ export function Dashboard() {
       to: '/expiry',
     },
     {
-      title: 'Payable to Suppliers',
+      title: t('dashboard.payable_to_suppliers'),
       value: formatCurrency(stats.payable_to_supplier),
-      change: 'Outstanding',
+      change: t('dashboard.outstanding'),
       trend: stats.payable_to_supplier > 0 ? 'down' as const : 'up' as const,
       icon: ShoppingCart,
       color: 'bg-indigo-500',
@@ -185,9 +187,9 @@ export function Dashboard() {
       to: '/purchase',
     },
     {
-      title: 'Total Categories',
+      title: t('dashboard.total_categories'),
       value: stats.total_categories.toString(),
-      change: `Products: ${stats.total_products}`,
+      change: `${t('common.products')}: ${stats.total_products}`,
       trend: 'up' as const,
       icon: FolderOpen,
       color: 'bg-teal-500',
@@ -199,7 +201,7 @@ export function Dashboard() {
   return (
     <div className="min-h-screen">
       <Header title="Dashboard" />
-      
+
       <div className="p-3">
         {/* Stats Grid */}
         {loading ? (
@@ -223,9 +225,8 @@ export function Dashboard() {
                     <stat.icon className="w-5 h-5 text-white" />
                   </div>
                   <span
-                    className={`flex items-center gap-1 text-sm font-medium ${
-                      stat.trend === 'up' ? 'text-green-600' : 'text-red-600'
-                    }`}
+                    className={`flex items-center gap-1 text-sm font-medium ${stat.trend === 'up' ? 'text-green-600' : 'text-red-600'
+                      }`}
                   >
                     <span>{stat.change}</span>
                     {stat.trend === 'up' ? (
@@ -246,22 +247,21 @@ export function Dashboard() {
 
         {/* Charts Row */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 mb-3">
-          {/* Sales Chart */}
           <div className="bg-white rounded-xl p-3 shadow-sm">
-            <h3 className="text-lg font-semibold text-slate-900 mb-2">Sales & Collections</h3>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">{t('dashboard.sales_collections')}</h3>
             <ResponsiveContainer width="100%" height={300}>
               <LineChart data={salesData} margin={{ left: 20, right: 20, top: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                <XAxis 
-                  dataKey="name" 
-                  stroke="#64748B" 
+                <XAxis
+                  dataKey="name"
+                  stroke="#64748B"
                   padding={{ left: 10, right: 10 }}
                   interval={0}
                   tick={{ fontSize: 12 }}
                 />
                 <YAxis stroke="#64748B" />
                 <Tooltip />
-                <Legend 
+                <Legend
                   wrapperStyle={{ paddingTop: '10px' }}
                   iconType="line"
                   formatter={(value) => {
@@ -298,19 +298,19 @@ export function Dashboard() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                 <XAxis type="number" stroke="#64748B" />
                 <YAxis dataKey="name" type="category" stroke="#64748B" width={100} />
-                <Tooltip 
+                <Tooltip
                   formatter={(value: number) => [`${value.toLocaleString()}`, 'Sales']}
-                  contentStyle={{ 
-                    backgroundColor: 'white', 
+                  contentStyle={{
+                    backgroundColor: 'white',
                     border: '1px solid #E2E8F0',
                     borderRadius: '8px',
                     padding: '8px'
                   }}
                 />
                 <Bar dataKey="sales" fill="#4F46E5" radius={[0, 4, 4, 0]}>
-                  <LabelList 
-                    dataKey="sales" 
-                    position="insideRight" 
+                  <LabelList
+                    dataKey="sales"
+                    position="insideRight"
                     formatter={(value: number) => value.toLocaleString()}
                     style={{ fill: '#FFFFFF', fontSize: '12px', fontWeight: '600' }}
                     offset={10}
@@ -326,15 +326,15 @@ export function Dashboard() {
           {/* Recent Orders */}
           <div className="bg-white rounded-xl shadow-sm overflow-hidden">
             <div className="p-2 border-b border-slate-200 flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-slate-900">Recent Orders</h3>
+              <h3 className="text-lg font-semibold text-slate-900">{t('dashboard.recent_orders')}</h3>
               <a href="/sales" className="text-primary-500 text-sm font-medium hover:underline">
-                View All
+                {t('dashboard.view_all')}
               </a>
             </div>
             <div className="divide-y divide-slate-100">
               {recentOrders.length === 0 ? (
                 <div className="p-6 text-center text-sm text-slate-500">
-                  No recent orders yet.
+                  {t('dashboard.no_recent_orders')}
                 </div>
               ) : (
                 recentOrders.map((order) => (
@@ -346,13 +346,12 @@ export function Dashboard() {
                     <div className="text-right">
                       <p className="font-semibold text-slate-900">{formatCurrency(order.amount)}</p>
                       <span
-                        className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${
-                          order.status === 'delivered'
+                        className={`inline-block px-2 py-0.5 text-xs font-medium rounded-full ${order.status === 'delivered'
                             ? 'bg-green-100 text-green-700'
                             : order.status === 'confirmed'
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-yellow-100 text-yellow-700'
-                        }`}
+                              ? 'bg-blue-100 text-blue-700'
+                              : 'bg-yellow-100 text-yellow-700'
+                          }`}
                       >
                         {order.status}
                       </span>
@@ -368,10 +367,10 @@ export function Dashboard() {
             <div className="p-2 border-b border-slate-200 flex items-center justify-between">
               <h3 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
                 <AlertTriangle className="w-5 h-5 text-orange-500" />
-                Expiring Soon
+                {t('dashboard.expiring_soon')}
               </h3>
               <a href="/expiry" className="text-primary-500 text-sm font-medium hover:underline">
-                View All
+                {t('dashboard.view_all')}
               </a>
             </div>
             <div className="divide-y divide-slate-100">

@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { Bell, ChevronDown, LogOut, RefreshCw, Search, Settings, FileText, User, X } from 'lucide-react';
 import { OnlineStatusBadge } from '@/components/OfflineIndicator';
 import { useOffline } from '@/contexts/OfflineContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   DropdownMenu,
@@ -22,6 +23,7 @@ export function Header({ title }: HeaderProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [localSearch, setLocalSearch] = useState(searchParams.get('q') || '');
   const { pendingSyncCount, syncData, isSyncing, isOnline } = useOffline();
+  const { t } = useLanguage();
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -63,7 +65,7 @@ export function Header({ title }: HeaderProps) {
     <header className="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-50 flex items-center justify-between px-4 transition-all duration-300">
       {/* Left: Title and Online Badge */}
       <div className="flex items-center gap-3">
-        <h2 className="text-2xl font-semibold text-slate-900 leading-none tracking-tight">{title}</h2>
+        <h2 className="text-2xl font-semibold text-slate-900 leading-none tracking-tight">{t(`common.${title.toLowerCase().replace(/ /g, '_')}`) || title}</h2>
         <div className="flex items-center">
           <OnlineStatusBadge />
         </div>
@@ -72,10 +74,10 @@ export function Header({ title }: HeaderProps) {
             onClick={syncData}
             disabled={!isOnline || isSyncing}
             className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 shadow-sm transition-all hover:bg-indigo-100 disabled:opacity-50"
-            title="Sync offline data"
+            title={t('common.sync')}
           >
             <RefreshCw className={`h-3.5 w-3.5 ${isSyncing ? 'animate-spin' : ''}`} />
-            Sync ({pendingSyncCount})
+            {t('common.sync')} ({pendingSyncCount})
           </button>
         )}
       </div>
@@ -88,7 +90,7 @@ export function Header({ title }: HeaderProps) {
           <input
             ref={searchInputRef}
             type="text"
-            placeholder="Search products, retailers... (Ctrl + K)"
+            placeholder={t('common.search_placeholder')}
             value={localSearch}
             onChange={(e) => handleSearchChange(e.target.value)}
             className="h-10 py-2.5 pl-10 pr-8 bg-slate-100 border border-slate-200 rounded-lg w-48 md:w-72 lg:w-96 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:bg-white focus:border-primary-500 transition-all duration-200"
@@ -121,7 +123,7 @@ export function Header({ title }: HeaderProps) {
           </PopoverTrigger>
           <PopoverContent align="end" className="w-80 p-0 shadow-xl border-slate-200 rounded-xl overflow-hidden">
             <div className="bg-slate-50 border-b border-slate-200 px-4 py-3">
-              <p className="text-sm font-semibold text-slate-900">Notifications</p>
+              <p className="text-sm font-semibold text-slate-900">{t('common.notifications')}</p>
               <p className="text-xs text-slate-500">You have new alerts</p>
             </div>
             <div className="p-1 max-h-[400px] overflow-y-auto">
@@ -163,8 +165,8 @@ export function Header({ title }: HeaderProps) {
                 <User className="w-4 h-4 text-white" />
               </div>
               <div className="hidden sm:flex flex-col items-start leading-tight">
-                <span className="text-sm font-semibold text-slate-900">Admin</span>
-                <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Administrator</span>
+                <span className="text-sm font-semibold text-slate-900">{t('common.admin')}</span>
+                <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">{t('common.administrator')}</span>
               </div>
               <ChevronDown className="w-4 h-4 text-slate-400 mr-1" />
             </button>
@@ -180,7 +182,7 @@ export function Header({ title }: HeaderProps) {
             <DropdownMenuItem asChild>
               <Link to="/settings" className="cursor-pointer">
                 <Settings className="mr-2 h-4 w-4" />
-                <span>Settings</span>
+                <span>{t('common.settings')}</span>
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
@@ -192,7 +194,7 @@ export function Header({ title }: HeaderProps) {
             <DropdownMenuSeparator />
             <DropdownMenuItem className="text-red-600 focus:text-red-600 cursor-pointer">
               <LogOut className="mr-2 h-4 w-4" />
-              <span>Logout</span>
+              <span>{t('common.logout')}</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

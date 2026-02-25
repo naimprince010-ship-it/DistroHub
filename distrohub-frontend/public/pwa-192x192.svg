@@ -1,0 +1,26 @@
+<svg width="192" height="192" viewBox="0 0 192 192" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background with rounded corners -->
+  <rect width="192" height="192" fill="#4F46E5" rx="28.799999999999997"/>
+  
+  <!-- 3D Cube Icon -->
+  <g transform="translate(48, 38.400000000000006)">
+    <!-- Front face -->
+    <path d="M 28.799999999999997 19.200000000000003 L 67.19999999999999 38.400000000000006 L 67.19999999999999 76.80000000000001 L 28.799999999999997 57.599999999999994 Z" 
+          fill="rgba(255, 255, 255, 0.95)"/>
+    <!-- Top face -->
+    <path d="M 28.799999999999997 19.200000000000003 L 67.19999999999999 38.400000000000006 L 96 19.200000000000003 L 57.599999999999994 0 Z" 
+          fill="rgba(255, 255, 255, 0.75)"/>
+    <!-- Right face -->
+    <path d="M 67.19999999999999 38.400000000000006 L 96 19.200000000000003 L 96 57.599999999999994 L 67.19999999999999 76.80000000000001 Z" 
+          fill="rgba(255, 255, 255, 0.85)"/>
+  </g>
+  
+  <!-- Text -->
+  <text x="96" y="134.39999999999998" 
+        font-family="Arial, sans-serif" 
+        font-size="38.400000000000006" 
+        font-weight="bold" 
+        fill="#FFFFFF" 
+        text-anchor="middle" 
+        dominant-baseline="middle">DH</text>
+</svg>

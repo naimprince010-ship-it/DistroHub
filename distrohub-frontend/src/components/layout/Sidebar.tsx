@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useLanguage } from '@/contexts/LanguageContext';
 import {
   LayoutDashboard,
   Package,
@@ -31,49 +32,50 @@ interface MenuGroup {
 
 const menuGroups: MenuGroup[] = [
   {
-    label: 'Main',
+    label: 'sidebar.main',
     items: [
-      { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-      { icon: Users, label: 'Retailers', path: '/retailers' },
+      { icon: LayoutDashboard, label: 'common.dashboard', path: '/' },
+      { icon: Users, label: 'common.retailers', path: '/retailers' },
     ],
   },
   {
-    label: 'Inventory',
+    label: 'sidebar.inventory',
     items: [
-      { icon: Package, label: 'Products', path: '/products' },
-      { icon: Warehouse, label: 'Inventory', path: '/inventory' },
-      { icon: AlertTriangle, label: 'Expiry Alerts', path: '/expiry' },
+      { icon: Package, label: 'common.products', path: '/products' },
+      { icon: Warehouse, label: 'common.inventory', path: '/inventory' },
+      { icon: AlertTriangle, label: 'common.expiry_alerts', path: '/expiry' },
     ],
   },
   {
-    label: 'Operations',
+    label: 'sidebar.operations',
     items: [
-      { icon: ShoppingCart, label: 'Purchase', path: '/purchase' },
-      { icon: Receipt, label: 'Sales Orders', path: '/sales' },
-      { icon: RotateCcw, label: 'Sales Returns', path: '/sales-returns' },
-      { icon: MapPin, label: 'Routes / Batches', path: '/routes' },
+      { icon: ShoppingCart, label: 'common.purchase', path: '/purchase' },
+      { icon: Receipt, label: 'common.sales', path: '/sales' },
+      { icon: RotateCcw, label: 'common.sales_returns', path: '/sales-returns' },
+      { icon: MapPin, label: 'common.routes', path: '/routes' },
     ],
   },
   {
-    label: 'Accounts',
+    label: 'sidebar.accounts',
     items: [
-      { icon: DollarSign, label: 'SR Accountability', path: '/accountability' },
-      { icon: TrendingUp, label: 'Receivables', path: '/receivables' },
+      { icon: DollarSign, label: 'common.accountability', path: '/accountability' },
+      { icon: TrendingUp, label: 'common.receivables', path: '/receivables' },
     ],
   },
   {
-    label: 'System',
+    label: 'sidebar.system',
     items: [
-      { icon: FileText, label: 'Reports', path: '/reports' },
-      { icon: Settings, label: 'Settings', path: '/settings' },
+      { icon: FileText, label: 'common.reports', path: '/reports' },
+      { icon: Settings, label: 'common.settings', path: '/settings' },
     ],
   },
 ];
 
 export function Sidebar() {
   const location = useLocation();
+  const { t } = useLanguage();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-    Main: true,
+    'sidebar.main': true,
   });
 
   // Ensure active group stays expanded
@@ -86,8 +88,8 @@ export function Sidebar() {
     }
   }, [location.pathname]);
 
-  const toggleGroup = (label: string) => {
-    setOpenGroups(prev => ({ ...prev, [label]: !prev[label] }));
+  const toggleGroup = (key: string) => {
+    setOpenGroups(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   const handleLogout = () => {
@@ -104,7 +106,7 @@ export function Sidebar() {
           </div>
           <div>
             <h1 className="text-xl font-bold tracking-tight">DistroHub</h1>
-            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">Distribution Management</p>
+            <p className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">{t('common.distribution_management')}</p>
           </div>
         </div>
       </div>
@@ -122,7 +124,7 @@ export function Sidebar() {
                   className={`w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wider transition-colors ${hasActiveItem ? 'text-primary-400' : 'text-slate-500 hover:text-slate-300'
                     }`}
                 >
-                  <span>{group.label}</span>
+                  <span>{t(group.label)}</span>
                   <ChevronDown className={`w-4 h-4 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                 </button>
 
@@ -135,12 +137,12 @@ export function Sidebar() {
                           <Link
                             to={item.path}
                             className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group ${isActive
-                                ? 'bg-primary-500 text-white shadow-md shadow-primary-500/20'
-                                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                              ? 'bg-primary-500 text-white shadow-md shadow-primary-500/20'
+                              : 'text-slate-400 hover:bg-slate-800 hover:text-white'
                               }`}
                           >
                             <item.icon className={`w-5 h-5 ${isActive ? 'text-white' : 'text-slate-400 group-hover:text-white'}`} />
-                            <span className="font-medium text-sm">{item.label}</span>
+                            <span className="font-medium text-sm">{t(item.label)}</span>
                           </Link>
                         </li>
                       );
@@ -159,7 +161,7 @@ export function Sidebar() {
           className="flex items-center gap-3 px-3 py-2 w-full text-slate-400 hover:bg-red-500/10 hover:text-red-400 rounded-lg transition-all duration-200 group"
         >
           <LogOut className="w-5 h-5 group-hover:scale-110 transition-transform" />
-          <span className="font-medium text-sm">Logout</span>
+          <span className="font-medium text-sm">{t('common.logout')}</span>
         </button>
       </div>
     </aside>

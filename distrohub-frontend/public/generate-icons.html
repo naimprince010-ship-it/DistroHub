@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Generate PWA Icons</title>
+</head>
+<body>
+    <h1>DistroHub PWA Icon Generator</h1>
+    <p>This page will generate the required icon files. Open browser console to download.</p>
+    
+    <canvas id="canvas192" width="192" height="192" style="border: 1px solid #ccc; margin: 10px;"></canvas>
+    <canvas id="canvas512" width="512" height="512" style="border: 1px solid #ccc; margin: 10px;"></canvas>
+    
+    <br>
+    <button onclick="generateIcons()">Generate & Download Icons</button>
+    
+    <script>
+        function drawIcon(canvas, size) {
+            const ctx = canvas.getContext('2d');
+            
+            // Background
+            ctx.fillStyle = '#4F46E5';
+            ctx.roundRect(0, 0, size, size, size * 0.15);
+            ctx.fill();
+            
+            // Cube/Box icon
+            const centerX = size / 2;
+            const centerY = size / 2;
+            const cubeSize = size * 0.3;
+            
+            // Front face
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+            ctx.beginPath();
+            ctx.moveTo(centerX - cubeSize/2, centerY - cubeSize/4);
+            ctx.lineTo(centerX + cubeSize/2, centerY - cubeSize/4 + cubeSize/4);
+            ctx.lineTo(centerX + cubeSize/2, centerY + cubeSize/2 + cubeSize/4);
+            ctx.lineTo(centerX - cubeSize/2, centerY + cubeSize/2);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Top face
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.beginPath();
+            ctx.moveTo(centerX - cubeSize/2, centerY - cubeSize/4);
+            ctx.lineTo(centerX + cubeSize/2, centerY - cubeSize/4 + cubeSize/4);
+            ctx.lineTo(centerX + cubeSize, centerY - cubeSize/4);
+            ctx.lineTo(centerX, centerY - cubeSize/2);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Right face
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+            ctx.beginPath();
+            ctx.moveTo(centerX + cubeSize/2, centerY - cubeSize/4 + cubeSize/4);
+            ctx.lineTo(centerX + cubeSize, centerY - cubeSize/4);
+            ctx.lineTo(centerX + cubeSize, centerY + cubeSize/2);
+            ctx.lineTo(centerX + cubeSize/2, centerY + cubeSize/2 + cubeSize/4);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Text "DH" for larger sizes
+            if (size >= 192) {
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = `bold ${size * 0.2}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('DH', centerX, centerY + cubeSize);
+            }
+        }
+        
+        function generateIcons() {
+            // Generate 192x192
+            const canvas192 = document.getElementById('canvas192');
+            drawIcon(canvas192, 192);
+            canvas192.toBlob(function(blob) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'pwa-192x192.png';
+                a.click();
+            });
+            
+            // Generate 512x512
+            setTimeout(() => {
+                const canvas512 = document.getElementById('canvas512');
+                drawIcon(canvas512, 512);
+                canvas512.toBlob(function(blob) {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'pwa-512x512.png';
+                    a.click();
+                });
+            }, 500);
+            
+            alert('Icons generated! Check your downloads folder. Place them in distrohub-frontend/public/');
+        }
+        
+        // Draw preview
+        window.onload = function() {
+            drawIcon(document.getElementById('canvas192'), 192);
+            drawIcon(document.getElementById('canvas512'), 512);
+        };
+    </script>
+</body>
+</html>

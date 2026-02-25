@@ -14,6 +14,7 @@ import {
   ImagePlus,
   TrendingUp,
 } from 'lucide-react';
+import { useLanguage } from '@/contexts/LanguageContext';
 // @ts-ignore - exceljs types may not be available in build
 import { Workbook } from 'exceljs';
 import { BarcodeScanButton } from '@/components/BarcodeScanner';
@@ -72,6 +73,7 @@ interface Unit {
 
 export function Products() {
   const [searchParams] = useSearchParams();
+  const { t } = useLanguage();
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -136,14 +138,14 @@ export function Products() {
         api.get('/api/suppliers'),
         api.get('/api/units')
       ]);
-      
+
       // Always use API data, even if empty (removes reliance on defaults)
       if (categoriesRes.data) {
         const categoryNames = categoriesRes.data.map((c: Category) => c.name);
         setCategories(categoryNames);
         logger.log('[Products] Categories loaded:', categoryNames.length, categoryNames);
       }
-      
+
       if (suppliersRes.data) {
         const supplierNames = suppliersRes.data.map((s: Supplier) => s.name);
         setSuppliers(supplierNames);
@@ -163,14 +165,14 @@ export function Products() {
         data: error?.response?.data,
         hasToken: !!localStorage.getItem('token')
       });
-      
+
       // On 401, let interceptor handle redirect
       if (error?.response?.status === 401) {
         console.warn('[Products] 401 Unauthorized - token may be expired');
         // Interceptor will redirect to login
         return;
       }
-      
+
       // On other errors, use empty arrays (no defaults) to force API retry
       setCategories([]);
       setSuppliers([]);
@@ -193,7 +195,7 @@ export function Products() {
       logger.log('[Products] Fetching products from API...');
       const response = await api.get('/api/products');
       logger.log('[Products] Products fetched successfully:', response.data?.length || 0);
-      
+
       if (response.data) {
         // Map backend Product to frontend Product interface
         interface ApiProduct {
@@ -247,7 +249,7 @@ export function Products() {
         status: error?.response?.status,
         data: error?.response?.data,
       });
-      
+
       if (error?.response?.status === 401) {
         logger.warn('[Products] 401 Unauthorized - token may be expired');
         return;
@@ -307,19 +309,19 @@ export function Products() {
         product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         product.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
         product.category.toLowerCase().includes(searchTerm.toLowerCase());
-      
+
       const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
-      
+
       const matchesStock = stockFilter === 'all' ||
         (stockFilter === 'low' && product.stock_quantity < 50) ||
         (stockFilter === 'out' && product.stock_quantity === 0) ||
         (stockFilter === 'in_stock' && product.stock_quantity >= 50);
-      
+
       const matchesExpiry = expiryFilter === 'all' ||
         (expiryFilter === 'expired' && isExpired(product.expiry_date)) ||
         (expiryFilter === 'expiring' && isExpiringSoon(product.expiry_date) && !isExpired(product.expiry_date)) ||
         (expiryFilter === 'safe' && !isExpiringSoon(product.expiry_date));
-      
+
       return matchesSearch && matchesCategory && matchesStock && matchesExpiry;
     });
   }, [products, searchTerm, categoryFilter, stockFilter, expiryFilter]);
@@ -328,31 +330,31 @@ export function Products() {
 
   const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Products.tsx:261',message:'Excel import function called',data:{hasFile:!!e.target.files?.[0]},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'Products.tsx:261', message: 'Excel import function called', data: { hasFile: !!e.target.files?.[0] }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
     // #endregion
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Products.tsx:266',message:'Excel import started',data:{hasWorkbook:typeof Workbook !== 'undefined'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'Products.tsx:266', message: 'Excel import started', data: { hasWorkbook: typeof Workbook !== 'undefined' }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
       // #endregion
       const workbook = new Workbook();
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Products.tsx:268',message:'Workbook created',data:{workbookType:typeof workbook},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'Products.tsx:268', message: 'Workbook created', data: { workbookType: typeof workbook }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
       // #endregion
       const buffer = await file.arrayBuffer();
       await workbook.xlsx.load(buffer);
       // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'Products.tsx:271',message:'Workbook loaded',data:{worksheetsCount:workbook.worksheets?.length || 0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'Products.tsx:271', message: 'Workbook loaded', data: { worksheetsCount: workbook.worksheets?.length || 0 }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
       // #endregion
-      
+
       const worksheet = workbook.worksheets[0];
       const jsonData: Product[] = [];
-      
+
       worksheet.eachRow((row: any, rowNumber: number) => {
         if (rowNumber === 1) return; // Skip header row
-        
+
         const values = row.values as (string | number | boolean)[];
         if (values.length > 1) {
           jsonData.push({
@@ -377,7 +379,7 @@ export function Products() {
           });
         }
       });
-      
+
       if (jsonData.length > 0) {
         setProducts([...products, ...jsonData]);
         alert(`Successfully imported ${jsonData.length} products!`);
@@ -394,7 +396,7 @@ export function Products() {
     try {
       const workbook = new Workbook();
       const worksheet = workbook.addWorksheet('Products');
-      
+
       // Add headers
       worksheet.columns = [
         { header: 'Name', key: 'name', width: 30 },
@@ -413,7 +415,7 @@ export function Products() {
         { header: 'VAT Rate', key: 'vat_rate', width: 12 },
         { header: 'Image URL', key: 'image_url', width: 30 },
       ];
-      
+
       // Add rows
       products.forEach((product) => {
         worksheet.addRow({
@@ -434,7 +436,7 @@ export function Products() {
           image_url: product.image_url,
         });
       });
-      
+
       // Style header row
       worksheet.getRow(1).font = { bold: true };
       worksheet.getRow(1).fill = {
@@ -442,7 +444,7 @@ export function Products() {
         pattern: 'solid',
         fgColor: { argb: 'FFE0E0E0' },
       };
-      
+
       // Generate buffer and download
       const buffer = await workbook.xlsx.writeBuffer();
       const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -458,191 +460,195 @@ export function Products() {
     }
   };
 
-    const handleDelete = async (id: string) => {
-      if (!confirm('Are you sure you want to delete this product?')) {
-        return;
+  const handleDelete = async (id: string) => {
+    if (!confirm(t('products.delete_confirm'))) {
+      return;
+    }
+
+    try {
+      logger.log('[Products] Deleting product:', id);
+      await deleteWithOfflineQueue('products', `/api/products/${id}`, { id }, {
+        onOfflineDelete: async () => deleteRecord('products', id),
+        onOnlineDelete: async () => deleteRecord('products', id),
+      });
+      logger.log('[Products] Product deleted successfully');
+
+      // Refetch products from API
+      await fetchProducts();
+    } catch (error: any) {
+      console.error('[Products] Failed to delete product:', error);
+      console.error('[Products] Error details:', {
+        message: error?.message,
+        status: error?.response?.status,
+        data: error?.response?.data,
+        code: error?.code
+      });
+
+      let errorMessage = 'Failed to delete product';
+      if (error?.code === 'ERR_NETWORK' || error?.message?.includes('Cannot connect')) {
+        errorMessage = 'Backend server is not responding. Please check:\n1. Backend is deployed on Render\n2. Backend service is running\n3. Try refreshing the page';
+      } else {
+        errorMessage = error?.response?.data?.detail || error?.message || 'Failed to delete product';
       }
 
-      try {
-        logger.log('[Products] Deleting product:', id);
-        await deleteWithOfflineQueue('products', `/api/products/${id}`, { id }, {
-          onOfflineDelete: async () => deleteRecord('products', id),
-          onOnlineDelete: async () => deleteRecord('products', id),
-        });
-        logger.log('[Products] Product deleted successfully');
-        
-        // Refetch products from API
-        await fetchProducts();
-      } catch (error: any) {
-        console.error('[Products] Failed to delete product:', error);
-        console.error('[Products] Error details:', {
-          message: error?.message,
-          status: error?.response?.status,
-          data: error?.response?.data,
-          code: error?.code
-        });
-        
-        let errorMessage = 'Failed to delete product';
-        if (error?.code === 'ERR_NETWORK' || error?.message?.includes('Cannot connect')) {
-          errorMessage = 'Backend server is not responding. Please check:\n1. Backend is deployed on Render\n2. Backend service is running\n3. Try refreshing the page';
-        } else {
-          errorMessage = error?.response?.data?.detail || error?.message || 'Failed to delete product';
-        }
-        
-        alert(`Failed to delete product: ${errorMessage}`);
-      }
-    };
+      alert(`Failed to delete product: ${errorMessage}`);
+    }
+  };
 
-    const clearFilters = () => {
-      setCategoryFilter('all');
-      setStockFilter('all');
-      setExpiryFilter('all');
-      setSearchTerm('');
-    };
+  const clearFilters = () => {
+    setCategoryFilter('all');
+    setStockFilter('all');
+    setExpiryFilter('all');
+    setSearchTerm('');
+  };
 
   return (
     <div className="min-h-screen">
-      <Header title="Products" />
+      <Header title={t('common.products')} />
 
       <div className="p-3">
-                {/* Actions Bar */}
-                <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2 flex-1 flex-wrap">
-                    <div className="relative">
-                      <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                      <select
-                        value={categoryFilter}
-                        onChange={(e) => setCategoryFilter(e.target.value)}
-                        className="input-field pl-10 w-40"
-                      >
-                        <option value="all">All Categories</option>
-                        {allCategories.map(cat => (
-                          <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                      </select>
-                    </div>
+        {/* Actions Bar */}
+        <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 flex-1 flex-wrap">
+            <div className="relative">
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder={t('header.search_placeholder')}
+                className="input-field pl-10 pr-10 w-64"
+              />
+              {searchTerm && (
+                <button
+                  onClick={() => setSearchTerm('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
 
-                    <select
-                      value={stockFilter}
-                      onChange={(e) => setStockFilter(e.target.value)}
-                      className="input-field w-36"
-                    >
-                      <option value="all">All Stock / সব</option>
-                      <option value="in_stock">In Stock / আছে</option>
-                      <option value="low">Low Stock / কম</option>
-                      <option value="out">Out of Stock / নেই</option>
-                    </select>
+            <div className="relative">
+              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <select
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+                className="input-field pl-10 w-40"
+              >
+                <option value="all">{t('common.all_categories')}</option>
+                {allCategories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+            </div>
 
-                    <select
-                      value={expiryFilter}
-                      onChange={(e) => setExpiryFilter(e.target.value)}
-                      className="input-field w-40"
-                    >
-                      <option value="all">All Expiry / সব</option>
-                      <option value="expired">Expired / মেয়াদ শেষ</option>
-                      <option value="expiring">Expiring Soon / শীঘ্রই শেষ</option>
-                      <option value="safe">Safe / নিরাপদ</option>
-                    </select>
+            <select
+              value={stockFilter}
+              onChange={(e) => setStockFilter(e.target.value)}
+              className="input-field w-36"
+            >
+              <option value="all">{t('common.all_stock')}</option>
+              <option value="in_stock">{t('products.in_stock')}</option>
+              <option value="low">{t('products.low_stock')}</option>
+              <option value="out">{t('products.out_of_stock')}</option>
+            </select>
 
-                    {activeFiltersCount > 0 && (
-                      <button
-                        onClick={clearFilters}
-                        className="flex items-center gap-1 px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      >
-                        <X className="w-4 h-4" />
-                        Clear ({activeFiltersCount})
-                      </button>
-                    )}
-                  </div>
+            <select
+              value={expiryFilter}
+              onChange={(e) => setExpiryFilter(e.target.value)}
+              className="input-field w-40"
+            >
+              <option value="all">{t('common.all_expiry')}</option>
+              <option value="expired">{t('products.expired')}</option>
+              <option value="expiring">{t('products.expiring_soon')}</option>
+              <option value="safe">{t('products.safe')}</option>
+            </select>
 
-                  <div className="flex items-center gap-2">
-                    <label className="btn-secondary flex items-center gap-2 cursor-pointer">
-                      <Upload className="w-4 h-4" />
-                      <span>Import Excel</span>
-                      <input
-                        type="file"
-                        accept=".xlsx,.xls"
-                        onChange={handleExcelImport}
-                        className="hidden"
-                      />
-                    </label>
+            {activeFiltersCount > 0 && (
+              <button
+                onClick={clearFilters}
+                className="flex items-center gap-1 px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              >
+                <X className="w-4 h-4" />
+                Clear ({activeFiltersCount})
+              </button>
+            )}
+          </div>
 
-                    <button onClick={handleExcelExport} className="btn-secondary flex items-center gap-2">
-                      <Download className="w-4 h-4" />
-                      <span>Export</span>
-                    </button>
+          <div className="flex items-center gap-2">
+            <label className="btn-secondary flex items-center gap-2 cursor-pointer">
+              <Upload className="w-4 h-4" />
+              <span>Import Excel</span>
+              <input
+                type="file"
+                accept=".xlsx,.xls"
+                onChange={handleExcelImport}
+                className="hidden"
+              />
+            </label>
 
-                    <button
-                      onClick={() => {
-                        // Refetch categories when opening modal to get latest
-                        fetchCategoriesAndSuppliers();
-                        setShowAddModal(true);
-                      }}
-                      className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 flex flex-col items-center gap-0.5 shadow-sm hover:shadow-md"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Plus className="w-4 h-4" />
-                        <span>Add Product</span>
-                      </div>
-                      <span className="text-xs font-normal opacity-90">পণ্য যোগ করুন</span>
-                    </button>
-                  </div>
-                </div>
+            <button onClick={handleExcelExport} className="btn-secondary flex items-center gap-2">
+              <Download className="w-4 h-4" />
+              <span>Export</span>
+            </button>
+
+            <button
+              onClick={() => {
+                // Refetch categories when opening modal to get latest
+                fetchCategoriesAndSuppliers();
+                setShowAddModal(true);
+              }}
+              className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 flex flex-col items-center gap-0.5 shadow-sm hover:shadow-md"
+            >
+              <div className="flex items-center gap-2">
+                <Plus className="w-4 h-4" />
+                <span>{t('common.add_product')}</span>
+              </div>
+            </button>
+          </div>
+        </div>
 
         {/* Products Table */}
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-white rounded-xl shadow-sm overflow-hidden max-h-[calc(100vh-180px)] overflow-y-auto">
           {loading ? (
-            <div className="p-8 text-center text-slate-500">Loading products...</div>
+            <div className="p-8 text-center text-slate-500">Loading...</div>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-slate-50 border-b border-slate-200">
+              <div className="relative overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
                     <tr>
-                      <th className="text-center p-2 font-semibold text-slate-700 w-12">
-                        #
-                        <div className="text-xs font-normal text-slate-500">ক্রম</div>
-                      </th>
-                      <th className="text-left p-2 font-semibold text-slate-700">Product</th>
-                      <th className="text-left p-2 font-semibold text-slate-700">SKU</th>
-                      <th className="text-left p-2 font-semibold text-slate-700">Category</th>
-                      <th className="text-left p-2 font-semibold text-slate-700">
-                        Unit
-                        <div className="text-xs font-normal text-slate-500">ইউনিট</div>
-                      </th>
-                      <th className="text-right p-2 font-semibold text-slate-700">
-                        Purchase
-                        <div className="text-xs font-normal text-slate-500">ক্রয়</div>
-                      </th>
-                      <th className="text-right p-2 font-semibold text-slate-700">
-                        Selling
-                        <div className="text-xs font-normal text-slate-500">বিক্রয়</div>
-                      </th>
-                      <th className="text-right p-2 font-semibold text-slate-700">
-                        Stock
-                        <div className="text-xs font-normal text-slate-500">মজুদ</div>
-                      </th>
-                      <th className="text-center p-2 font-semibold text-slate-700">
-                        Pcs/Ctn
-                        <div className="text-xs font-normal text-slate-500">পিস/কার্টন</div>
-                      </th>
-                      <th className="text-left p-2 font-semibold text-slate-700">Batch</th>
-                      <th className="text-left p-2 font-semibold text-slate-700">Expiry</th>
-                      <th className="text-center p-2 font-semibold text-slate-700">Actions</th>
+                      <th className="text-center p-2 font-semibold text-slate-700 w-12 sticky top-0 bg-slate-50">#</th>
+                      <th className="text-left p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.products')}</th>
+                      <th className="text-left p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.sku')}</th>
+                      <th className="text-left p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.category')}</th>
+                      <th className="text-right p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.unit')}</th>
+                      <th className="text-right p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.purchase')}</th>
+                      <th className="text-right p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.selling')}</th>
+                      <th className="text-right p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.stock')}</th>
+                      <th className="text-right p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.pcs_ctn')}</th>
+                      <th className="text-left p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.batch')}</th>
+                      <th className="text-left p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.expiry')}</th>
+                      <th className="text-center p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.actions')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {filteredProducts.map((product, index) => (
-                      <tr key={product.id} className="hover:bg-slate-50 transition-colors">
+                    {filteredProducts.map((product, index) => {
+                      const stockLevel = product.stock_quantity < 50 ? 'low' : product.stock_quantity === 0 ? 'out' : 'ok';
+                      const expiryStatus = isExpired(product.expiry_date) ? 'expired' : isExpiringSoon(product.expiry_date) ? 'soon' : 'ok';
+                      const isAlert = stockLevel === 'out' || stockLevel === 'low' || expiryStatus === 'expired' || expiryStatus === 'soon';
+
+                      return (
+                        <tr key={product.id} className={`hover:bg-slate-100 transition-colors ${isAlert ? 'bg-red-50/50' : ''}`}>
                         <td className="p-2 text-center text-slate-600 font-medium">
                           {index + 1}
                         </td>
-                        <td className="p-2">
-                          <div className="flex items-center gap-2">
-                            <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
-                              <Package className="w-5 h-5 text-primary-600" />
+                          <div className="flex items-center gap-2 max-w-[200px]">
+                            <div className="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                              <Package className="w-4 h-4 text-primary-600" />
                             </div>
-                            <span className="font-medium text-slate-900">{product.name}</span>
+                            <span className="font-medium text-slate-900 truncate" title={product.name}>{product.name}</span>
                           </div>
                         </td>
                         <td className="p-2 text-slate-600 font-mono text-sm">{product.sku}</td>
@@ -651,25 +657,24 @@ export function Products() {
                             {product.category}
                           </span>
                         </td>
-                        <td className="p-2 text-slate-600">
+                        <td className="p-2 text-right text-slate-600">
                           {product.unit}
                         </td>
                         <td className="p-2 text-right text-slate-600">৳ {product.purchase_price}</td>
                         <td className="p-2 text-right font-bold text-slate-900">৳ {product.selling_price}</td>
                         <td className="p-2 text-right">
                           <span
-                            className={`${
-                              product.stock_quantity === 0 
-                                ? 'font-bold text-red-600' 
-                                : product.stock_quantity < 50 
-                                  ? 'font-medium text-orange-600' 
-                                  : 'font-medium text-green-600'
-                            }`}
+                            className={`${product.stock_quantity === 0
+                              ? 'font-bold text-red-600'
+                              : product.stock_quantity < 50
+                                ? 'font-medium text-orange-600'
+                                : 'font-medium text-green-600'
+                              }`}
                           >
                             {product.stock_quantity}
                           </span>
                         </td>
-                        <td className="p-2 text-center text-slate-600 text-sm">
+                        <td className="p-2 text-right text-slate-600 text-sm">
                           {product.pieces_per_carton || product.pack_size || '-'}
                         </td>
                         <td className="p-2 text-slate-600 font-mono text-sm">{product.batch_number}</td>
@@ -691,14 +696,14 @@ export function Products() {
                           <div className="flex items-center justify-center gap-2">
                             <button
                               onClick={() => setEditingProduct(product)}
-                              className="p-2 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                              className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
                               title="Edit"
                             >
                               <Edit className="w-5 h-5" />
                             </button>
                             <button
                               onClick={() => handleDelete(product.id)}
-                              className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                              className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
                               title="Delete"
                             >
                               <Trash2 className="w-5 h-5" />
@@ -706,156 +711,159 @@ export function Products() {
                           </div>
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  );
+                  })}
+                </tbody>
+              </table>
+            </div>
 
-              {filteredProducts.length === 0 && !loading && (
-                <div className="p-4 text-center text-slate-500">
-                  No products found. Try adjusting your search or add a new product.
-                </div>
-              )}
-            </>
+          {filteredProducts.length === 0 && !loading && (
+            <div className="p-4 text-center text-slate-500">
+              {t('products.no_products')}
+            </div>
           )}
-        </div>
+        </>
+          )}
       </div>
-
-      {/* Add/Edit Modal would go here */}
-      {(showAddModal || editingProduct) && (
-        <ProductModal
-          product={editingProduct}
-          categories={categories}
-          suppliers={suppliers}
-          units={units}
-          onRefreshCategories={fetchCategoriesAndSuppliers}
-          onClose={() => {
-            setShowAddModal(false);
-            setEditingProduct(null);
-          }}
-                    onSave={async (product, addAnother) => {
-                      try {
-                        logger.log('[Products] Saving product:', {
-                          isEdit: !!editingProduct,
-                          productId: editingProduct?.id,
-                          productName: product.name
-                        });
-
-                        // Map frontend Product to backend ProductCreate format
-                        const payload = {
-                          name: product.name,
-                          sku: product.sku,
-                          barcode: product.barcode || '',
-                          category: product.category,
-                          unit: product.unit,
-                          pack_size: product.pack_size || 1,
-                          pieces_per_carton: product.pieces_per_carton || product.pack_size || 1,
-                          purchase_price: product.purchase_price,
-                          selling_price: product.selling_price,
-                          stock_quantity: product.stock_quantity || 0,
-                          reorder_level: product.reorder_level || 0,
-                          batch_number: product.batch_number || '',
-                          expiry_date: product.expiry_date || undefined,
-                          supplier: product.supplier || '',
-                          vat_inclusive: product.vat_inclusive || false,
-                          vat_rate: product.vat_rate || 0,
-                          image_url: product.image_url || '',
-                        };
-
-                        logger.log('[Products] API payload:', payload);
-
-                        if (editingProduct) {
-                          const localRecord: ProductRecord = {
-                            id: editingProduct.id,
-                            name: product.name,
-                            sku: product.sku,
-                            category: product.category,
-                            unit_price: product.selling_price,
-                            stock_quantity: product.stock_quantity || 0,
-                            expiry_date: product.expiry_date || '',
-                            synced: false,
-                            lastModified: Date.now(),
-                          };
-                          logger.log('[Products] Updating product via PUT:', `/api/products/${editingProduct.id}`);
-                          await putWithOfflineQueue('products', `/api/products/${editingProduct.id}`, payload, {
-                            localRecord,
-                            onOfflineSave: async (record) => saveProduct(record as ProductRecord),
-                            onOnlineSave: async (data) => {
-                              const mapped = mapApiProductToRecord(data, true);
-                              await saveProduct(mapped);
-                            },
-                          });
-                          logger.log('[Products] Product updated successfully');
-                        } else {
-                          const tempId = `offline-product-${Date.now()}`;
-                          const localRecord: ProductRecord = {
-                            id: tempId,
-                            name: product.name,
-                            sku: product.sku,
-                            category: product.category,
-                            unit_price: product.selling_price,
-                            stock_quantity: product.stock_quantity || 0,
-                            expiry_date: product.expiry_date || '',
-                            synced: false,
-                            lastModified: Date.now(),
-                          };
-                          logger.log('[Products] Creating product via POST:', '/api/products');
-                          await postWithOfflineQueue('products', '/api/products', payload, {
-                            queueData: { ...payload, _local_id: tempId },
-                            localRecord,
-                            onOfflineSave: async (record) => saveProduct(record as ProductRecord),
-                            onOnlineSave: async (data) => {
-                              const mapped = mapApiProductToRecord(data, true);
-                              await saveProduct(mapped);
-                            },
-                          });
-                          logger.log('[Products] Product created successfully');
-                        }
-
-                        // Refetch products from API to get latest data
-                        logger.log('[Products] Refetching products list...');
-                        await fetchProducts();
-
-                        if (!addAnother) {
-                          setShowAddModal(false);
-                          setEditingProduct(null);
-                        }
-                        logger.log('[Products] Product operation completed successfully');
-                      } catch (error: any) {
-                        console.error('[Products] Failed to save product:', error);
-                        console.error('[Products] Error details:', {
-                          message: error?.message,
-                          response: error?.response?.data,
-                          status: error?.response?.status,
-                          url: error?.config?.url,
-                        });
-
-                        let errorMessage = 'Failed to save product';
-                        if (error?.response) {
-                          const status = error.response.status;
-                          const detail = error.response.data?.detail || error.response.data?.message || error.response.data;
-                          
-                          if (status === 400) {
-                            errorMessage = `Validation error: ${detail || 'Invalid input data'}`;
-                          } else if (status === 401) {
-                            errorMessage = 'Authentication failed. Please login again.';
-                          } else if (status === 409) {
-                            errorMessage = `Conflict: ${detail || 'Product with this SKU already exists'}`;
-                          } else if (status === 500) {
-                            errorMessage = `Server error: ${detail || 'An unexpected error occurred'}`;
-                          } else {
-                            errorMessage = `Error ${status}: ${detail || error.message || 'Unknown error'}`;
-                          }
-                        } else if (error?.message) {
-                          errorMessage = error.message;
-                        }
-
-                        alert(`Failed to save product: ${errorMessage}`);
-                      }
-                    }}
-        />
-      )}
     </div>
+
+      {/* Add/Edit Modal would go here */ }
+  {
+    (showAddModal || editingProduct) && (
+      <ProductModal
+        product={editingProduct}
+        categories={categories}
+        suppliers={suppliers}
+        units={units}
+        onRefreshCategories={fetchCategoriesAndSuppliers}
+        onClose={() => {
+          setShowAddModal(false);
+          setEditingProduct(null);
+        }}
+        onSave={async (product, addAnother) => {
+          try {
+            logger.log('[Products] Saving product:', {
+              isEdit: !!editingProduct,
+              productId: editingProduct?.id,
+              productName: product.name
+            });
+
+            // Map frontend Product to backend ProductCreate format
+            const payload = {
+              name: product.name,
+              sku: product.sku,
+              barcode: product.barcode || '',
+              category: product.category,
+              unit: product.unit,
+              pack_size: product.pack_size || 1,
+              pieces_per_carton: product.pieces_per_carton || product.pack_size || 1,
+              purchase_price: product.purchase_price,
+              selling_price: product.selling_price,
+              stock_quantity: product.stock_quantity || 0,
+              reorder_level: product.reorder_level || 0,
+              batch_number: product.batch_number || '',
+              expiry_date: product.expiry_date || undefined,
+              supplier: product.supplier || '',
+              vat_inclusive: product.vat_inclusive || false,
+              vat_rate: product.vat_rate || 0,
+              image_url: product.image_url || '',
+            };
+
+            logger.log('[Products] API payload:', payload);
+
+            if (editingProduct) {
+              const localRecord: ProductRecord = {
+                id: editingProduct.id,
+                name: product.name,
+                sku: product.sku,
+                category: product.category,
+                unit_price: product.selling_price,
+                stock_quantity: product.stock_quantity || 0,
+                expiry_date: product.expiry_date || '',
+                synced: false,
+                lastModified: Date.now(),
+              };
+              logger.log('[Products] Updating product via PUT:', `/api/products/${editingProduct.id}`);
+              await putWithOfflineQueue('products', `/api/products/${editingProduct.id}`, payload, {
+                localRecord,
+                onOfflineSave: async (record) => saveProduct(record as ProductRecord),
+                onOnlineSave: async (data) => {
+                  const mapped = mapApiProductToRecord(data, true);
+                  await saveProduct(mapped);
+                },
+              });
+              logger.log('[Products] Product updated successfully');
+            } else {
+              const tempId = `offline-product-${Date.now()}`;
+              const localRecord: ProductRecord = {
+                id: tempId,
+                name: product.name,
+                sku: product.sku,
+                category: product.category,
+                unit_price: product.selling_price,
+                stock_quantity: product.stock_quantity || 0,
+                expiry_date: product.expiry_date || '',
+                synced: false,
+                lastModified: Date.now(),
+              };
+              logger.log('[Products] Creating product via POST:', '/api/products');
+              await postWithOfflineQueue('products', '/api/products', payload, {
+                queueData: { ...payload, _local_id: tempId },
+                localRecord,
+                onOfflineSave: async (record) => saveProduct(record as ProductRecord),
+                onOnlineSave: async (data) => {
+                  const mapped = mapApiProductToRecord(data, true);
+                  await saveProduct(mapped);
+                },
+              });
+              logger.log('[Products] Product created successfully');
+            }
+
+            // Refetch products from API to get latest data
+            logger.log('[Products] Refetching products list...');
+            await fetchProducts();
+
+            if (!addAnother) {
+              setShowAddModal(false);
+              setEditingProduct(null);
+            }
+            logger.log('[Products] Product operation completed successfully');
+          } catch (error: any) {
+            console.error('[Products] Failed to save product:', error);
+            console.error('[Products] Error details:', {
+              message: error?.message,
+              response: error?.response?.data,
+              status: error?.response?.status,
+              url: error?.config?.url,
+            });
+
+            let errorMessage = 'Failed to save product';
+            if (error?.response) {
+              const status = error.response.status;
+              const detail = error.response.data?.detail || error.response.data?.message || error.response.data;
+
+              if (status === 400) {
+                errorMessage = `Validation error: ${detail || 'Invalid input data'}`;
+              } else if (status === 401) {
+                errorMessage = 'Authentication failed. Please login again.';
+              } else if (status === 409) {
+                errorMessage = `Conflict: ${detail || 'Product with this SKU already exists'}`;
+              } else if (status === 500) {
+                errorMessage = `Server error: ${detail || 'An unexpected error occurred'}`;
+              } else {
+                errorMessage = `Error ${status}: ${detail || error.message || 'Unknown error'}`;
+              }
+            } else if (error?.message) {
+              errorMessage = error.message;
+            }
+
+            alert(`Failed to save product: ${errorMessage}`);
+          }
+        }}
+      />
+    )
+  }
+    </div >
   );
 }
 
@@ -874,6 +882,7 @@ interface ValidationErrors {
 }
 
 function ProductModal({ product, onClose, onSave, categories, suppliers, units, onRefreshCategories }: ProductModalProps) {
+  const { t } = useLanguage();
   // Refetch categories when modal opens to ensure latest data
   useEffect(() => {
     if (onRefreshCategories) {
@@ -954,31 +963,31 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
 
   const validateField = (name: string, value: string | number) => {
     const newErrors = { ...errors };
-    
+
     if (name === 'name' && !value) {
       newErrors.name = 'Product name is required';
     } else if (name === 'name') {
       delete newErrors.name;
     }
-    
+
     if (name === 'purchase_price' && (typeof value === 'number' && value < 0)) {
       newErrors.purchase_price = 'Price cannot be negative';
     } else if (name === 'purchase_price') {
       delete newErrors.purchase_price;
     }
-    
+
     if (name === 'selling_price' && (typeof value === 'number' && value < 0)) {
       newErrors.selling_price = 'Price cannot be negative';
     } else if (name === 'selling_price') {
       delete newErrors.selling_price;
     }
-    
+
     if (name === 'stock_quantity' && (typeof value === 'number' && value < 0)) {
       newErrors.stock_quantity = 'Stock cannot be negative';
     } else if (name === 'stock_quantity') {
       delete newErrors.stock_quantity;
     }
-    
+
     setErrors(newErrors);
   };
 
@@ -996,8 +1005,8 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
   };
 
   const profitAmount = (formData.selling_price || 0) - (formData.purchase_price || 0);
-  const profitPercent = formData.purchase_price && formData.purchase_price > 0 
-    ? ((profitAmount / formData.purchase_price) * 100).toFixed(1) 
+  const profitPercent = formData.purchase_price && formData.purchase_price > 0
+    ? ((profitAmount / formData.purchase_price) * 100).toFixed(1)
     : '0';
 
   const updateStockFromCartons = (nextCartonCount: number, nextPiecesPerCarton: number) => {
@@ -1045,12 +1054,12 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
 
     const hasBatch = !!(nextFormData.batch_number && nextFormData.batch_number.trim() !== '');
     if (hasBatch && !nextFormData.expiry_date) {
-      setErrors({ ...errors, expiry_date: 'Expiry date is required when batch number is provided' });
+      setErrors({ ...errors, expiry_date: t('products.expiry_required') || 'Expiry date is required' });
       return;
     }
-    
+
     onSave(nextFormData as Product, addAnother);
-    
+
     if (addAnother) {
       setFormData({
         name: '',
@@ -1087,7 +1096,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
       <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
         <div className="p-4 border-b border-slate-200 flex items-center justify-between gap-2">
           <h2 className="text-xl font-semibold text-slate-900">
-            {product ? 'Edit Product' : 'Add New Product'}
+            {product ? t('products.edit') : t('products.add_new')}
           </h2>
           <button
             type="button"
@@ -1104,7 +1113,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
           {/* Product Image */}
           <div className="flex items-start gap-4">
             <div className="flex-shrink-0">
-              <div 
+              <div
                 className="w-24 h-24 border-2 border-dashed border-slate-300 rounded-xl flex items-center justify-center cursor-pointer hover:border-primary-500 hover:bg-primary-50 transition-colors overflow-hidden"
                 onClick={() => fileInputRef.current?.click()}
               >
@@ -1113,7 +1122,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                 ) : (
                   <div className="text-center">
                     <ImagePlus className="w-8 h-8 text-slate-400 mx-auto" />
-                    <span className="text-xs text-slate-500">Add Image</span>
+                    <span className="text-xs text-slate-500">{t('products.add_image')}</span>
                   </div>
                 )}
               </div>
@@ -1125,11 +1134,11 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                 className="hidden"
               />
             </div>
-            
+
             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Product Name<RequiredMark />
+                  {t('products.name')}<RequiredMark />
                 </label>
                 <input
                   type="text"
@@ -1145,7 +1154,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  SKU<RequiredMark />
+                  {t('common.sku')}<RequiredMark />
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -1166,21 +1175,21 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
           {/* Barcode */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Barcode</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('products.barcode')}</label>
               <div className="flex gap-2">
                 <input
                   type="text"
                   value={formData.barcode}
                   onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
                   className="input-field flex-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                  placeholder="Scan or enter barcode"
+                  placeholder={t('products.scan_barcode')}
                 />
                 <BarcodeScanButton onScan={handleBarcodeScan} />
               </div>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                Category<RequiredMark />
+                {t('common.category')}<RequiredMark />
               </label>
               <select
                 value={formData.category}
@@ -1188,7 +1197,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                 className="input-field w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                 required
               >
-                <option value="">Select Category</option>
+                <option value="">{t('products.select_category')}</option>
                 {categories.map((cat: string) => (
                   <option key={cat} value={cat}>{cat}</option>
                 ))}
@@ -1199,7 +1208,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
           {/* Unit & Pack Size */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Unit</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('common.unit')}</label>
               <select
                 value={formData.unit}
                 onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
@@ -1211,10 +1220,10 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-slate-500 mt-1">বিক্রির একক</p>
+              <p className="text-xs text-slate-500 mt-1">{t('products.unit_hint')}</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Pack Size</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('products.pack_size')}</label>
               <input
                 type="number"
                 value={formData.pack_size}
@@ -1222,10 +1231,10 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                 className="input-field w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
                 min="1"
               />
-              <p className="text-xs text-slate-500 mt-1">প্যাকে পিস সংখ্যা</p>
+              <p className="text-xs text-slate-500 mt-1">{t('products.pack_size_hint')}</p>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Pieces/Carton</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('common.pcs_ctn')}</label>
               <input
                 type="number"
                 value={formData.pieces_per_carton}
@@ -1234,7 +1243,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                 min="1"
                 placeholder="যেমন: ২৪"
               />
-              <p className="text-xs text-slate-500 mt-1">কার্টনে মোট পিস</p>
+              <p className="text-xs text-slate-500 mt-1">{t('products.carton_hint')}</p>
             </div>
           </div>
 
@@ -1243,7 +1252,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Purchase Price (৳)<RequiredMark />
+                  {t('products.purchase_price')} (৳)<RequiredMark />
                 </label>
                 <input
                   type="number"
@@ -1259,11 +1268,11 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                   required
                 />
                 {errors.purchase_price && <p className="text-red-500 text-xs mt-1">{errors.purchase_price}</p>}
-                {!errors.purchase_price && <p className="text-xs text-slate-500 mt-1">প্রতি পিসের কেনা দাম</p>}
+                {!errors.purchase_price && <p className="text-xs text-slate-500 mt-1">{t('products.purchase_hint')}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Selling Price (৳)<RequiredMark />
+                  {t('products.selling_price')} (৳)<RequiredMark />
                 </label>
                 <input
                   type="number"
@@ -1278,20 +1287,20 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                   required
                 />
                 {errors.selling_price && <p className="text-red-500 text-xs mt-1">{errors.selling_price}</p>}
-                {!errors.selling_price && <p className="text-xs text-slate-500 mt-1">প্রতি পিসের বিক্রয়মূল্য</p>}
+                {!errors.selling_price && <p className="text-xs text-slate-500 mt-1">{t('products.selling_hint')}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Profit Margin</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('products.profit_margin')}</label>
                 <div className={`input-field w-full flex items-center gap-2 ${profitAmount >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
                   <TrendingUp className={`w-4 h-4 ${profitAmount >= 0 ? 'text-green-600' : 'text-red-600'}`} />
                   <span className={`font-medium ${profitAmount >= 0 ? 'text-green-700' : 'text-red-700'}`}>
                     ৳{profitAmount} ({profitPercent}%)
                   </span>
                 </div>
-                <p className="text-xs text-slate-500 mt-1">লাভের হিসাব</p>
+                <p className="text-xs text-slate-500 mt-1">{t('products.profit_hint')}</p>
               </div>
             </div>
-            
+
             {/* VAT Toggle */}
             <div className="flex items-center gap-4 mt-3 pt-3 border-t border-slate-200">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -1301,11 +1310,11 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                   onChange={(e) => setFormData({ ...formData, vat_inclusive: e.target.checked })}
                   className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
                 />
-                <span className="text-sm text-slate-700">VAT Inclusive</span>
+                <span className="text-sm text-slate-700">{t('products.vat_inclusive')}</span>
               </label>
               {formData.vat_inclusive && (
                 <div className="flex items-center gap-2">
-                  <label className="text-sm text-slate-700">VAT Rate:</label>
+                  <label className="text-sm text-slate-700">{t('products.vat_rate')}:</label>
                   <input
                     type="number"
                     value={formData.vat_rate}
@@ -1323,7 +1332,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
           {/* Stock & Reorder Level */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Carton Count</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('products.carton_count')}</label>
               <input
                 type="number"
                 value={cartonCount}
@@ -1335,11 +1344,11 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                 min="0"
                 placeholder="যেমন: ১০"
               />
-              <p className="text-xs text-slate-500 mt-1">কার্টন সংখ্যা</p>
+              <p className="text-xs text-slate-500 mt-1">{t('products.carton_count_hint')}</p>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                Stock Quantity<RequiredMark />
+                {t('products.stock_quantity')}<RequiredMark />
               </label>
               <input
                 type="number"
@@ -1355,7 +1364,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                 required
               />
               {errors.stock_quantity && <p className="text-red-500 text-xs mt-1">{errors.stock_quantity}</p>}
-              {!errors.stock_quantity && <p className="text-xs text-slate-500 mt-1">মোট পিস (যেমন: ২৪০)</p>}
+              {!errors.stock_quantity && <p className="text-xs text-slate-500 mt-1">{t('products.stock_hint')}</p>}
               <label className="flex items-center gap-2 mt-2 text-xs text-slate-600">
                 <input
                   type="checkbox"
@@ -1363,12 +1372,12 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                   onChange={(e) => setAutoCalcStock(e.target.checked)}
                   className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
                 />
-                কার্টন সংখ্যা থেকে অটো হিসাব
+                {t('products.auto_calc')}
               </label>
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                Reorder Level (Low Stock Alert)
+                {t('products.reorder_level')}
               </label>
               <input
                 type="number"
@@ -1378,14 +1387,14 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                 min="0"
                 placeholder="কম হলে সতর্কতা"
               />
-              <p className="text-xs text-slate-500 mt-1">কম স্টকের সতর্কবার্তা</p>
+              <p className="text-xs text-slate-500 mt-1">{t('products.reorder_hint')}</p>
             </div>
           </div>
 
           {/* Batch & Expiry */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Batch Number</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('products.batch_number')}</label>
               <input
                 type="text"
                 value={formData.batch_number}
@@ -1396,16 +1405,16 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                 className="input-field w-full"
                 placeholder="যেমন: BT-2024-001"
               />
-              <p className="text-xs text-slate-500 mt-1">ব্যাচ বা লট আইডি</p>
+              <p className="text-xs text-slate-500 mt-1">{t('products.batch_hint')}</p>
               {!batchHasValue && (
                 <p className="text-xs text-slate-500 mt-1">
-                  Leave empty to auto-generate on save (when expiry is set).
+                  {t('products.batch_auto_hint')}
                 </p>
               )}
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1">
-                Expiry Date{expiryRequired && <RequiredMark />}
+                {t('products.expiry_date')}{expiryRequired && <RequiredMark />}
               </label>
               <input
                 type="date"
@@ -1422,19 +1431,19 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                 required={expiryRequired}
               />
               {errors.expiry_date && <p className="text-red-500 text-xs mt-1">{errors.expiry_date}</p>}
-              {!errors.expiry_date && <p className="text-xs text-slate-500 mt-1">মেয়াদের শেষ তারিখ</p>}
+              {!errors.expiry_date && <p className="text-xs text-slate-500 mt-1">{t('products.expiry_hint')}</p>}
             </div>
           </div>
 
           {/* Supplier */}
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Supplier</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1">{t('products.supplier')}</label>
             <select
               value={formData.supplier}
               onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
               className="input-field w-full"
             >
-              <option value="">Select Supplier</option>
+              <option value="">{t('products.select_supplier')}</option>
               {suppliers.map((sup: string) => (
                 <option key={sup} value={sup}>{sup}</option>
               ))}
@@ -1444,7 +1453,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
           {/* Action Buttons */}
           <div className="flex justify-end gap-2 pt-4 border-t border-slate-200">
             <button type="button" onClick={onClose} className="btn-secondary">
-              Cancel
+              {t('products.cancel')}
             </button>
             {!product && (
               <button
@@ -1457,7 +1466,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
               </button>
             )}
             <button type="submit" className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md">
-              {product ? 'Update Product' : 'Add Product'}
+              {product ? t('products.update') : t('products.save')}
             </button>
           </div>
         </form>

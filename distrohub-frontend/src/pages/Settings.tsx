@@ -24,6 +24,7 @@ import {
 import api from '@/lib/api';
 import { logger } from '@/lib/logger';
 import * as smsApi from '@/lib/smsApi';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from '@/hooks/use-toast';
 import type {
   SmsSettings,
@@ -45,6 +46,7 @@ interface Category {
 
 export function Settings() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { t } = useLanguage();
   const tabFromUrl = searchParams.get('tab') || 'suppliers';
   const [activeTab, setActiveTab] = useState(tabFromUrl);
 
@@ -55,16 +57,16 @@ export function Settings() {
   }, [searchParams]);
 
   const tabs = [
-    { id: 'suppliers', label: 'Suppliers', icon: Truck },
-    { id: 'categories', label: 'Categories', icon: Tags },
-    { id: 'units', label: 'Units', icon: Ruler },
-    { id: 'market-routes', label: 'Routes/Areas', icon: MapPin },
-    { id: 'sales-reps', label: 'Sales Reps', icon: User },
-    { id: 'profile', label: 'Profile', icon: User },
-    { id: 'business', label: 'Business', icon: Building },
-    { id: 'notifications', label: 'Notifications', icon: Bell },
-    { id: 'security', label: 'Security', icon: Shield },
-    { id: 'appearance', label: 'Appearance', icon: Palette },
+    { id: 'suppliers', label: t('common.suppliers'), icon: Truck },
+    { id: 'categories', label: t('common.categories'), icon: Tags },
+    { id: 'units', label: t('common.units'), icon: Ruler },
+    { id: 'market-routes', label: t('common.routes'), icon: MapPin },
+    { id: 'sales-reps', label: t('common.sales_reps'), icon: User },
+    { id: 'profile', label: t('common.profile'), icon: User },
+    { id: 'business', label: t('common.business'), icon: Building },
+    { id: 'notifications', label: t('common.notifications'), icon: Bell },
+    { id: 'security', label: t('common.security'), icon: Shield },
+    { id: 'appearance', label: t('settings.appearance'), icon: Palette },
   ];
 
   const handleTabChange = (tabId: string) => {
@@ -83,11 +85,10 @@ export function Settings() {
               <button
                 key={tab.id}
                 onClick={() => handleTabChange(tab.id)}
-                className={`flex items-center gap-2 px-3 py-2 font-medium transition-colors ${
-                  activeTab === tab.id
-                    ? 'text-primary-600 border-b-2 border-primary-600'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
+                className={`flex items-center gap-2 px-3 py-2 font-medium transition-colors ${activeTab === tab.id
+                  ? 'text-primary-600 border-b-2 border-primary-600'
+                  : 'text-slate-500 hover:text-slate-700'
+                  }`}
               >
                 <tab.icon className="w-4 h-4" />
                 {tab.label}
@@ -141,7 +142,7 @@ function SupplierManagement() {
     logger.log('[SupplierManagement] ============================================');
     logger.log('[SupplierManagement] API MODE ACTIVE - Version: 2026-01-03');
     logger.log('[SupplierManagement] Component mounted, fetching suppliers...');
-    
+
     // Load from localStorage first for instant display
     const storedSuppliers = loadSuppliersFromStorage();
     if (storedSuppliers.length > 0) {
@@ -149,7 +150,7 @@ function SupplierManagement() {
       setSuppliers(storedSuppliers);
       setLoading(false); // Show cached data immediately
     }
-    
+
     // Then fetch from API to get latest data (background sync)
     fetchSuppliers();
   }, []); // Empty deps - only run on mount
@@ -213,7 +214,7 @@ function SupplierManagement() {
       const response = await api.get('/api/suppliers');
       logger.log('[SupplierManagement] Suppliers fetched successfully:', response.data);
       logger.log('[SupplierManagement] Number of suppliers:', response.data?.length || 0);
-      
+
       // Validate response data
       if (response.data && Array.isArray(response.data)) {
         const beforeStorage = loadSuppliersFromStorage();
@@ -256,14 +257,14 @@ function SupplierManagement() {
       }
     } catch (error: any) {
       console.error('[SupplierManagement] Failed to fetch suppliers:', error);
-      
+
       // Load from localStorage as fallback
       const storedSuppliers = loadSuppliersFromStorage();
       if (storedSuppliers.length > 0) {
         logger.log('[SupplierManagement] Using', storedSuppliers.length, 'suppliers from localStorage as fallback');
         setSuppliers(storedSuppliers);
       }
-      
+
       // Don't clear suppliers on timeout - keep existing data
       if (error.isTimeout || error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
         console.warn('[SupplierManagement] Timeout error - using localStorage data');
@@ -302,15 +303,15 @@ function SupplierManagement() {
       logger.log('[SupplierManagement] Already submitting, ignoring duplicate request');
       return;
     }
-    
+
     if (!formData.name || !formData.name.trim() || !formData.phone || !formData.phone.trim()) {
       alert('Supplier name and phone are required');
       return;
     }
-    
+
     setIsSubmitting(true);
     setError(null);
-    
+
     try {
       const payload = {
         name: formData.name.trim(),
@@ -319,7 +320,7 @@ function SupplierManagement() {
         contact_person: formData.company?.trim() || null,
         email: null,
       };
-      
+
       logger.log('[SupplierManagement] Submitting supplier:', {
         isEdit: !!editingSupplier,
         supplierId: editingSupplier?.id,
@@ -330,7 +331,7 @@ function SupplierManagement() {
         logger.log('[SupplierManagement] Updating supplier via PUT:', `/api/suppliers/${editingSupplier.id}`);
         const response = await api.put(`/api/suppliers/${editingSupplier.id}`, payload);
         logger.log('[SupplierManagement] Supplier updated successfully:', response.data);
-        
+
         // Update supplier in list
         const serverSupplier: Supplier = {
           ...response.data,
@@ -346,7 +347,7 @@ function SupplierManagement() {
       } else {
         logger.log('[SupplierManagement] Creating supplier via POST:', '/api/suppliers');
         logger.log('[SupplierManagement] Payload being sent:', JSON.stringify(payload, null, 2));
-        
+
         // Optimistic update: Add new supplier to UI immediately with temp ID
         const tempId = `temp-${Date.now()}`;
         const optimisticSupplier: Supplier = {
@@ -364,19 +365,19 @@ function SupplierManagement() {
           saveSuppliersToStorage(updated);
           return updated;
         });
-        
+
         try {
           const response = await api.post('/api/suppliers', payload);
           logger.log('[SupplierManagement] Supplier created successfully:', response.data);
           logger.log('[SupplierManagement] New supplier ID:', response.data?.id);
           logger.log('[SupplierManagement] Full response:', JSON.stringify(response.data, null, 2));
-          
+
           // Verify response has required fields
           if (!response.data?.id) {
             console.error('[SupplierManagement] WARNING: Supplier created but no ID in response!');
             console.error('[SupplierManagement] Response data:', response.data);
           }
-          
+
           // Replace optimistic entry with actual server data
           const serverSupplier: Supplier = {
             ...response.data,
@@ -400,7 +401,7 @@ function SupplierManagement() {
           throw createError; // Re-throw to show error to user
         }
       }
-      
+
       // Then fetch from server to ensure consistency (background sync)
       try {
         await fetchSuppliers();
@@ -408,7 +409,7 @@ function SupplierManagement() {
         console.warn('[SupplierManagement] Failed to refresh suppliers list, but supplier was saved:', fetchError);
         // Don't show error - we already updated optimistically and saved to localStorage
       }
-      
+
       setShowModal(false);
       setEditingSupplier(null);
       setFormData({ name: '', phone: '', address: '', company: '' });
@@ -425,11 +426,11 @@ function SupplierManagement() {
 
   const handleEdit = (supplier: Supplier) => {
     setEditingSupplier(supplier);
-    setFormData({ 
-      name: supplier.name, 
-      phone: supplier.phone, 
-      address: supplier.address || '', 
-      company: supplier.contact_person || '' 
+    setFormData({
+      name: supplier.name,
+      phone: supplier.phone,
+      address: supplier.address || '',
+      company: supplier.contact_person || ''
     });
     setShowModal(true);
   };
@@ -437,14 +438,14 @@ function SupplierManagement() {
   const handleDelete = async (id: string) => {
     try {
       logger.log('[SupplierManagement] Deleting supplier:', id);
-      
+
       // Optimistic update: Remove from UI immediately
       setSuppliers(prev => {
         const updated = prev.filter(s => s.id !== id);
         saveSuppliersToStorage(updated);
         return updated;
       });
-      
+
       try {
         await api.delete(`/api/suppliers/${id}`);
         logger.log('[SupplierManagement] Supplier deleted successfully');
@@ -462,7 +463,7 @@ function SupplierManagement() {
         alert(`Failed to delete supplier: ${errorMessage}`);
         return;
       }
-      
+
       setDeleteConfirm(null);
     } catch (error: any) {
       console.error('[SupplierManagement] Failed to delete supplier:', error);
@@ -573,13 +574,13 @@ function SupplierManagement() {
           <div className="bg-white rounded-xl p-4 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-lg font-semibold">{editingSupplier ? 'Edit Supplier' : 'Add Supplier'}</h4>
-              <button 
+              <button
                 onClick={() => {
                   setShowModal(false);
                   setEditingSupplier(null);
                   setFormData({ name: '', phone: '', address: '', company: '' });
                   setError(null);
-                }} 
+                }}
                 className="p-1 hover:bg-slate-100 rounded"
               >
                 <X className="w-5 h-5" />
@@ -627,13 +628,13 @@ function SupplierManagement() {
                 />
               </div>
               <div className="flex gap-2 pt-2">
-                <button 
+                <button
                   onClick={() => {
                     setShowModal(false);
                     setEditingSupplier(null);
                     setFormData({ name: '', phone: '', address: '', company: '' });
                     setError(null);
-                  }} 
+                  }}
                   className="btn-secondary flex-1"
                 >
                   Cancel
@@ -690,11 +691,11 @@ function SalesRepManagement() {
   const [showModal, setShowModal] = useState(false);
   const [editingRep, setEditingRep] = useState<SalesRep | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  const [formData, setFormData] = useState<{ name: string; email: string; phone: string; password: string }>({ 
-    name: '', 
-    email: '', 
-    phone: '', 
-    password: '' 
+  const [formData, setFormData] = useState<{ name: string; email: string; phone: string; password: string }>({
+    name: '',
+    email: '',
+    phone: '',
+    password: ''
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -740,7 +741,7 @@ function SalesRepManagement() {
 
   const handleSubmit = async () => {
     if (isSubmitting) return;
-    
+
     if (!formData.name || !formData.name.trim() || !formData.email || !formData.email.trim()) {
       alert('Name and email are required');
       return;
@@ -794,11 +795,11 @@ function SalesRepManagement() {
 
   const handleEdit = (rep: SalesRep) => {
     setEditingRep(rep);
-    setFormData({ 
-      name: rep.name, 
-      email: rep.email, 
-      phone: rep.phone || '', 
-      password: '' 
+    setFormData({
+      name: rep.name,
+      email: rep.email,
+      phone: rep.phone || '',
+      password: ''
     });
     setShowModal(true);
   };
@@ -838,13 +839,13 @@ function SalesRepManagement() {
     <div className="space-y-3">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-slate-900">Sales Rep Management</h3>
-        <button 
-          onClick={() => { 
-            setShowModal(true); 
-            setEditingRep(null); 
-            setFormData({ name: '', email: '', phone: '', password: '' }); 
+        <button
+          onClick={() => {
+            setShowModal(true);
+            setEditingRep(null);
+            setFormData({ name: '', email: '', phone: '', password: '' });
             setError(null);
-          }} 
+          }}
           className="btn-primary flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
@@ -894,15 +895,15 @@ function SalesRepManagement() {
                 <td className="p-2 text-slate-600">{rep.phone || '-'}</td>
                 <td className="p-2">
                   <div className="flex items-center gap-1">
-                    <button 
-                      onClick={() => handleEdit(rep)} 
+                    <button
+                      onClick={() => handleEdit(rep)}
                       className="p-1 hover:bg-slate-100 rounded text-slate-600"
                       title="Edit"
                     >
                       <Edit className="w-4 h-4" />
                     </button>
-                    <button 
-                      onClick={() => setDeleteConfirm(rep.id)} 
+                    <button
+                      onClick={() => setDeleteConfirm(rep.id)}
                       className="p-1 hover:bg-red-50 rounded text-red-500"
                       title="Delete"
                     >
@@ -924,13 +925,13 @@ function SalesRepManagement() {
           <div className="bg-white rounded-xl p-4 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-lg font-semibold">{editingRep ? 'Edit Sales Rep' : 'Add Sales Rep'}</h4>
-              <button 
+              <button
                 onClick={() => {
                   setShowModal(false);
                   setEditingRep(null);
                   setFormData({ name: '', email: '', phone: '', password: '' });
                   setError(null);
-                }} 
+                }}
                 className="p-1 hover:bg-slate-100 rounded"
               >
                 <X className="w-5 h-5" />
@@ -983,13 +984,13 @@ function SalesRepManagement() {
                 />
               </div>
               <div className="flex gap-2 pt-2">
-                <button 
+                <button
                   onClick={() => {
                     setShowModal(false);
                     setEditingRep(null);
                     setFormData({ name: '', email: '', phone: '', password: '' });
                     setError(null);
-                  }} 
+                  }}
                   className="btn-secondary flex-1"
                 >
                   Cancel
@@ -1061,7 +1062,7 @@ function CategoryManagement() {
         status: error?.response?.status,
         url: error?.config?.url
       });
-      
+
       // Show user-friendly error message
       if (error.isTimeout || error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
         alert('Backend is starting up (cold start). This may take 30-60 seconds. Please wait and try again.');
@@ -1089,21 +1090,21 @@ function CategoryManagement() {
       logger.log('[CategoryManagement] Already submitting, ignoring duplicate request');
       return;
     }
-    
+
     if (!formData.name || !formData.name.trim()) {
       alert('Category name is required');
       return;
     }
-    
+
     setIsSubmitting(true);
-    
+
     try {
       const payload = {
         name: formData.name.trim(),
         description: formData.description?.trim() || null,
         color: formData.color,
       };
-      
+
       logger.log('[CategoryManagement] Submitting category:', {
         isEdit: !!editingCategory,
         categoryId: editingCategory?.id,
@@ -1122,11 +1123,11 @@ function CategoryManagement() {
         logger.log('[CategoryManagement] Category created successfully:', response.data);
         logger.log('[CategoryManagement] New category ID:', response.data?.id);
       }
-      
+
       // Refresh categories from server after successful save
       logger.log('[CategoryManagement] Refreshing categories list...');
       await fetchCategories();
-      
+
       setShowModal(false);
       setEditingCategory(null);
       setFormData({ name: '', description: '', color: '#4F46E5' });
@@ -1146,10 +1147,10 @@ function CategoryManagement() {
         request: error?.request,
         timeout: error?.code === 'ECONNABORTED' || error?.message?.includes('timeout')
       });
-      
+
       // Better error message with detailed information
       let errorMessage = 'Failed to save category';
-      
+
       // Network/timeout errors
       if (error?.code === 'ECONNABORTED' || error?.message?.includes('timeout')) {
         errorMessage = 'Request timed out. The server may be slow. Please try again.';
@@ -1162,7 +1163,7 @@ function CategoryManagement() {
       else if (error?.response) {
         const status = error.response.status;
         const detail = error.response.data?.detail || error.response.data?.message || error.response.data;
-        
+
         if (status === 400) {
           errorMessage = `Validation error: ${detail || 'Invalid input data'}`;
         } else if (status === 401) {
@@ -1194,17 +1195,17 @@ function CategoryManagement() {
       } else if (error?.message) {
         errorMessage = error.message;
       }
-      
+
       alert(`Failed to save category: ${errorMessage}`);
     }
   };
 
   const handleEdit = (category: Category) => {
     setEditingCategory(category);
-    setFormData({ 
-      name: category.name, 
-      description: category.description || '', 
-      color: category.color 
+    setFormData({
+      name: category.name,
+      description: category.description || '',
+      color: category.color
     });
     setShowModal(true);
   };
@@ -1290,12 +1291,12 @@ function CategoryManagement() {
           <div className="bg-white rounded-xl p-4 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-lg font-semibold">{editingCategory ? 'Edit Category' : 'Add Category'}</h4>
-              <button 
+              <button
                 onClick={() => {
                   setShowModal(false);
                   setEditingCategory(null);
                   setFormData({ name: '', description: '', color: '#4F46E5' });
-                }} 
+                }}
                 className="p-1 hover:bg-slate-100 rounded"
               >
                 <X className="w-5 h-5" />
@@ -1323,12 +1324,12 @@ function CategoryManagement() {
                 />
               </div>
               <div className="flex gap-2 pt-2">
-                <button 
+                <button
                   onClick={() => {
                     setShowModal(false);
                     setEditingCategory(null);
                     setFormData({ name: '', description: '', color: '#4F46E5' });
-                  }} 
+                  }}
                   className="btn-secondary flex-1"
                 >
                   Cancel
@@ -1731,22 +1732,22 @@ function UnitManagement() {
       logger.log('[UnitManagement] Already submitting, ignoring duplicate request');
       return;
     }
-    
+
     if (!formData.name || !formData.name.trim() || !formData.abbreviation || !formData.abbreviation.trim()) {
       alert('Unit name and abbreviation are required');
       return;
     }
-    
+
     setIsSubmitting(true);
     setError(null);
-    
+
     try {
       const payload = {
         name: formData.name.trim(),
         abbreviation: formData.abbreviation.trim(),
         description: formData.description?.trim() || null,
       };
-      
+
       logger.log('[UnitManagement] Submitting unit:', {
         isEdit: !!editingUnit,
         unitId: editingUnit?.id,
@@ -1764,11 +1765,11 @@ function UnitManagement() {
         logger.log('[UnitManagement] Unit created successfully:', response.data);
         logger.log('[UnitManagement] New unit ID:', response.data?.id);
       }
-      
+
       // Refresh units from server after successful save
       logger.log('[UnitManagement] Refreshing units list...');
       await fetchUnits();
-      
+
       setShowModal(false);
       setEditingUnit(null);
       setFormData({ name: '', abbreviation: '', description: '' });
@@ -1785,10 +1786,10 @@ function UnitManagement() {
 
   const handleEdit = (unit: Unit) => {
     setEditingUnit(unit);
-    setFormData({ 
-      name: unit.name, 
-      abbreviation: unit.abbreviation, 
-      description: unit.description || '' 
+    setFormData({
+      name: unit.name,
+      abbreviation: unit.abbreviation,
+      description: unit.description || ''
     });
     setShowModal(true);
   };
@@ -1897,13 +1898,13 @@ function UnitManagement() {
           <div className="bg-white rounded-xl p-4 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-lg font-semibold">{editingUnit ? 'Edit Unit' : 'Add Unit'}</h4>
-              <button 
+              <button
                 onClick={() => {
                   setShowModal(false);
                   setEditingUnit(null);
                   setFormData({ name: '', abbreviation: '', description: '' });
                   setError(null);
-                }} 
+                }}
                 className="p-1 hover:bg-slate-100 rounded"
               >
                 <X className="w-5 h-5" />
@@ -1941,13 +1942,13 @@ function UnitManagement() {
                 />
               </div>
               <div className="flex gap-2 pt-2">
-                <button 
+                <button
                   onClick={() => {
                     setShowModal(false);
                     setEditingUnit(null);
                     setFormData({ name: '', abbreviation: '', description: '' });
                     setError(null);
-                  }} 
+                  }}
                   className="btn-secondary flex-1"
                 >
                   Cancel
@@ -1992,7 +1993,7 @@ function ProfileSettings() {
   return (
     <div className="max-w-2xl space-y-3">
       <h3 className="text-lg font-semibold text-slate-900">Profile Settings</h3>
-      
+
       <div className="flex items-center gap-3">
         <div className="w-20 h-20 bg-primary-500 rounded-full flex items-center justify-center">
           <User className="w-10 h-10 text-white" />
@@ -2180,7 +2181,7 @@ function NotificationSettings() {
     new_order: null,
   });
   const settingsRef = useRef(smsSettings);
-  
+
   // Keep ref in sync with state
   useEffect(() => {
     settingsRef.current = smsSettings;
@@ -2236,16 +2237,16 @@ function NotificationSettings() {
         [eventType]: currentSetting
           ? { ...currentSetting, enabled }
           : {
-              id: `temp-${Date.now()}`,
-              user_id: '',
-              role: 'sales_rep',
-              event_type: eventType,
-              enabled,
-              delivery_mode: 'immediate',
-              recipients: ['admins'],
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString(),
-            },
+            id: `temp-${Date.now()}`,
+            user_id: '',
+            role: 'sales_rep',
+            event_type: eventType,
+            enabled,
+            delivery_mode: 'immediate',
+            recipients: ['admins'],
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
       };
     });
 
@@ -2270,7 +2271,7 @@ function NotificationSettings() {
         };
 
         const updated = await smsApi.updateSmsSettings(updateData);
-        
+
         // Update with server response
         setSmsSettings((prev) => ({
           ...prev,
@@ -2282,7 +2283,7 @@ function NotificationSettings() {
           ...prev,
           [eventType]: previousSetting,
         }));
-        
+
         logger.error(`Failed to update SMS setting for ${eventType}:`, error);
         alert(`Failed to update ${eventTypes.find((e) => e.type === eventType)?.label || eventType}. Please try again.`);
       } finally {
@@ -2366,21 +2367,19 @@ function NotificationSettings() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => handleDeliveryModeChange(event.type, 'immediate')}
-                      className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                        setting?.delivery_mode === 'immediate'
-                          ? 'bg-primary-600 text-white'
-                          : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
-                      }`}
+                      className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${setting?.delivery_mode === 'immediate'
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
+                        }`}
                     >
                       Immediate
                     </button>
                     <button
                       onClick={() => handleDeliveryModeChange(event.type, 'queued')}
-                      className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${
-                        setting?.delivery_mode === 'queued'
-                          ? 'bg-primary-600 text-white'
-                          : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
-                      }`}
+                      className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${setting?.delivery_mode === 'queued'
+                        ? 'bg-primary-600 text-white'
+                        : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
+                        }`}
                     >
                       Queued
                     </button>
@@ -2437,11 +2436,29 @@ function SecuritySettings() {
 }
 
 function AppearanceSettings() {
+  const { language, setLanguage, t } = useLanguage();
+
   return (
     <div className="max-w-2xl space-y-3">
-      <h3 className="text-lg font-semibold text-slate-900">Appearance Settings</h3>
+      <h3 className="text-lg font-semibold text-slate-900">{t('settings.appearance')}</h3>
 
       <div>
+        <label className="block text-sm font-medium text-slate-700 mb-2">{t('settings.language')}</label>
+        <div className="relative w-48">
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value as any)}
+            className="input-field appearance-none pr-10"
+          >
+            <option value="en">{t('settings.english')}</option>
+            <option value="bn">{t('settings.bengali')}</option>
+          </select>
+          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+        </div>
+        <p className="text-xs text-slate-500 mt-1">{t('settings.select_language')}</p>
+      </div>
+
+      <div className="pt-4 border-t border-slate-100">
         <label className="block text-sm font-medium text-slate-700 mb-2">Theme</label>
         <div className="flex gap-2">
           <button className="flex-1 p-3 border-2 border-primary-500 rounded-lg bg-white">

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Create PWA Icons - Simple</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        canvas {
+            display: block;
+            margin: 20px auto;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        button {
+            display: block;
+            margin: 20px auto;
+            padding: 15px 30px;
+            font-size: 16px;
+            background: #4F46E5;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #4338CA;
+        }
+        .instructions {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎨 DistroHub PWA Icon Generator</h1>
+    
+    <div class="instructions">
+        <h3>Instructions:</h3>
+        <ol>
+            <li>Click the button below to generate icons</li>
+            <li>Two PNG files will download automatically</li>
+            <li>Place them in: <code>distrohub-frontend/public/</code></li>
+            <li>Files should be named: <code>pwa-192x192.png</code> and <code>pwa-512x512.png</code></li>
+        </ol>
+    </div>
+    
+    <canvas id="preview192" width="192" height="192"></canvas>
+    <canvas id="preview512" width="512" height="512"></canvas>
+    
+    <button onclick="downloadIcons()">📥 Generate & Download Icons</button>
+    
+    <script>
+        function drawDistroHubIcon(canvas, size) {
+            const ctx = canvas.getContext('2d');
+            const padding = size * 0.1;
+            const centerX = size / 2;
+            const centerY = size / 2;
+            const iconSize = size * 0.5;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, size, size);
+            
+            // Background with rounded corners
+            ctx.fillStyle = '#4F46E5';
+            ctx.beginPath();
+            const radius = size * 0.15;
+            ctx.moveTo(radius, 0);
+            ctx.lineTo(size - radius, 0);
+            ctx.arcTo(size, 0, size, size, radius);
+            ctx.lineTo(size, size - radius);
+            ctx.arcTo(size, size, 0, size, radius);
+            ctx.lineTo(radius, size);
+            ctx.arcTo(0, size, 0, 0, radius);
+            ctx.lineTo(0, radius);
+            ctx.arcTo(0, 0, size, 0, radius);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Draw 3D cube/box icon
+            const cubeSize = iconSize * 0.6;
+            const offsetX = centerX - cubeSize / 2;
+            const offsetY = centerY - cubeSize / 2 - size * 0.05;
+            
+            // Front face (white)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+            ctx.beginPath();
+            ctx.moveTo(offsetX, offsetY);
+            ctx.lineTo(offsetX + cubeSize * 0.6, offsetY + cubeSize * 0.3);
+            ctx.lineTo(offsetX + cubeSize * 0.6, offsetY + cubeSize * 0.9);
+            ctx.lineTo(offsetX, offsetY + cubeSize * 0.6);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Top face (lighter)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.75)';
+            ctx.beginPath();
+            ctx.moveTo(offsetX, offsetY);
+            ctx.lineTo(offsetX + cubeSize * 0.6, offsetY + cubeSize * 0.3);
+            ctx.lineTo(offsetX + cubeSize, offsetY);
+            ctx.lineTo(offsetX + cubeSize * 0.4, offsetY - cubeSize * 0.3);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Right face (medium)
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+            ctx.beginPath();
+            ctx.moveTo(offsetX + cubeSize * 0.6, offsetY + cubeSize * 0.3);
+            ctx.lineTo(offsetX + cubeSize, offsetY);
+            ctx.lineTo(offsetX + cubeSize, offsetY + cubeSize * 0.6);
+            ctx.lineTo(offsetX + cubeSize * 0.6, offsetY + cubeSize * 0.9);
+            ctx.closePath();
+            ctx.fill();
+            
+            // Add "DH" text for larger icon
+            if (size >= 192) {
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = `bold ${size * 0.18}px Arial, sans-serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('DH', centerX, centerY + iconSize * 0.4);
+            }
+        }
+        
+        function downloadCanvas(canvas, filename) {
+            canvas.toBlob(function(blob) {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }, 'image/png');
+        }
+        
+        function downloadIcons() {
+            const canvas192 = document.getElementById('preview192');
+            const canvas512 = document.getElementById('preview512');
+            
+            // Draw icons
+            drawDistroHubIcon(canvas192, 192);
+            drawDistroHubIcon(canvas512, 512);
+            
+            // Download with slight delay
+            setTimeout(() => {
+                downloadCanvas(canvas192, 'pwa-192x192.png');
+            }, 100);
+            
+            setTimeout(() => {
+                downloadCanvas(canvas512, 'pwa-512x512.png');
+            }, 500);
+            
+            setTimeout(() => {
+                alert('✅ Icons downloaded!\n\nNext steps:\n1. Move files to: distrohub-frontend/public/\n2. Run: npm run build\n3. Deploy to Vercel');
+            }, 1000);
+        }
+        
+        // Draw preview on load
+        window.onload = function() {
+            drawDistroHubIcon(document.getElementById('preview192'), 192);
+            drawDistroHubIcon(document.getElementById('preview512'), 512);
+        };
+    </script>
+</body>
+</html>
