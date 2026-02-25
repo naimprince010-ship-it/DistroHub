@@ -641,229 +641,229 @@ export function Products() {
 
                       return (
                         <tr key={product.id} className={`hover:bg-slate-100 transition-colors ${isAlert ? 'bg-red-50/50' : ''}`}>
-                        <td className="p-2 text-center text-slate-600 font-medium">
-                          {index + 1}
-                        </td>
-                          <div className="flex items-center gap-2 max-w-[200px]">
-                            <div className="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                              <Package className="w-4 h-4 text-primary-600" />
+                          <td className="p-2 text-center text-slate-600 font-medium">
+                            {index + 1}
+                          </td>
+                          <td className="p-2">
+                            <div className="flex items-center gap-2 max-w-[200px]">
+                              <div className="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                                <Package className="w-4 h-4 text-primary-600" />
+                              </div>
+                              <span className="font-medium text-slate-900 truncate" title={product.name}>{product.name}</span>
                             </div>
-                            <span className="font-medium text-slate-900 truncate" title={product.name}>{product.name}</span>
-                          </div>
-                        </td>
-                        <td className="p-2 text-slate-600 font-mono text-sm">{product.sku}</td>
-                        <td className="p-2">
-                          <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded-full text-sm">
-                            {product.category}
-                          </span>
-                        </td>
-                        <td className="p-2 text-right text-slate-600">
-                          {product.unit}
-                        </td>
-                        <td className="p-2 text-right text-slate-600">৳ {product.purchase_price}</td>
-                        <td className="p-2 text-right font-bold text-slate-900">৳ {product.selling_price}</td>
-                        <td className="p-2 text-right">
-                          <span
-                            className={`${product.stock_quantity === 0
-                              ? 'font-bold text-red-600'
-                              : product.stock_quantity < 50
-                                ? 'font-medium text-orange-600'
-                                : 'font-medium text-green-600'
-                              }`}
-                          >
-                            {product.stock_quantity}
-                          </span>
-                        </td>
-                        <td className="p-2 text-right text-slate-600 text-sm">
-                          {product.pieces_per_carton || product.pack_size || '-'}
-                        </td>
-                        <td className="p-2 text-slate-600 font-mono text-sm">{product.batch_number}</td>
-                        <td className="p-2">
-                          <div className="flex items-center gap-1">
-                            {isExpiringSoon(product.expiry_date) && (
-                              <AlertTriangle className="w-4 h-4 text-orange-500" />
-                            )}
-                            <span
-                              className={
-                                isExpiringSoon(product.expiry_date) ? 'text-orange-600 font-medium' : 'text-slate-600'
-                              }
-                            >
-                              {product.expiry_date}
+                          </td>
+                          <td className="p-2 text-slate-600 font-mono text-sm">{product.sku}</td>
+                          <td className="p-2">
+                            <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded-full text-sm">
+                              {product.category}
                             </span>
-                          </div>
-                        </td>
-                        <td className="p-2">
-                          <div className="flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => setEditingProduct(product)}
-                              className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                              title="Edit"
+                          </td>
+                          <td className="p-2 text-right text-slate-600">
+                            {product.unit}
+                          </td>
+                          <td className="p-2 text-right text-slate-600">৳ {product.purchase_price}</td>
+                          <td className="p-2 text-right font-bold text-slate-900">৳ {product.selling_price}</td>
+                          <td className="p-2 text-right">
+                            <span
+                              className={`${product.stock_quantity === 0
+                                ? 'font-bold text-red-600'
+                                : product.stock_quantity < 50
+                                  ? 'font-medium text-orange-600'
+                                  : 'font-medium text-green-600'
+                                }`}
                             >
-                              <Edit className="w-5 h-5" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(product.id)}
-                              className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
-                              title="Delete"
-                            >
-                              <Trash2 className="w-5 h-5" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                  );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                              {product.stock_quantity}
+                            </span>
+                          </td>
+                          <td className="p-2 text-right text-slate-600 text-sm">
+                            {product.pieces_per_carton || product.pack_size || '-'}
+                          </td>
+                          <td className="p-2 text-slate-600 font-mono text-sm">{product.batch_number}</td>
+                          <td className="p-2">
+                            <div className="flex items-center gap-1">
+                              {isExpiringSoon(product.expiry_date) && (
+                                <AlertTriangle className="w-4 h-4 text-orange-500" />
+                              )}
+                              <span
+                                className={
+                                  isExpiringSoon(product.expiry_date) ? 'text-orange-600 font-medium' : 'text-slate-600'
+                                }
+                              >
+                                {product.expiry_date}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="p-2">
+                            <div className="flex items-center justify-center gap-2">
+                              <button
+                                onClick={() => setEditingProduct(product)}
+                                className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                title="Edit"
+                              >
+                                <Edit className="w-5 h-5" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(product.id)}
+                                className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-5 h-5" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
-          {filteredProducts.length === 0 && !loading && (
-            <div className="p-4 text-center text-slate-500">
-              {t('products.no_products')}
-            </div>
+              {filteredProducts.length === 0 && !loading && (
+                <div className="p-4 text-center text-slate-500">
+                  {t('products.no_products')}
+                </div>
+              )}
+            </>
           )}
-        </>
-          )}
+        </div>
       </div>
-    </div>
 
-      {/* Add/Edit Modal would go here */ }
-  {
-    (showAddModal || editingProduct) && (
-      <ProductModal
-        product={editingProduct}
-        categories={categories}
-        suppliers={suppliers}
-        units={units}
-        onRefreshCategories={fetchCategoriesAndSuppliers}
-        onClose={() => {
-          setShowAddModal(false);
-          setEditingProduct(null);
-        }}
-        onSave={async (product, addAnother) => {
-          try {
-            logger.log('[Products] Saving product:', {
-              isEdit: !!editingProduct,
-              productId: editingProduct?.id,
-              productName: product.name
-            });
-
-            // Map frontend Product to backend ProductCreate format
-            const payload = {
-              name: product.name,
-              sku: product.sku,
-              barcode: product.barcode || '',
-              category: product.category,
-              unit: product.unit,
-              pack_size: product.pack_size || 1,
-              pieces_per_carton: product.pieces_per_carton || product.pack_size || 1,
-              purchase_price: product.purchase_price,
-              selling_price: product.selling_price,
-              stock_quantity: product.stock_quantity || 0,
-              reorder_level: product.reorder_level || 0,
-              batch_number: product.batch_number || '',
-              expiry_date: product.expiry_date || undefined,
-              supplier: product.supplier || '',
-              vat_inclusive: product.vat_inclusive || false,
-              vat_rate: product.vat_rate || 0,
-              image_url: product.image_url || '',
-            };
-
-            logger.log('[Products] API payload:', payload);
-
-            if (editingProduct) {
-              const localRecord: ProductRecord = {
-                id: editingProduct.id,
-                name: product.name,
-                sku: product.sku,
-                category: product.category,
-                unit_price: product.selling_price,
-                stock_quantity: product.stock_quantity || 0,
-                expiry_date: product.expiry_date || '',
-                synced: false,
-                lastModified: Date.now(),
-              };
-              logger.log('[Products] Updating product via PUT:', `/api/products/${editingProduct.id}`);
-              await putWithOfflineQueue('products', `/api/products/${editingProduct.id}`, payload, {
-                localRecord,
-                onOfflineSave: async (record) => saveProduct(record as ProductRecord),
-                onOnlineSave: async (data) => {
-                  const mapped = mapApiProductToRecord(data, true);
-                  await saveProduct(mapped);
-                },
-              });
-              logger.log('[Products] Product updated successfully');
-            } else {
-              const tempId = `offline-product-${Date.now()}`;
-              const localRecord: ProductRecord = {
-                id: tempId,
-                name: product.name,
-                sku: product.sku,
-                category: product.category,
-                unit_price: product.selling_price,
-                stock_quantity: product.stock_quantity || 0,
-                expiry_date: product.expiry_date || '',
-                synced: false,
-                lastModified: Date.now(),
-              };
-              logger.log('[Products] Creating product via POST:', '/api/products');
-              await postWithOfflineQueue('products', '/api/products', payload, {
-                queueData: { ...payload, _local_id: tempId },
-                localRecord,
-                onOfflineSave: async (record) => saveProduct(record as ProductRecord),
-                onOnlineSave: async (data) => {
-                  const mapped = mapApiProductToRecord(data, true);
-                  await saveProduct(mapped);
-                },
-              });
-              logger.log('[Products] Product created successfully');
-            }
-
-            // Refetch products from API to get latest data
-            logger.log('[Products] Refetching products list...');
-            await fetchProducts();
-
-            if (!addAnother) {
+      {/* Add/Edit Modal would go here */}
+      {
+        (showAddModal || editingProduct) && (
+          <ProductModal
+            product={editingProduct}
+            categories={categories}
+            suppliers={suppliers}
+            units={units}
+            onRefreshCategories={fetchCategoriesAndSuppliers}
+            onClose={() => {
               setShowAddModal(false);
               setEditingProduct(null);
-            }
-            logger.log('[Products] Product operation completed successfully');
-          } catch (error: any) {
-            console.error('[Products] Failed to save product:', error);
-            console.error('[Products] Error details:', {
-              message: error?.message,
-              response: error?.response?.data,
-              status: error?.response?.status,
-              url: error?.config?.url,
-            });
+            }}
+            onSave={async (product, addAnother) => {
+              try {
+                logger.log('[Products] Saving product:', {
+                  isEdit: !!editingProduct,
+                  productId: editingProduct?.id,
+                  productName: product.name
+                });
 
-            let errorMessage = 'Failed to save product';
-            if (error?.response) {
-              const status = error.response.status;
-              const detail = error.response.data?.detail || error.response.data?.message || error.response.data;
+                // Map frontend Product to backend ProductCreate format
+                const payload = {
+                  name: product.name,
+                  sku: product.sku,
+                  barcode: product.barcode || '',
+                  category: product.category,
+                  unit: product.unit,
+                  pack_size: product.pack_size || 1,
+                  pieces_per_carton: product.pieces_per_carton || product.pack_size || 1,
+                  purchase_price: product.purchase_price,
+                  selling_price: product.selling_price,
+                  stock_quantity: product.stock_quantity || 0,
+                  reorder_level: product.reorder_level || 0,
+                  batch_number: product.batch_number || '',
+                  expiry_date: product.expiry_date || undefined,
+                  supplier: product.supplier || '',
+                  vat_inclusive: product.vat_inclusive || false,
+                  vat_rate: product.vat_rate || 0,
+                  image_url: product.image_url || '',
+                };
 
-              if (status === 400) {
-                errorMessage = `Validation error: ${detail || 'Invalid input data'}`;
-              } else if (status === 401) {
-                errorMessage = 'Authentication failed. Please login again.';
-              } else if (status === 409) {
-                errorMessage = `Conflict: ${detail || 'Product with this SKU already exists'}`;
-              } else if (status === 500) {
-                errorMessage = `Server error: ${detail || 'An unexpected error occurred'}`;
-              } else {
-                errorMessage = `Error ${status}: ${detail || error.message || 'Unknown error'}`;
+                logger.log('[Products] API payload:', payload);
+
+                if (editingProduct) {
+                  const localRecord: ProductRecord = {
+                    id: editingProduct.id,
+                    name: product.name,
+                    sku: product.sku,
+                    category: product.category,
+                    unit_price: product.selling_price,
+                    stock_quantity: product.stock_quantity || 0,
+                    expiry_date: product.expiry_date || '',
+                    synced: false,
+                    lastModified: Date.now(),
+                  };
+                  logger.log('[Products] Updating product via PUT:', `/api/products/${editingProduct.id}`);
+                  await putWithOfflineQueue('products', `/api/products/${editingProduct.id}`, payload, {
+                    localRecord,
+                    onOfflineSave: async (record) => saveProduct(record as ProductRecord),
+                    onOnlineSave: async (data) => {
+                      const mapped = mapApiProductToRecord(data, true);
+                      await saveProduct(mapped);
+                    },
+                  });
+                  logger.log('[Products] Product updated successfully');
+                } else {
+                  const tempId = `offline-product-${Date.now()}`;
+                  const localRecord: ProductRecord = {
+                    id: tempId,
+                    name: product.name,
+                    sku: product.sku,
+                    category: product.category,
+                    unit_price: product.selling_price,
+                    stock_quantity: product.stock_quantity || 0,
+                    expiry_date: product.expiry_date || '',
+                    synced: false,
+                    lastModified: Date.now(),
+                  };
+                  logger.log('[Products] Creating product via POST:', '/api/products');
+                  await postWithOfflineQueue('products', '/api/products', payload, {
+                    queueData: { ...payload, _local_id: tempId },
+                    localRecord,
+                    onOfflineSave: async (record) => saveProduct(record as ProductRecord),
+                    onOnlineSave: async (data) => {
+                      const mapped = mapApiProductToRecord(data, true);
+                      await saveProduct(mapped);
+                    },
+                  });
+                  logger.log('[Products] Product created successfully');
+                }
+
+                // Refetch products from API to get latest data
+                logger.log('[Products] Refetching products list...');
+                await fetchProducts();
+
+                if (!addAnother) {
+                  setShowAddModal(false);
+                  setEditingProduct(null);
+                }
+                logger.log('[Products] Product operation completed successfully');
+              } catch (error: any) {
+                console.error('[Products] Failed to save product:', error);
+                console.error('[Products] Error details:', {
+                  message: error?.message,
+                  response: error?.response?.data,
+                  status: error?.response?.status,
+                  url: error?.config?.url,
+                });
+
+                let errorMessage = 'Failed to save product';
+                if (error?.response) {
+                  const status = error.response.status;
+                  const detail = error.response.data?.detail || error.response.data?.message || error.response.data;
+
+                  if (status === 400) {
+                    errorMessage = `Validation error: ${detail || 'Invalid input data'}`;
+                  } else if (status === 401) {
+                    errorMessage = 'Authentication failed. Please login again.';
+                  } else if (status === 409) {
+                    errorMessage = `Conflict: ${detail || 'Product with this SKU already exists'}`;
+                  } else if (status === 500) {
+                    errorMessage = `Server error: ${detail || 'An unexpected error occurred'}`;
+                  } else {
+                    errorMessage = `Error ${status}: ${detail || error.message || 'Unknown error'}`;
+                  }
+                } else if (error?.message) {
+                  errorMessage = error.message;
+                }
+
+                alert(`Failed to save product: ${errorMessage}`);
               }
-            } else if (error?.message) {
-              errorMessage = error.message;
-            }
-
-            alert(`Failed to save product: ${errorMessage}`);
-          }
-        }}
-      />
-    )
-  }
-    </div >
+            }}
+          />
+        )}
+    </div>
   );
 }
 
