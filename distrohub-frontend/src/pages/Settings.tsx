@@ -20,6 +20,7 @@ import {
   MapPin,
   Building2,
   AlertTriangle,
+  ChevronDown,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { logger } from '@/lib/logger';
