@@ -109,7 +109,7 @@ export function Dashboard() {
 
   // Format currency with consistent font rendering
   const formatCurrency = (amount: number): string => {
-    return `৳ ${amount.toLocaleString()}`;
+    return `৳\u00A0${amount.toLocaleString()}`;
   };
 
   // Format stats for display
@@ -250,9 +250,15 @@ export function Dashboard() {
           <div className="bg-white rounded-xl p-3 shadow-sm">
             <h3 className="text-lg font-semibold text-slate-900 mb-2">Sales & Collections</h3>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={salesData} margin={{ left: 20, right: 10, top: 10, bottom: 5 }}>
+              <LineChart data={salesData} margin={{ left: 20, right: 20, top: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
-                <XAxis dataKey="name" stroke="#64748B" />
+                <XAxis 
+                  dataKey="name" 
+                  stroke="#64748B" 
+                  padding={{ left: 10, right: 10 }}
+                  interval={0}
+                  tick={{ fontSize: 12 }}
+                />
                 <YAxis stroke="#64748B" />
                 <Tooltip />
                 <Legend 
@@ -304,9 +310,10 @@ export function Dashboard() {
                 <Bar dataKey="sales" fill="#4F46E5" radius={[0, 4, 4, 0]}>
                   <LabelList 
                     dataKey="sales" 
-                    position="right" 
+                    position="insideRight" 
                     formatter={(value: number) => value.toLocaleString()}
-                    style={{ fill: '#64748B', fontSize: '12px', fontWeight: '600' }}
+                    style={{ fill: '#FFFFFF', fontSize: '12px', fontWeight: '600' }}
+                    offset={10}
                   />
                 </Bar>
               </BarChart>
