@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Bell, ChevronDown, LogOut, RefreshCw, Search, Settings, FileText, User, X } from 'lucide-react';
 import { OnlineStatusBadge } from '@/components/OfflineIndicator';
@@ -25,6 +25,15 @@ export function Header({ title }: HeaderProps) {
   const { pendingSyncCount, syncData, isSyncing, isOnline } = useOffline();
   const { t } = useLanguage();
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Read logged-in user info from localStorage
+  const currentUser = useMemo(() => {
+    try {
+      const stored = localStorage.getItem('user');
+      if (stored) return JSON.parse(stored);
+    } catch { }
+    return { name: 'Admin User', email: 'admin@distrohub.com' };
+  }, []);
 
   useEffect(() => {
     setLocalSearch(searchParams.get('q') || '');
@@ -165,8 +174,8 @@ export function Header({ title }: HeaderProps) {
                 <User className="w-4 h-4 text-white" />
               </div>
               <div className="hidden sm:flex flex-col items-start leading-tight">
-                <span className="text-sm font-semibold text-slate-900">{t('common.admin')}</span>
-                <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">{t('common.administrator')}</span>
+                <span className="text-sm font-semibold text-slate-900">{currentUser.name || 'Admin'}</span>
+                <span className="text-[10px] uppercase tracking-wider text-slate-400 font-bold">{currentUser.role || t('common.administrator')}</span>
               </div>
               <ChevronDown className="w-4 h-4 text-slate-400 mr-1" />
             </button>
@@ -174,8 +183,8 @@ export function Header({ title }: HeaderProps) {
           <DropdownMenuContent align="end" className="w-56 p-1 shadow-xl border-slate-200 rounded-xl">
             <DropdownMenuLabel className="px-3 py-2">
               <div className="flex flex-col space-y-1">
-                <p className="text-sm font-semibold leading-none">Admin User</p>
-                <p className="text-xs leading-none text-slate-500">admin@distrohub.com</p>
+                <p className="text-sm font-semibold leading-none">{currentUser.name || 'Admin User'}</p>
+                <p className="text-xs leading-none text-slate-500">{currentUser.email || 'admin@distrohub.com'}</p>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
