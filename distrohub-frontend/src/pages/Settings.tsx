@@ -1991,6 +1991,14 @@ function UnitManagement() {
 }
 
 function ProfileSettings() {
+  const currentUser = useMemo(() => {
+    try {
+      const stored = localStorage.getItem('user');
+      if (stored) return JSON.parse(stored);
+    } catch { }
+    return { name: 'Admin User', email: 'admin@distrohub.com', role: 'Administrator' };
+  }, []);
+
   return (
     <div className="max-w-2xl space-y-3">
       <h3 className="text-lg font-semibold text-slate-900">Profile Settings</h3>
@@ -2005,11 +2013,11 @@ function ProfileSettings() {
       <div className="grid grid-cols-2 gap-2">
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
-          <input type="text" className="input-field" defaultValue="Admin User" />
+          <input type="text" className="input-field" defaultValue={currentUser.name || "Admin User"} />
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-          <input type="email" className="input-field" defaultValue="admin@distrohub.com" />
+          <input type="email" className="input-field" defaultValue={currentUser.email || "admin@distrohub.com"} />
         </div>
       </div>
 
@@ -2020,7 +2028,7 @@ function ProfileSettings() {
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
-          <input type="text" className="input-field bg-slate-50" defaultValue="Administrator" disabled />
+          <input type="text" className="input-field bg-slate-50" defaultValue={currentUser.role || "Administrator"} disabled />
         </div>
       </div>
 
