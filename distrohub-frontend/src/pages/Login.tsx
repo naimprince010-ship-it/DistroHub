@@ -20,7 +20,8 @@ export function Login() {
     const errorParam = urlParams.get('error');
 
     if (errorParam) {
-      setError(`Google login failed: ${errorParam}`);
+      // Show the actual error message from backend
+      setError(`Google login failed: ${errorParam.replace(/_/g, ' ')}`);
       window.history.replaceState({}, '', '/login');
       return;
     }
@@ -60,6 +61,13 @@ export function Login() {
     const backendUrl = import.meta.env.VITE_API_URL || 'https://distrohub-backend.onrender.com';
     window.location.href = `${backendUrl}/api/auth/google`;
   };
+
+  const features = [
+    { icon: Truck, text: 'Real-time Delivery Tracking' },
+    { icon: BarChart3, text: 'Advanced Sales Analytics' },
+    { icon: Package, text: 'Smart Inventory Management' },
+    { icon: Shield, text: 'Secure & Role-based Access' },
+  ];
 
   return (
     <div className="min-h-screen flex">

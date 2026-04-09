@@ -5,7 +5,8 @@ import hashlib
 from app.models import (
     User, UserRole, Product, ProductBatch, Retailer, Purchase, PurchaseItem,
     Sale, SaleItem, Payment, PaymentStatus, OrderStatus, ExpiryStatus,
-    InventoryItem, ExpiryAlert, DashboardStats, Category, Supplier, Unit
+    InventoryItem, ExpiryAlert, DashboardStats, Category, Supplier, Unit,
+    Warehouse
 )
 
 def generate_id() -> str:
@@ -27,6 +28,9 @@ class InMemoryDatabase:
         self.categories: Dict[str, dict] = {}
         self.suppliers: Dict[str, dict] = {}
         self.units: Dict[str, dict] = {}
+        self.warehouses: Dict[str, dict] = {}
+        self.sms_queue: Dict[str, dict] = {}
+        self.sms_logs: List[dict] = []
         self.audit_logs: List[dict] = []
         self._seed_data()
     
@@ -152,6 +156,15 @@ class InMemoryDatabase:
                 **u,
                 "created_at": datetime.now()
             }
+        
+        # Seed warehouses
+        wid = generate_id()
+        self.warehouses[wid] = {
+            "id": wid,
+            "name": "Main Warehouse",
+            "address": "Dhaka",
+            "created_at": datetime.now()
+        }
     
     def hash_password(self, password: str) -> str:
         return hashlib.sha256(password.encode()).hexdigest()
@@ -750,6 +763,81 @@ class InMemoryDatabase:
             del self.units[unit_id]
             return True
         return False
+    
+    # Warehouse methods
+    def get_warehouses(self) -> List[dict]:
+        return list(self.warehouses.values())
+    
+    def get_warehouse(self, warehouse_id: str) -> Optional[dict]:
+        return self.warehouses.get(warehouse_id)
+    
+    def create_warehouse(self, data: dict) -> dict:
+        wid = generate_id()
+        w = {"id": wid, **data, "created_at": datetime.now()}
+        self.warehouses[wid] = w
+        return w
+    
+    def update_warehouse(self, warehouse_id: str, data: dict) -> Optional[dict]:
+        if warehouse_id in self.warehouses:
+            self.warehouses[warehouse_id].update(data)
+            return self.warehouses[warehouse_id]
+        return None
+    
+    def delete_warehouse(self, warehouse_id: str) -> bool:
+        if warehouse_id in self.warehouses:
+            del self.warehouses[warehouse_id]
+            return True
+        return False
+    
+    def get_warehouse_stock_count(self, warehouse_id: str) -> int:
+        return sum(b["quantity"] for b in self.batches.values() if b.get("warehouse_id") == warehouse_id)
+    
+    def get_warehouse_stock_summary(self, warehouse_id: str) -> List[dict]:
+        summary = []
+        for pid, product in self.products.items():
+            qty = sum(b["quantity"] for b in self.batches.values() if b.get("warehouse_id") == warehouse_id and b["product_id"] == pid)
+            if qty > 0:
+                summary.append({"product_id": pid, "product_name": product["name"], "total_quantity": qty})
+        return summary
+    
+    # SMS methods
+    def add_to_sms_queue(self, recipient_phone: str, message: str, event_type: str, scheduled_at: datetime) -> str:
+        queue_id = generate_id()
+        self.sms_queue[queue_id] = {
+            "id": queue_id,
+            "recipient_phone": recipient_phone,
+            "message": message,
+            "event_type": event_type,
+            "status": "pending",
+            "scheduled_at": scheduled_at,
+            "retry_count": 0,
+            "created_at": datetime.now()
+        }
+        return queue_id
+    
+    def get_pending_sms_queue(self, limit: int = 10) -> List[dict]:
+        pending = [
+            item for item in self.sms_queue.values() 
+            if item["status"] == "pending" and item["scheduled_at"] <= datetime.now()
+        ]
+        return sorted(pending, key=lambda x: x["scheduled_at"])[:limit]
+    
+    def update_sms_queue_status(self, queue_id: str, status: str, error_message: Optional[str] = None):
+        if queue_id in self.sms_queue:
+            self.sms_queue[queue_id]["status"] = status
+            if error_message:
+                self.sms_queue[queue_id]["error_message"] = error_message
+            if status == "pending": # It's a retry
+                self.sms_queue[queue_id]["retry_count"] += 1
+    
+    def create_sms_log(self, data: dict) -> dict:
+        log_entry = {
+            "id": generate_id(),
+            **data,
+            "created_at": datetime.now()
+        }
+        self.sms_logs.append(log_entry)
+        return log_entry
 
 import os
 
@@ -763,7 +851,10 @@ def get_database():
             from app.supabase_db import SupabaseDatabase
             return SupabaseDatabase()
         except Exception as e:
-            print(f"Failed to connect to Supabase: {e}, falling back to in-memory database")
+            print(f"Failed to connect to Supabase: {e}")
+            import traceback
+            traceback.print_exc()
+            print("Falling back to in-memory database")
     
     return InMemoryDatabase()
 

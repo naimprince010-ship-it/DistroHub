@@ -573,8 +573,13 @@ async def google_callback(code: str = None, error: str = None):
             else:
                 print(f"[GOOGLE OAUTH] Existing user logged in: {google_email}")
             
+            if not user or 'id' not in user:
+                print(f"[GOOGLE OAUTH] Error: User object from DB is invalid or missing ID. User: {user}")
+                return RedirectResponse(url=f"{frontend_url}/login?error=database_create_failed")
+            
             # Generate JWT token
             jwt_token = create_access_token(data={"sub": user["id"]})
+
             
             # Redirect to frontend with token
             return RedirectResponse(
@@ -582,10 +587,13 @@ async def google_callback(code: str = None, error: str = None):
             )
             
     except Exception as e:
-        print(f"[GOOGLE OAUTH] Error: {str(e)}")
+        error_msg = str(e)
+        print(f"[GOOGLE OAUTH] CRITICAL ERROR: {error_msg}")
         import traceback
         traceback.print_exc()
-        return RedirectResponse(url=f"{frontend_url}/login?error=oauth_error")
+        # Return the actual error message to the frontend for better debugging
+        return RedirectResponse(url=f"{frontend_url}/login?error={error_msg.replace(' ', '_')}")
+
 
 @app.get("/api/users", response_model=List[User])
 async def get_users(current_user: dict = Depends(get_current_user)):
