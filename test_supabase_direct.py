@@ -1,7 +1,11 @@
 """Test Supabase connection directly"""
 import os
 import sys
+import json
+from dotenv import load_dotenv
+load_dotenv('distrohub-backend/.env')
 sys.path.insert(0, 'distrohub-backend')
+
 
 from app.supabase_db import SupabaseDatabase
 

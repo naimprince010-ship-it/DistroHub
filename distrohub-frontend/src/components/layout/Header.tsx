@@ -32,7 +32,7 @@ export function Header({ title }: HeaderProps) {
       const stored = localStorage.getItem('user');
       if (stored) return JSON.parse(stored);
     } catch { }
-    return { name: 'Admin User', email: 'admin@distrohub.com' };
+    return { name: 'Admin User', email: 'admin@distrohub.com', role: 'admin' };
   }, []);
 
   useEffect(() => {
@@ -171,7 +171,11 @@ export function Header({ title }: HeaderProps) {
           <DropdownMenuTrigger asChild>
             <button className="flex items-center gap-2.5 pl-2 py-1 pr-1 rounded-full hover:bg-slate-100 transition-colors border-l border-slate-200 focus:outline-none group">
               <div className="w-8 h-8 bg-primary-500 rounded-full flex items-center justify-center shadow-sm group-hover:shadow transition-shadow">
-                <User className="w-4 h-4 text-white" />
+                {currentUser?.name ? (
+                  <span className="text-sm font-bold text-white">{currentUser.name.charAt(0).toUpperCase()}</span>
+                ) : (
+                  <User className="w-4 h-4 text-white" />
+                )}
               </div>
               <div className="hidden sm:flex flex-col items-start leading-tight">
                 <span className="text-sm font-semibold text-slate-900">{currentUser.name || 'Admin'}</span>
