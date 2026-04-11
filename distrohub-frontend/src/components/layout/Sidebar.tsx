@@ -17,6 +17,7 @@ import {
   DollarSign,
   ChevronDown,
 } from 'lucide-react';
+import { useLanguage } from '../../contexts/LanguageContext';
 
 interface MenuItem {
   icon: any;
@@ -72,6 +73,7 @@ const menuGroups: MenuGroup[] = [
 
 export function Sidebar() {
   const location = useLocation();
+  const { t } = useLanguage();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     'Main': true,
   });
