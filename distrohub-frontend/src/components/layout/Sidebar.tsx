@@ -17,7 +17,6 @@ import {
   DollarSign,
   ChevronDown,
 } from 'lucide-react';
-import { useLanguage } from '../../contexts/LanguageContext';
 
 interface MenuItem {
   icon: any;
@@ -73,7 +72,6 @@ const menuGroups: MenuGroup[] = [
 
 export function Sidebar() {
   const location = useLocation();
-  const { t } = useLanguage();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     'Main': true,
   });
@@ -98,84 +96,84 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-[280px] bg-gradient-to-b from-[#0F1419] via-[#0A0F1C] to-[#050810] text-white flex flex-col z-50 border-r border-emerald-500/10 shadow-2xl overflow-hidden font-sans">
-      {/* Decorative Ambient Glows */}
-      <div className="absolute top-0 left-0 w-full h-40 bg-emerald-500/5 blur-[80px] -z-10 pointer-events-none" />
-      <div className="absolute bottom-32 right-0 w-96 h-96 bg-teal-500/3 blur-[100px] -z-10 pointer-events-none rounded-full" />
+    <aside className="fixed left-0 top-0 h-screen w-72 bg-slate-950 text-white flex flex-col z-50 border-r border-slate-800 shadow-2xl overflow-hidden font-sans">
+      {/* Subtle Background Pattern */}
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_50%,rgba(16,185,129,0.08),transparent_50%)] pointer-events-none -z-10" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_80%,rgba(13,148,136,0.05),transparent_50%)] pointer-events-none -z-10" />
 
       {/* Header / Logo */}
-      <div className="p-6 border-b border-emerald-500/20 relative z-10 backdrop-blur-md bg-gradient-to-br from-[#0A0F1C]/95 to-[#050810]/95">
-        <div className="flex items-center gap-3.5">
+      <div className="px-6 py-5 border-b border-slate-800/60 relative z-10">
+        <div className="flex items-center gap-3">
           <div className="relative group">
-            <div className="absolute -inset-1 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl blur opacity-50 group-hover:opacity-75 transition duration-500 group-hover:blur-md" />
-            <div className="relative w-11 h-11 bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-600 rounded-xl flex items-center justify-center shadow-[0_0_20px_rgba(16,185,129,0.4)] border border-emerald-400/30 group-hover:shadow-[0_0_30px_rgba(16,185,129,0.6)] transition-all duration-300">
-              <Package className="w-6 h-6 text-white drop-shadow-lg" />
+            <div className="absolute -inset-2 bg-gradient-to-br from-cyan-500/20 to-teal-500/20 rounded-lg blur-lg opacity-0 group-hover:opacity-100 transition duration-500" />
+            <div className="relative w-10 h-10 bg-gradient-to-br from-cyan-600 to-teal-600 rounded-lg flex items-center justify-center shadow-lg shadow-cyan-500/20 border border-cyan-400/30 group-hover:shadow-cyan-500/40 transition-all duration-300">
+              <Package className="w-5 h-5 text-white" />
             </div>
           </div>
-          <div className="flex flex-col justify-center min-w-0">
-            <h1 className="text-xl font-black tracking-tight bg-gradient-to-r from-emerald-200 via-white to-emerald-100 bg-clip-text text-transparent drop-shadow-lg line-clamp-1">
+          <div className="flex flex-col justify-center">
+            <h1 className="text-lg font-bold text-white leading-tight">
               DistroHub
             </h1>
-            <p className="text-[9px] text-emerald-300/80 uppercase tracking-[0.15em] font-bold mt-1">
-              {t('common.distribution_management')}
+            <p className="text-xs text-cyan-400/80 font-medium mt-0.5">
+              Distribution Hub
             </p>
           </div>
         </div>
       </div>
 
       {/* Navigation Links */}
-      <nav className="flex-1 px-3 py-5 overflow-y-auto custom-scrollbar relative z-10 space-y-1">
+      <nav className="flex-1 px-4 py-6 overflow-y-auto custom-scrollbar relative z-10">
         {menuGroups.map((group, groupIndex) => {
           const isOpen = openGroups[group.label];
           const hasActiveItem = group.items.some(item => location.pathname === item.path);
 
           return (
             <div key={group.label}>
-              {groupIndex > 0 && <div className="h-px bg-gradient-to-r from-slate-800 via-emerald-500/20 to-slate-800 my-3" />}
+              {groupIndex > 0 && <div className="h-px bg-slate-800/50 my-4" />}
               
-              <div className="space-y-2 py-2">
+              <div className={`mb-3 ${groupIndex > 0 ? 'pt-2' : ''}`}>
                 <button
                   onClick={() => toggleGroup(group.label)}
-                  className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-[0.18em] transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 ${hasActiveItem 
-                    ? 'text-emerald-300 bg-emerald-500/10' 
-                    : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/30'
+                  className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-semibold uppercase tracking-wider transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-500/50 ${
+                    hasActiveItem 
+                      ? 'text-cyan-400 bg-cyan-500/10' 
+                      : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/40'
                   }`}
                 >
-                  <span className="opacity-90">{t(group.label)}</span>
-                  <ChevronDown className={`w-4 h-4 transition-all duration-300 ease-out flex-shrink-0 ${isOpen ? 'rotate-180 text-emerald-400' : 'text-slate-600 group-hover:text-slate-400'}`} />
+                  <span>{group.label}</span>
+                  <ChevronDown className={`w-4 h-4 transition-transform duration-300 flex-shrink-0 ${isOpen ? 'rotate-180 text-cyan-400' : 'text-slate-600'}`} />
                 </button>
 
                 <div 
                   className={`grid transition-all duration-300 ease-in-out origin-top ${
-                    isOpen ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+                    isOpen ? 'grid-rows-[1fr] opacity-100 mt-2' : 'grid-rows-[0fr] opacity-0 mt-0'
                   }`}
                 >
-                  <ul className="space-y-1 overflow-hidden">
+                  <ul className="space-y-1.5 overflow-hidden">
                     {group.items.map((item) => {
                       const isActive = location.pathname === item.path;
                       return (
                         <li key={item.path}>
                           <Link
                             to={item.path}
-                            className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-300 group relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-emerald-500/50 ${isActive
-                              ? 'bg-gradient-to-r from-emerald-600/80 to-teal-600/60 text-white shadow-[0_8px_24px_-6px_rgba(16,185,129,0.35)] scale-[1.02] translate-x-1'
-                              : 'text-slate-400 hover:bg-slate-800/40 hover:text-slate-100 hover:translate-x-0.5 border border-transparent hover:border-emerald-500/20'
-                              }`}
+                            className={`flex items-center gap-3 px-3 py-2.5 rounded-md transition-all duration-200 group relative overflow-hidden focus:outline-none focus:ring-2 focus:ring-cyan-500/50 ${
+                              isActive
+                                ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-500/25'
+                                : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                            }`}
                           >
-                            {/* Active Left Accent */}
-                            {isActive && (
-                              <div className="absolute left-0 top-0 bottom-0 w-0.5 bg-gradient-to-b from-white/90 via-emerald-300/70 to-transparent rounded-r-full shadow-[0_0_12px_rgba(16,185,129,0.6)]" />
-                            )}
-                            
-                            <div className={`relative flex items-center justify-center transition-all duration-300 flex-shrink-0 ${isActive 
-                              ? 'text-white scale-110 drop-shadow-lg' 
-                              : 'text-slate-500 group-hover:text-emerald-400 group-hover:scale-110'
+                            <div className={`relative flex items-center justify-center transition-all duration-200 flex-shrink-0 ${
+                              isActive 
+                                ? 'text-white' 
+                                : 'text-slate-500 group-hover:text-cyan-400'
                             }`}>
-                              <item.icon className="w-5 h-5 drop-shadow-sm" />
+                              <item.icon className="w-5 h-5" />
                             </div>
                             
-                            <span className={`font-semibold text-[13px] tracking-wide whitespace-nowrap overflow-hidden text-ellipsis ${isActive ? 'drop-shadow-md font-bold' : 'group-hover:drop-shadow-sm'}`}>
-                              {t(item.label)}
+                            <span className={`font-medium text-sm whitespace-nowrap overflow-hidden text-ellipsis ${
+                              isActive ? 'font-semibold' : ''
+                            }`}>
+                              {item.label}
                             </span>
                           </Link>
                         </li>
@@ -190,15 +188,15 @@ export function Sidebar() {
       </nav>
 
       {/* Footer / Logout */}
-      <div className="p-4 border-t border-emerald-500/15 bg-gradient-to-t from-[#050810]/90 to-[#0A0F1C]/80 backdrop-blur-md relative z-10">
+      <div className="p-4 border-t border-slate-800/60 bg-slate-900/50 backdrop-blur-sm relative z-10">
         <button
           onClick={handleLogout}
-          className="flex items-center gap-3 px-4 py-3 w-full text-slate-400 hover:text-rose-300 rounded-lg transition-all duration-300 group border border-transparent hover:border-rose-500/30 focus:outline-none focus:ring-2 focus:ring-rose-500/50 hover:bg-gradient-to-r hover:from-rose-500/15 hover:to-transparent"
+          className="flex items-center gap-3 px-3 py-2.5 w-full text-slate-400 hover:text-rose-400 rounded-md transition-all duration-200 group border border-transparent hover:border-rose-500/30 focus:outline-none focus:ring-2 focus:ring-rose-500/50 hover:bg-rose-500/10"
         >
-          <div className="relative w-9 h-9 rounded-lg bg-slate-800/50 flex items-center justify-center group-hover:bg-rose-500/20 group-hover:shadow-[0_0_16px_rgba(244,63,94,0.4)] transition-all duration-300 border border-slate-700/50 group-hover:border-rose-500/40 flex-shrink-0">
-            <LogOut className="w-5 h-5 group-hover:scale-110 transition-transform duration-300 text-slate-500 group-hover:text-rose-400" />
+          <div className="relative w-5 h-5 rounded flex items-center justify-center flex-shrink-0">
+            <LogOut className="w-5 h-5 group-hover:scale-110 transition-transform duration-200 text-slate-500 group-hover:text-rose-400" />
           </div>
-          <span className="font-semibold text-sm tracking-wide">{t('common.logout')}</span>
+          <span className="font-medium text-sm">Logout</span>
         </button>
       </div>
     </aside>
