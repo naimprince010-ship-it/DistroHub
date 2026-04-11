@@ -180,7 +180,7 @@ export function Sidebar() {
                       );
                     })}
                   </ul>
-                )}
+                </div>
               </div>
             </div>
           );
