@@ -96,7 +96,6 @@ api.interceptors.response.use(
     
     // Handle 401 Unauthorized - token expired or invalid
     if (error.response?.status === 401) {
-      const requestUrl = error?.config?.url || '';
       // Don't redirect if we're already on login page
       if (!window.location.pathname.includes('/login')) {
         console.warn('[API] 401 Unauthorized - clearing token and redirecting to login');
