@@ -38,9 +38,9 @@ def test_login():
     print("\n2. Connecting to Database...")
     try:
         db = get_database()
-        print(f"   ✓ Database connected: {type(db).__name__}")
+        print(f"   [OK] Database connected: {type(db).__name__}")
     except Exception as e:
-        print(f"   ✗ Database connection failed: {e}")
+        print(f"   [FAILED] Database connection failed: {e}")
         return
     
     # Test user lookup
@@ -49,12 +49,12 @@ def test_login():
     user = db.get_user_by_email(test_email)
     
     if user:
-        print(f"   ✓ User found: {user['email']}")
+        print(f"   [OK] User found: {user['email']}")
         print(f"   - Name: {user.get('name', 'N/A')}")
         print(f"   - Role: {user.get('role', 'N/A')}")
         print(f"   - Password Hash: {user.get('password_hash', 'N/A')[:20]}...")
     else:
-        print(f"   ✗ User NOT found: {test_email}")
+        print(f"   [FAILED] User NOT found: {test_email}")
         print("\n   SOLUTION: Create user using register endpoint or manually in database")
         return
     
@@ -69,15 +69,18 @@ def test_login():
         print(f"   Stored hash: {password_hash[:40]}...")
         print(f"   Expected hash: {expected_hash[:40]}...")
         
-        is_valid = db.verify_password(test_password, password_hash)
-        if is_valid:
-            print("   ✓ Password verification: SUCCESS")
-        else:
-            print("   ✗ Password verification: FAILED")
-            print("\n   SOLUTION: Password hash mismatch. Update password hash in database.")
-            print(f"   Correct hash for '{test_password}': {expected_hash}")
+        try:
+            is_valid = db.verify_password(test_password, password_hash)
+            if is_valid:
+                print(f"   [OK] Password '{test_password}' is VALID for '{test_email}'")
+            else:
+                print(f"   [FAILED] Password '{test_password}' is INVALID for '{test_email}'")
+                print(f"   Stored hash:   {user.get('password_hash')}")
+                print(f"   Expected hash: {expected_hash}")
+        except Exception as e:
+            print(f"   [FAILED] Error verifying password: {e}")
     else:
-        print("   ✗ No password hash found in user record")
+        print("   [FAILED] No password hash found in user record")
     
     # Test with other common passwords
     print("\n5. Testing Common Passwords...")
@@ -85,13 +88,17 @@ def test_login():
     for pwd in common_passwords:
         if password_hash:
             if db.verify_password(pwd, password_hash):
-                print(f"   ✓ Password '{pwd}' matches!")
+                print(f"   [OK] Password '{pwd}' matches!")
                 break
     
-    print("\n" + "=" * 60)
+    print("\n4. Final Verdict:")
+    if user and db.verify_password(test_password, user["password_hash"]):
+        print("   [SUCCESS] Demo credentials should work correctly.")
+    else:
+        print("   [ERROR] Demo credentials will NOT work.")
+    print("="*60)
     print("Diagnostic Complete")
     print("=" * 60)
 
 if __name__ == "__main__":
     test_login()
-

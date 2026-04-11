@@ -110,36 +110,52 @@ export function Dashboard() {
   }, []);
 
   // Format currency with consistent font rendering
-  const formatCurrency = (amount: number): string => {
-    return `৳\u00A0${amount.toLocaleString()}`;
+  const formatCurrency = (amount: number | null | undefined): string => {
+    return `৳\u00A0${(amount ?? 0).toLocaleString()}`;
   };
 
+  // Normalize stats to ensure no null values crash the UI
+  const safeStats = stats ? {
+    total_sales: stats.total_sales ?? 0,
+    total_due: stats.total_due ?? 0,
+    total_products: stats.total_products ?? 0,
+    total_categories: stats.total_categories ?? 0,
+    total_purchases: stats.total_purchases ?? 0,
+    active_retailers: stats.active_retailers ?? 0,
+    low_stock_count: stats.low_stock_count ?? 0,
+    expiring_soon_count: stats.expiring_soon_count ?? 0,
+    payable_to_supplier: stats.payable_to_supplier ?? 0,
+    receivable_from_customers: stats.receivable_from_customers ?? 0,
+    sales_this_month: stats.sales_this_month ?? 0,
+    collections_this_month: stats.collections_this_month ?? 0,
+  } : null;
+
   // Format stats for display
-  const displayStats = stats ? [
+  const displayStats = safeStats ? [
     {
       title: t('dashboard.total_sales'),
-      value: formatCurrency(stats.total_sales),
-      change: stats.sales_this_month > 0 ? `+${formatCurrency(stats.sales_this_month)}` : formatCurrency(0),
+      value: formatCurrency(safeStats.total_sales),
+      change: safeStats.sales_this_month > 0 ? `+${formatCurrency(safeStats.sales_this_month)}` : formatCurrency(0),
       trend: 'up' as const,
       icon: TrendingUp,
       color: 'bg-green-500',
-      tint: stats.sales_this_month > 0 ? 'bg-green-50 border-green-100' : 'bg-white border-slate-100',
+      tint: safeStats.sales_this_month > 0 ? 'bg-green-50 border-green-100' : 'bg-white border-slate-100',
       to: '/sales',
     },
     {
       title: t('dashboard.receivable'),
-      value: formatCurrency(stats.receivable_from_customers),
-      change: stats.collections_this_month > 0 ? `+${formatCurrency(stats.collections_this_month)}` : formatCurrency(0),
-      trend: stats.receivable_from_customers > 0 ? 'down' as const : 'up' as const,
+      value: formatCurrency(safeStats.receivable_from_customers),
+      change: safeStats.collections_this_month > 0 ? `+${formatCurrency(safeStats.collections_this_month)}` : formatCurrency(0),
+      trend: safeStats.receivable_from_customers > 0 ? 'down' as const : 'up' as const,
       icon: TrendingDown,
       color: 'bg-red-500',
-      tint: stats.receivable_from_customers > 0 ? 'bg-red-50 border-red-100' : 'bg-white border-slate-100',
+      tint: safeStats.receivable_from_customers > 0 ? 'bg-red-50 border-red-100' : 'bg-white border-slate-100',
       to: '/receivables',
     },
     {
       title: t('dashboard.total_products'),
-      value: stats.total_products.toString(),
-      change: `${t('dashboard.total_categories')}: ${stats.total_categories}`,
+      value: safeStats.total_products.toString(),
+      change: `${t('dashboard.total_categories')}: ${safeStats.total_categories}`,
       trend: 'up' as const,
       icon: Package,
       color: 'bg-blue-500',
@@ -148,8 +164,8 @@ export function Dashboard() {
     },
     {
       title: t('dashboard.active_retailers'),
-      value: stats.active_retailers.toString(),
-      change: `${t('common.purchase')}: ${stats.total_purchases}`,
+      value: safeStats.active_retailers.toString(),
+      change: `${t('common.purchase')}: ${safeStats.total_purchases}`,
       trend: 'up' as const,
       icon: Users,
       color: 'bg-purple-500',
@@ -158,38 +174,38 @@ export function Dashboard() {
     },
     {
       title: t('dashboard.low_stock'),
-      value: stats.low_stock_count.toString(),
+      value: safeStats.low_stock_count.toString(),
       change: t('dashboard.items'),
-      trend: stats.low_stock_count > 0 ? 'down' as const : 'up' as const,
+      trend: safeStats.low_stock_count > 0 ? 'down' as const : 'up' as const,
       icon: AlertTriangle,
       color: 'bg-orange-500',
-      tint: stats.low_stock_count > 0 ? 'bg-orange-50 border-orange-100' : 'bg-white border-slate-100',
+      tint: safeStats.low_stock_count > 0 ? 'bg-orange-50 border-orange-100' : 'bg-white border-slate-100',
       to: '/inventory?filter=low-stock',
     },
     {
       title: t('dashboard.expiring_soon'),
-      value: stats.expiring_soon_count.toString(),
+      value: safeStats.expiring_soon_count.toString(),
       change: t('dashboard.within_30_days'),
-      trend: stats.expiring_soon_count > 0 ? 'down' as const : 'up' as const,
+      trend: safeStats.expiring_soon_count > 0 ? 'down' as const : 'up' as const,
       icon: AlertTriangle,
       color: 'bg-yellow-500',
-      tint: stats.expiring_soon_count > 0 ? 'bg-yellow-50 border-yellow-100' : 'bg-white border-slate-100',
+      tint: safeStats.expiring_soon_count > 0 ? 'bg-yellow-50 border-yellow-100' : 'bg-white border-slate-100',
       to: '/expiry',
     },
     {
       title: t('dashboard.payable_to_suppliers'),
-      value: formatCurrency(stats.payable_to_supplier),
+      value: formatCurrency(safeStats.payable_to_supplier),
       change: t('dashboard.outstanding'),
-      trend: stats.payable_to_supplier > 0 ? 'down' as const : 'up' as const,
+      trend: safeStats.payable_to_supplier > 0 ? 'down' as const : 'up' as const,
       icon: ShoppingCart,
       color: 'bg-indigo-500',
-      tint: stats.payable_to_supplier > 0 ? 'bg-indigo-50 border-indigo-100' : 'bg-white border-slate-100',
+      tint: safeStats.payable_to_supplier > 0 ? 'bg-indigo-50 border-indigo-100' : 'bg-white border-slate-100',
       to: '/purchase',
     },
     {
       title: t('dashboard.total_categories'),
-      value: stats.total_categories.toString(),
-      change: `${t('common.products')}: ${stats.total_products}`,
+      value: safeStats.total_categories.toString(),
+      change: `${t('common.products')}: ${safeStats.total_products}`,
       trend: 'up' as const,
       icon: FolderOpen,
       color: 'bg-teal-500',
@@ -374,7 +390,7 @@ export function Dashboard() {
               </a>
             </div>
             <div className="divide-y divide-slate-100">
-              {stats?.expiring_soon_count === 0 ? (
+              {safeStats?.expiring_soon_count === 0 ? (
                 <div className="p-6 flex items-center justify-center gap-2 text-sm text-green-700 bg-green-50">
                   <CheckCircle2 className="w-5 h-5 text-green-600" />
                   No products expiring soon.
