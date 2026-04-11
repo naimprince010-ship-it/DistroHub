@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useLanguage } from '@/contexts/LanguageContext';
+
 import {
   LayoutDashboard,
   Package,
@@ -73,7 +73,7 @@ const menuGroups: MenuGroup[] = [
 
 export function Sidebar() {
   const location = useLocation();
-  const { t } = useLanguage();
+
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
     'Main': true,
   });
