@@ -189,14 +189,6 @@ async def global_exception_handler(request, exc):
 
 # CORS configuration - allow frontend from any device
 # Get additional allowed origins from environment variable (comma-separated)
-# #region agent log
-try:
-    import json
-    with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-        log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"D","location":"main.py:63","message":"Parsing ALLOWED_ORIGINS env var","data":{"raw_value":os.environ.get("ALLOWED_ORIGINS", "")},"timestamp":int(datetime.now().timestamp() * 1000)}
-        f.write(json.dumps(log_data) + '\n')
-except: pass
-# #endregion
 additional_origins = os.environ.get("ALLOWED_ORIGINS", "").split(",")
 additional_origins = [origin.strip() for origin in additional_origins if origin.strip()]
 
@@ -211,25 +203,7 @@ allowed_origins = [
 # Add additional origins from environment
 allowed_origins.extend(additional_origins)
 
-# #region agent log
-try:
-    import json
-    with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-        log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"main.py:75","message":"CORS config before middleware","data":{"allowed_origins_count":len(allowed_origins),"additional_origins_count":len(additional_origins)},"timestamp":int(datetime.now().timestamp() * 1000)}
-        f.write(json.dumps(log_data) + '\n')
-except: pass
-# #endregion
 
-# #region agent log
-try:
-    import json
-    with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-        log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"main.py:95","message":"Adding CORS middleware","data":{"allowed_origins_count":len(allowed_origins),"has_regex":True},"timestamp":int(datetime.now().timestamp() * 1000)}
-        f.write(json.dumps(log_data) + '\n')
-except Exception as e:
-    # Log to console if file logging fails
-    print(f"[DEBUG] Failed to write log: {e}")
-# #endregion
 
 # FastAPI/Starlette CORSMiddleware: when both allow_origins and allow_origin_regex are provided,
 # it checks if origin matches EITHER the explicit list OR the regex pattern
@@ -237,15 +211,6 @@ except Exception as e:
 # 1. Main production origin (https://distrohub-frontend.vercel.app) is explicitly allowed
 # 2. All Vercel preview URLs are allowed via regex
 # 3. All localhost URLs are allowed for development
-# #region agent log
-try:
-    import json
-    with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-        log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"main.py:107","message":"Configuring CORS middleware","data":{"explicit_origins":allowed_origins,"has_regex":True},"timestamp":int(datetime.now().timestamp() * 1000)}
-        f.write(json.dumps(log_data) + '\n')
-except Exception as e:
-    print(f"[DEBUG] Failed to write CORS config log: {e}")
-# #endregion
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,  # Explicit origins - main production URL is here
@@ -256,58 +221,17 @@ app.add_middleware(
     expose_headers=["*"],
     max_age=600,  # Cache preflight for 10 minutes
 )
-# #region agent log
-try:
-    import json
-    with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-        log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"main.py:120","message":"CORS middleware configured successfully","data":{},"timestamp":int(datetime.now().timestamp() * 1000)}
-        f.write(json.dumps(log_data) + '\n')
-except Exception as e:
-    print(f"[DEBUG] Failed to write CORS success log: {e}")
-# #endregion
-# #region agent log
-try:
-    import json
-    with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-        log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"main.py:115","message":"CORS middleware added successfully","data":{},"timestamp":int(datetime.now().timestamp() * 1000)}
-        f.write(json.dumps(log_data) + '\n')
-except: pass
-# #endregion
 
 @app.on_event("startup")
 async def startup_event():
     """Start background tasks on application startup"""
-    # #region agent log
-    try:
-        import json
-        with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"main.py:143","message":"Backend startup event triggered","data":{},"timestamp":int(datetime.now().timestamp() * 1000)}
-            f.write(json.dumps(log_data) + '\n')
-    except Exception as e:
-        print(f"[DEBUG] Failed to write startup log: {e}")
-    # #endregion
     # Start SMS worker
     try:
         await start_sms_worker(db)
         logger.info("SMS worker started successfully")
-        # #region agent log
-        try:
-            import json
-            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"main.py:151","message":"SMS worker started successfully","data":{},"timestamp":int(datetime.now().timestamp() * 1000)}
-                f.write(json.dumps(log_data) + '\n')
-        except: pass
-        # #endregion
     except Exception as e:
         logger.error(f"Failed to start SMS worker: {e}")
-        # #region agent log
-        try:
-            import json
-            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"A","location":"main.py:156","message":"SMS worker failed","data":{"error":str(e)[:100]},"timestamp":int(datetime.now().timestamp() * 1000)}
-                f.write(json.dumps(log_data) + '\n')
-        except: pass
-        # #endregion
+        pass
 
 @app.get("/healthz")
 async def healthz():
@@ -315,28 +239,10 @@ async def healthz():
 
 @app.post("/api/auth/login", response_model=Token)
 async def login(credentials: UserLogin, request: Request):
-    # #region agent log
-    try:
-        import json
-        with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-            log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:109","message":"Login endpoint called","data":{"email":credentials.email[:10] + "..."},"timestamp":int(datetime.now().timestamp() * 1000)}
-            f.write(json.dumps(log_data) + '\n')
-    except: pass
-    # #endregion
+    pass
     try:
         # Log request details for debugging device-specific issues
-        # #region agent log
-        try:
-            import json
-            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:112","message":"Request object check","data":{"has_request":request is not None,"has_headers":hasattr(request, "headers")},"timestamp":int(datetime.now().timestamp() * 1000)}
-                f.write(json.dumps(log_data) + '\n')
-        except Exception as e:
-            import json
-            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:112","message":"Request check error","data":{"error":str(e)[:50]},"timestamp":int(datetime.now().timestamp() * 1000)}
-                f.write(json.dumps(log_data) + '\n')
-        # #endregion
+        pass
         origin = request.headers.get("origin", "unknown")
         user_agent = request.headers.get("user-agent", "unknown")
         client_host = request.client.host if request.client else "unknown"
@@ -351,14 +257,7 @@ async def login(credentials: UserLogin, request: Request):
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="Too many login attempts. Please try again later."
             )
-        # #region agent log
-        try:
-            import json
-            with open(r'c:\Users\User\DistroHub\.cursor\debug.log', 'a', encoding='utf-8') as f:
-                log_data = {"sessionId":"debug-session","runId":"run1","hypothesisId":"B","location":"main.py:118","message":"Request headers extracted","data":{"origin":origin[:30],"has_client":request.client is not None},"timestamp":int(datetime.now().timestamp() * 1000)}
-                f.write(json.dumps(log_data) + '\n')
-        except: pass
-        # #endregion
+        pass
         
         user = db.get_user_by_email(credentials.email)
         if not user:
@@ -2405,92 +2304,16 @@ async def update_route(
 ):
     """Update route (status, notes, etc.)"""
     try:
-        # #region agent log
-        import json
-        from datetime import datetime
-        log_data = {
-            "location": "main.py:update_route:entry",
-            "message": "Route update endpoint called",
-            "data": {
-                "route_id": route_id,
-                "update_data": route_update.model_dump(exclude_unset=True)
-            },
-            "timestamp": int(datetime.now().timestamp() * 1000),
-            "sessionId": "debug-session",
-            "runId": "run1",
-            "hypothesisId": "D"
-        }
-        try:
-            with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
-                f.write(json.dumps(log_data) + "\n")
-        except: pass
-        # #endregion
         
         route = db.update_route(route_id, route_update.model_dump(exclude_unset=True))
         
-        # #region agent log
-        log_data = {
-            "location": "main.py:update_route:after_db_update",
-            "message": "Route updated in database",
-            "data": {
-                "route_id": route_id,
-                "route_found": route is not None,
-                "route_status": route.get("status") if route else None
-            },
-            "timestamp": int(datetime.now().timestamp() * 1000),
-            "sessionId": "debug-session",
-            "runId": "run1",
-            "hypothesisId": "D"
-        }
-        try:
-            with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
-                f.write(json.dumps(log_data) + "\n")
-        except: pass
-        # #endregion
         
         if not route:
             raise HTTPException(status_code=404, detail="Route not found")
         return Route(**route)
     except ValueError as e:
-        # #region agent log
-        log_data = {
-            "location": "main.py:update_route:value_error",
-            "message": "ValueError in route update",
-            "data": {
-                "route_id": route_id,
-                "error": str(e)
-            },
-            "timestamp": int(datetime.now().timestamp() * 1000),
-            "sessionId": "debug-session",
-            "runId": "run1",
-            "hypothesisId": "D"
-        }
-        try:
-            with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
-                f.write(json.dumps(log_data) + "\n")
-        except: pass
-        # #endregion
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        # #region agent log
-        log_data = {
-            "location": "main.py:update_route:exception",
-            "message": "Unexpected error in route update",
-            "data": {
-                "route_id": route_id,
-                "error": str(e),
-                "error_type": type(e).__name__
-            },
-            "timestamp": int(datetime.now().timestamp() * 1000),
-            "sessionId": "debug-session",
-            "runId": "run1",
-            "hypothesisId": "D"
-        }
-        try:
-            with open("c:\\Users\\User\\DistroHub\\.cursor\\debug.log", "a") as f:
-                f.write(json.dumps(log_data) + "\n")
-        except: pass
-        # #endregion
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Failed to update route: {str(e)}")

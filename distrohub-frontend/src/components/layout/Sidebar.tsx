@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useLanguage } from '@/contexts/LanguageContext';
 import {
   LayoutDashboard,
   Package,
@@ -32,50 +31,49 @@ interface MenuGroup {
 
 const menuGroups: MenuGroup[] = [
   {
-    label: 'sidebar.main',
+    label: 'Main',
     items: [
-      { icon: LayoutDashboard, label: 'common.dashboard', path: '/' },
-      { icon: Users, label: 'common.retailers', path: '/retailers' },
+      { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
+      { icon: Users, label: 'Retailers', path: '/retailers' },
     ],
   },
   {
-    label: 'sidebar.inventory',
+    label: 'Inventory',
     items: [
-      { icon: Package, label: 'common.products', path: '/products' },
-      { icon: Warehouse, label: 'common.inventory', path: '/inventory' },
-      { icon: AlertTriangle, label: 'common.expiry_alerts', path: '/expiry' },
+      { icon: Package, label: 'Products', path: '/products' },
+      { icon: Warehouse, label: 'Inventory', path: '/inventory' },
+      { icon: AlertTriangle, label: 'Expiry Alerts', path: '/expiry' },
     ],
   },
   {
-    label: 'sidebar.operations',
+    label: 'Operations',
     items: [
-      { icon: ShoppingCart, label: 'common.purchase', path: '/purchase' },
-      { icon: Receipt, label: 'common.sales', path: '/sales' },
-      { icon: RotateCcw, label: 'common.sales_returns', path: '/sales-returns' },
-      { icon: MapPin, label: 'common.routes', path: '/routes' },
+      { icon: ShoppingCart, label: 'Purchase', path: '/purchase' },
+      { icon: Receipt, label: 'Sales', path: '/sales' },
+      { icon: RotateCcw, label: 'Sales Returns', path: '/sales-returns' },
+      { icon: MapPin, label: 'Routes', path: '/routes' },
     ],
   },
   {
-    label: 'sidebar.accounts',
+    label: 'Accounts',
     items: [
-      { icon: DollarSign, label: 'common.accountability', path: '/accountability' },
-      { icon: TrendingUp, label: 'common.receivables', path: '/receivables' },
+      { icon: DollarSign, label: 'Accountability', path: '/accountability' },
+      { icon: TrendingUp, label: 'Receivables', path: '/receivables' },
     ],
   },
   {
-    label: 'sidebar.system',
+    label: 'System',
     items: [
-      { icon: FileText, label: 'common.reports', path: '/reports' },
-      { icon: Settings, label: 'common.settings', path: '/settings' },
+      { icon: FileText, label: 'Reports', path: '/reports' },
+      { icon: Settings, label: 'Settings', path: '/settings' },
     ],
   },
 ];
 
 export function Sidebar() {
   const location = useLocation();
-  const { t } = useLanguage();
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({
-    'sidebar.main': true,
+    'Main': true,
   });
 
   // Ensure active group stays expanded
@@ -182,7 +180,7 @@ export function Sidebar() {
                       );
                     })}
                   </ul>
-                </div>
+                )}
               </div>
             </div>
           );
