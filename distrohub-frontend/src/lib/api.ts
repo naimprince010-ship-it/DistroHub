@@ -96,11 +96,12 @@ api.interceptors.response.use(
     
     // Handle 401 Unauthorized - token expired or invalid
     if (error.response?.status === 401) {
-      console.warn('[API] 401 Unauthorized - clearing token and redirecting to login');
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      // Only redirect if not already on login page
+      const requestUrl = error?.config?.url || '';
+      // Don't redirect if we're already on login page
       if (!window.location.pathname.includes('/login')) {
+        console.warn('[API] 401 Unauthorized - clearing token and redirecting to login');
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
         window.location.href = '/login';
       }
     }
