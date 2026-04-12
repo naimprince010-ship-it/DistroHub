@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
-import { Bell, ChevronDown, LogOut, RefreshCw, Search, Settings, FileText, User, X, Menu } from 'lucide-react';
+import { Bell, ChevronDown, LogOut, RefreshCw, Search, Settings, FileText, User, X } from 'lucide-react';
 import { OnlineStatusBadge } from '@/components/OfflineIndicator';
 import { useOffline } from '@/contexts/OfflineContext';
 import { useLanguage } from '@/contexts/LanguageContext';
-import { useSidebar, SidebarTrigger } from '@/components/layout/Sidebar';
+import { SidebarTrigger } from '@/components/layout/Sidebar';
 import { cn } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {

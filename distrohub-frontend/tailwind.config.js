@@ -50,6 +50,7 @@ export default {
   		  			ring: 'hsl(var(--ring))',
   		  			primary: {
   				DEFAULT: '#4F46E5',
+  				foreground: 'hsl(var(--primary-foreground))',
   				50: '#EEEEFF',
   				100: '#E0E0FF',
   				200: '#C7C4FE',
@@ -60,6 +61,10 @@ export default {
   				700: '#3730A3',
   				800: '#312E81',
   				900: '#1E1B4B',
+  			},
+  			secondary: {
+  				DEFAULT: 'hsl(var(--secondary))',
+  				foreground: 'hsl(var(--secondary-foreground))'
   			},
   			slate: {
   				DEFAULT: '#0F172A',
