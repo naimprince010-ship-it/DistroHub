@@ -14,7 +14,7 @@ function MainContent() {
         className={cn(
           'min-h-screen transition-all duration-300 ease-out',
           // On mobile, no margin needed since sidebar is overlay
-          isMobile ? 'ml-0' : isCollapsed ? 'ml-[68px]' : 'ml-64'
+          isMobile ? 'ml-0' : isCollapsed ? 'ml-[76px]' : 'ml-[260px]'
         )}
       >
         <Outlet />
