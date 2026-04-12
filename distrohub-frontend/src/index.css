@@ -6,64 +6,80 @@
 
 @layer base {
   :root {
-    --radius: 0.5rem;
+    --radius: 0.625rem;
     --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --foreground: 224 71% 4%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 224 71% 4%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 243 75% 59%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 243 75% 59%;
+    --popover-foreground: 224 71% 4%;
+    --primary: 171 77% 36%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 96%;
+    --secondary-foreground: 224 71% 4%;
+    --muted: 220 14% 96%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 220 14% 96%;
+    --accent-foreground: 224 71% 4%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 171 77% 36%;
+    --chart-1: 171 77% 36%;
+    --chart-2: 262 83% 58%;
+    --chart-3: 217 91% 60%;
+    --chart-4: 43 96% 56%;
+    --chart-5: 0 84% 60%;
+    
+    /* Sidebar tokens - Light mode */
     --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 240 5.3% 26.1%;
-    --sidebar-primary: 240 5.9% 10%;
-    --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 240 4.8% 95.9%;
-    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-foreground: 224 71% 4%;
+    --sidebar-primary: 171 77% 36%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 14% 96%;
+    --sidebar-accent-foreground: 224 71% 4%;
     --sidebar-border: 220 13% 91%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-ring: 171 77% 36%;
+    --sidebar-muted: 220 9% 46%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 243 75% 59%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 243 75% 59%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
+    --background: 224 71% 4%;
+    --foreground: 210 20% 98%;
+    --card: 224 71% 4%;
+    --card-foreground: 210 20% 98%;
+    --popover: 224 71% 6%;
+    --popover-foreground: 210 20% 98%;
+    --primary: 171 77% 36%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 215 28% 17%;
+    --secondary-foreground: 210 20% 98%;
+    --muted: 215 28% 17%;
+    --muted-foreground: 217 10% 64%;
+    --accent: 215 28% 17%;
+    --accent-foreground: 210 20% 98%;
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 210 20% 98%;
+    --border: 215 28% 17%;
+    --input: 215 28% 17%;
+    --ring: 171 77% 36%;
+    --chart-1: 171 77% 36%;
+    --chart-2: 262 83% 58%;
+    --chart-3: 217 91% 60%;
+    --chart-4: 43 96% 56%;
+    --chart-5: 0 84% 60%;
+    
+    /* Sidebar tokens - Dark mode */
+    --sidebar-background: 222 47% 6%;
+    --sidebar-foreground: 210 20% 98%;
+    --sidebar-primary: 171 77% 36%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-accent: 215 28% 12%;
+    --sidebar-accent-foreground: 210 20% 98%;
+    --sidebar-border: 215 28% 12%;
+    --sidebar-ring: 171 77% 36%;
+    --sidebar-muted: 217 10% 54%;
   }
 
   * {
@@ -79,7 +95,7 @@
     font-family: 'Hind Siliguri', 'Inter', 'Plus Jakarta Sans', sans-serif;
   }
   
-  /* Ensure currency symbol (৳) renders clearly */
+  /* Ensure currency symbol renders clearly */
   .currency-symbol {
     font-family: 'Inter', 'Plus Jakarta Sans', system-ui, sans-serif;
     font-weight: 600;
@@ -88,8 +104,9 @@
 }
 
 @layer components {
+  /* Skeleton loading animation */
   .skeleton {
-    @apply relative overflow-hidden bg-slate-200 rounded;
+    @apply relative overflow-hidden bg-muted rounded;
   }
 
   .skeleton::after {
@@ -97,27 +114,105 @@
     background: linear-gradient(
       90deg,
       transparent,
-      rgba(255, 255, 255, 0.4),
+      rgba(255, 255, 255, 0.1),
       transparent
     );
     animation: shimmer 2s infinite;
     content: '';
   }
 
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  /* Button variants */
   .btn-primary {
-    @apply bg-primary-500 hover:bg-primary-600 text-white font-medium px-2 py-1 rounded-lg transition-all duration-200 ease-in-out transform hover:scale-[1.02] active:scale-[0.98];
+    @apply bg-primary text-primary-foreground font-medium px-4 py-2 rounded-lg transition-all duration-200 ease-out hover:opacity-90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2;
   }
 
   .btn-secondary {
-    @apply bg-slate-100 hover:bg-slate-200 text-slate-900 font-medium px-2 py-1 rounded-lg transition-all duration-200 ease-in-out;
+    @apply bg-secondary text-secondary-foreground font-medium px-4 py-2 rounded-lg transition-all duration-200 ease-out hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2;
   }
 
+  /* Card hover effect */
   .card-hover {
-    @apply transition-all duration-200 ease-in-out hover:shadow-lg hover:-translate-y-0.5;
+    @apply transition-all duration-200 ease-out hover:shadow-lg hover:-translate-y-0.5;
   }
 
+  /* Input field styling */
   .input-field {
-    @apply w-full px-2 py-1 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent transition-all duration-200;
+    @apply w-full px-3 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200;
+  }
+
+  /* Custom scrollbar */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/30;
+  }
+
+  /* Glass effect */
+  .glass {
+    @apply bg-background/80 backdrop-blur-xl;
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-primary to-chart-3 bg-clip-text text-transparent;
+  }
+
+  /* Sidebar item animation */
+  .sidebar-item-enter {
+    animation: slideIn 0.2s ease-out;
+  }
+
+  @keyframes slideIn {
+    from {
+      opacity: 0;
+      transform: translateX(-8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  /* Focus visible ring */
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
   }
 }
 
+@layer utilities {
+  /* Hide scrollbar but keep functionality */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Text balance for better line breaks */
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .text-pretty {
+    text-wrap: pretty;
+  }
+}
