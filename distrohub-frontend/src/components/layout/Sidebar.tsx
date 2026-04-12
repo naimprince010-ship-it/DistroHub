@@ -15,7 +15,6 @@ import {
   RotateCcw,
   MapPin,
   DollarSign,
-  ChevronDown,
   ChevronLeft,
   Menu,
   X,
