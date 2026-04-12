@@ -322,10 +322,10 @@ export function Sidebar() {
         />
         
         <aside
+          style={{ background: 'linear-gradient(135deg, rgba(16,68,81,0.97) 0%, rgba(20,92,108,0.97) 100%)' }}
           className={cn(
             'fixed left-0 top-0 h-full w-[280px] z-50 transition-transform duration-500 ease-out',
-            'bg-gradient-to-b from-[#104451]/95 to-[#145C6C]/95 backdrop-blur-xl',
-            'border-r border-white/5 shadow-2xl',
+            'backdrop-blur-md border-r border-white/10 shadow-2xl',
             isMobileOpen ? 'translate-x-0' : '-translate-x-full'
           )}
         >
@@ -338,10 +338,10 @@ export function Sidebar() {
   // Desktop sidebar
   return (
     <aside
+      style={{ background: 'linear-gradient(135deg, rgba(16,68,81,0.97) 0%, rgba(20,92,108,0.97) 100%)' }}
       className={cn(
-        'fixed left-0 top-0 h-screen z-40 transition-all duration-500 cubic-bezier(0.4, 0, 0.2, 1)',
-        'bg-[linear-gradient(135deg,rgba(16,68,81,0.95)_0%,rgba(20,92,108,0.95)_100%)] backdrop-blur-md',
-        'border-r border-white/5 shadow-xl',
+        'fixed left-0 top-0 h-screen z-40 transition-all duration-500',
+        'backdrop-blur-md border-r border-white/10 shadow-xl',
         isCollapsed ? 'w-[76px]' : 'w-[260px]'
       )}
     >
