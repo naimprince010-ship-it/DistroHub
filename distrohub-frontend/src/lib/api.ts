@@ -5,7 +5,7 @@ export type OfflineEntity = 'products' | 'retailers' | 'sales' | 'purchases';
 
 // Get API URL from environment variable with fallback for development
 const API_URL = import.meta.env.VITE_API_URL || 
-  (import.meta.env.DEV ? 'http://localhost:8001' : 'https://distrohub-backend.onrender.com');
+  (import.meta.env.DEV ? 'http://localhost:8001' : 'https://distrohub-backend.vercel.app');
 
 // Validate URL format (but don't crash - just warn)
 let isValidUrl = true;
