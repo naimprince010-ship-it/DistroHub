@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.database import db
 
-JWT_SECRET = os.environ.get("JWT_SECRET_KEY") or os.urandom(32).hex()
+JWT_SECRET = os.environ.get("JWT_SECRET_KEY", "distrohub_super_secret_key_123456789")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 
