@@ -716,45 +716,13 @@ function RouteDetailsModal({
               });
               
               try {
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    location: 'Routes.tsx:MarkAsCompleted:click',
-                    message: 'Mark as Completed button clicked',
-                    data: { routeId: routeDetails.id, currentStatus: routeDetails.status },
-                    timestamp: Date.now(),
-                    sessionId: 'debug-session',
-                    runId: 'run1',
-                    hypothesisId: 'C'
-                  })
-                }).catch(() => {});
-                // #endregion
-                
                 console.log('[RouteDetailsModal] Sending PUT request to:', `/api/routes/${routeDetails.id}`);
                 console.log('[RouteDetailsModal] Request payload:', { status: 'completed' });
                 
                 const response = await api.put(`/api/routes/${routeDetails.id}`, { status: 'completed' });
                 
                 console.log('[RouteDetailsModal] Route update successful:', response.data);
-                
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    location: 'Routes.tsx:MarkAsCompleted:success',
-                    message: 'Route status updated successfully',
-                    data: { routeId: routeDetails.id, response: response.data },
-                    timestamp: Date.now(),
-                    sessionId: 'debug-session',
-                    runId: 'run1',
-                    hypothesisId: 'C'
-                  })
-                }).catch(() => {});
-                // #endregion
-                
+
                 console.log('[RouteDetailsModal] Refreshing routes list and closing modal');
                 onRefresh();
                 onClose(); // Close modal after update
@@ -771,28 +739,7 @@ function RouteDetailsModal({
                     baseURL: error?.config?.baseURL
                   }
                 });
-                
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    location: 'Routes.tsx:MarkAsCompleted:error',
-                    message: 'Error updating route status',
-                    data: {
-                      routeId: routeDetails.id,
-                      error: error?.message,
-                      status: error?.response?.status,
-                      response: error?.response?.data
-                    },
-                    timestamp: Date.now(),
-                    sessionId: 'debug-session',
-                    runId: 'run1',
-                    hypothesisId: 'C'
-                  })
-                }).catch(() => {});
-                // #endregion
-                
+
                 const errorMessage = error?.response?.data?.detail || error?.message || 'Unknown error';
                 alert(`Failed to update route status: ${errorMessage}`);
               }

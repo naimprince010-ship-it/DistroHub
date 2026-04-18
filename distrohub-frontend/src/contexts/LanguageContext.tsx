@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import en from '../i18n/locales/en.json';
 import bn from '../i18n/locales/bn.json';
 
@@ -30,7 +30,7 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
         document.documentElement.lang = language;
     }, [language]);
 
-    const t = (keyPath: string): string => {
+    const t = useCallback((keyPath: string): string => {
         const keys = keyPath.split('.');
         let current: any = translations[language];
 
@@ -44,7 +44,7 @@ export const LanguageProvider: React.FC<{ children: ReactNode }> = ({ children }
         }
 
         return typeof current === 'string' ? current : keyPath;
-    };
+    }, [language]);
 
     return (
         <LanguageContext.Provider value={{ language, setLanguage, t }}>

@@ -19,12 +19,33 @@ export function Login() {
     try {
       const response = await api.post('/api/auth/login', { email, password });
       const { access_token, user } = response.data;
-      localStorage.setItem('token', access_token);
+      localStorage.setItem('token', String(access_token).trim());
       localStorage.setItem('user', JSON.stringify(user));
       navigate('/');
     } catch (err: unknown) {
-      const error = err as { response?: { data?: { detail?: string } } };
-      setError(error.response?.data?.detail || 'Login failed. Please try again.');
+      const e = err as {
+        response?: { data?: { detail?: string | string[] } };
+        code?: string;
+        message?: string;
+        isNetworkError?: boolean;
+        isTimeout?: boolean;
+      };
+      if (e?.code === 'ERR_NETWORK' || e?.isNetworkError || e?.message?.includes?.('Network Error')) {
+        setError(
+          'Cannot reach the API server. Start the backend on the same URL as VITE_API_URL (default: http://localhost:8001), then try again.'
+        );
+      } else if (e?.code === 'ECONNABORTED' || e?.isTimeout) {
+        setError('Request timed out. If the backend was sleeping, wait a few seconds and try again.');
+      } else {
+        const detail = e.response?.data?.detail;
+        const msg =
+          typeof detail === 'string'
+            ? detail
+            : Array.isArray(detail)
+              ? detail.map((d) => (typeof d === 'object' && d && 'msg' in d ? String((d as { msg: string }).msg) : String(d))).join(' ')
+              : null;
+        setError(msg || 'Login failed. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }

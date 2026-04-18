@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Header } from '@/components/layout/Header';
 import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
@@ -13,28 +13,12 @@ import {
   ShoppingCart,
   FolderOpen,
   CheckCircle2,
+  RefreshCw,
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, LabelList } from 'recharts';
 import api from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
-
-const salesData = [
-  { name: 'Jan', sales: 4000, collections: 2400 },
-  { name: 'Feb', sales: 3000, collections: 1398 },
-  { name: 'Mar', sales: 2000, collections: 9800 },
-  { name: 'Apr', sales: 2780, collections: 3908 },
-  { name: 'May', sales: 1890, collections: 4800 },
-  { name: 'Jun', sales: 2390, collections: 3800 },
-  { name: 'Jul', sales: 3490, collections: 4300 },
-];
-
-const topProducts = [
-  { name: 'Akij Flour 1kg', sales: 1250 },
-  { name: 'Power Milk 400g', sales: 980 },
-  { name: 'Pampers Medium', sales: 850 },
-  { name: 'Rice Premium 5kg', sales: 720 },
-  { name: 'Sugar 1kg', sales: 650 },
-];
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface DashboardStats {
   total_sales: number;
@@ -51,426 +35,699 @@ interface DashboardStats {
   collections_this_month: number;
 }
 
-const recentOrders: Array<{
-  id: string;
-  retailer: string;
-  amount: number;
-  status: 'delivered' | 'pending' | 'confirmed';
-}> = [];
+interface SaleItemRow {
+  product_name?: string;
+  total?: number;
+}
 
-const expiringProducts = [
-  { name: 'Power Milk 400g', batch: 'BT-2024-001', expiry: '2025-01-15', qty: 50 },
-  { name: 'Akij Flour 1kg', batch: 'BT-2024-002', expiry: '2025-01-20', qty: 30 },
-  { name: 'Biscuit Pack', batch: 'BT-2024-003', expiry: '2025-01-25', qty: 100 },
-];
+interface SaleRow {
+  id: string;
+  invoice_number?: string;
+  retailer_name?: string;
+  total_amount?: number;
+  status?: string;
+  created_at: string | Date;
+  items?: SaleItemRow[];
+}
+
+interface PaymentRow {
+  amount?: number;
+  created_at: string | Date;
+}
+
+interface ExpiryAlertRow {
+  product_name: string;
+  batch_number: string;
+  expiry_date: string;
+  quantity: number;
+  days_until_expiry: number;
+}
+
+type RecentOrderStatus = 'delivered' | 'pending' | 'confirmed' | 'cancelled';
+
+function parseTs(v: string | Date): Date {
+  if (v instanceof Date) return v;
+  return new Date(v);
+}
+
+function monthKey(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function getLastNMonthBuckets(n: number, locale: string): { key: string; label: string }[] {
+  const out: { key: string; label: string }[] = [];
+  const now = new Date();
+  for (let i = n - 1; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    out.push({
+      key: monthKey(d),
+      label: d.toLocaleString(locale, { month: 'short', year: 'numeric' }),
+    });
+  }
+  return out;
+}
+
+function buildMonthlySeries(sales: SaleRow[], payments: PaymentRow[], locale: string) {
+  const months = getLastNMonthBuckets(6, locale);
+  const salesTot = new Map<string, number>();
+  const payTot = new Map<string, number>();
+  months.forEach((m) => {
+    salesTot.set(m.key, 0);
+    payTot.set(m.key, 0);
+  });
+
+  for (const s of sales) {
+    try {
+      const d = parseTs(s.created_at);
+      if (Number.isNaN(d.getTime())) continue;
+      const key = monthKey(d);
+      if (!salesTot.has(key)) continue;
+      salesTot.set(key, (salesTot.get(key) || 0) + Number(s.total_amount ?? 0));
+    } catch {
+      /* skip */
+    }
+  }
+  for (const p of payments) {
+    try {
+      const d = parseTs(p.created_at);
+      if (Number.isNaN(d.getTime())) continue;
+      const key = monthKey(d);
+      if (!payTot.has(key)) continue;
+      payTot.set(key, (payTot.get(key) || 0) + Number(p.amount ?? 0));
+    } catch {
+      /* skip */
+    }
+  }
+
+  return months.map((m) => ({
+    name: m.label,
+    sales: salesTot.get(m.key) || 0,
+    collections: payTot.get(m.key) || 0,
+  }));
+}
+
+function aggregateTopProducts(sales: SaleRow[], unknownLabel: string): { name: string; sales: number }[] {
+  const m = new Map<string, number>();
+  for (const s of sales) {
+    for (const it of s.items || []) {
+      const name = (it.product_name || '').trim() || unknownLabel;
+      m.set(name, (m.get(name) || 0) + (Number(it.total) || 0));
+    }
+  }
+  return [...m.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, salesVal]) => ({ name, sales: salesVal }));
+}
+
+function mapOrderStatus(s: string | undefined): RecentOrderStatus {
+  const v = (s || '').toLowerCase();
+  if (v === 'delivered' || v === 'pending' || v === 'confirmed' || v === 'cancelled') {
+    return v;
+  }
+  return 'pending';
+}
+
+function formatExpiryLabel(expiry: string | Date): string {
+  if (expiry instanceof Date) {
+    return Number.isNaN(expiry.getTime()) ? '' : expiry.toLocaleDateString();
+  }
+  const d = new Date(expiry);
+  return Number.isNaN(d.getTime()) ? String(expiry) : d.toLocaleDateString();
+}
+
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {Array.from({ length: 8 }).map((_, i) => (
+          <div key={i} className="rounded-xl border border-border bg-card p-5 space-y-4">
+            <div className="flex justify-between items-start">
+              <Skeleton className="h-11 w-11 rounded-xl" />
+              <Skeleton className="h-6 w-14 rounded-full" />
+            </div>
+            <Skeleton className="h-9 w-28" />
+            <Skeleton className="h-4 w-36" />
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+        <Skeleton className="h-[340px] rounded-xl border border-border" />
+        <Skeleton className="h-[340px] rounded-xl border border-border" />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+        <Skeleton className="h-[260px] rounded-xl border border-border" />
+        <Skeleton className="h-[260px] rounded-xl border border-border" />
+      </div>
+    </div>
+  );
+}
 
 export function Dashboard() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [salesMonthly, setSalesMonthly] = useState<{ name: string; sales: number; collections: number }[]>([]);
+  const [topProducts, setTopProducts] = useState<{ name: string; sales: number }[]>([]);
+  const [recentOrders, setRecentOrders] = useState<
+    { id: string; retailer: string; amount: number; status: RecentOrderStatus }[]
+  >([]);
+  const [expiringRows, setExpiringRows] = useState<
+    { name: string; batch: string; expiry: string; qty: number }[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const { t } = useLanguage();
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const { t, language } = useLanguage();
 
-  useEffect(() => {
-    const fetchDashboardStats = async () => {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        console.warn('[Dashboard] No token found, skipping stats fetch');
-        setLoading(false);
+  const locale = language === 'bn' ? 'bn-BD' : 'en-GB';
+
+  const loadDashboard = useCallback(async () => {
+    const token = localStorage.getItem('token')?.trim();
+    if (!token) {
+      console.warn('[Dashboard] No token found, skipping stats fetch');
+      setLoading(false);
+      return;
+    }
+
+    const loc = language === 'bn' ? 'bn-BD' : 'en-GB';
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [statsRes, salesRes, paymentsRes, expiryRes] = await Promise.all([
+        api.get<DashboardStats>('/api/dashboard/stats'),
+        api.get<SaleRow[]>('/api/sales'),
+        api.get<PaymentRow[]>('/api/payments'),
+        api.get<ExpiryAlertRow[]>('/api/expiry-alerts'),
+      ]);
+
+      setStats(statsRes.data);
+
+      const sales = Array.isArray(salesRes.data) ? salesRes.data : [];
+      const payments = Array.isArray(paymentsRes.data) ? paymentsRes.data : [];
+      const alerts = Array.isArray(expiryRes.data) ? expiryRes.data : [];
+
+      setSalesMonthly(buildMonthlySeries(sales, payments, loc));
+      setTopProducts(aggregateTopProducts(sales, t('dashboard.unknown_product')));
+
+      const recent = [...sales]
+        .sort((a, b) => parseTs(b.created_at).getTime() - parseTs(a.created_at).getTime())
+        .slice(0, 5)
+        .map((s) => ({
+          id: s.invoice_number || s.id,
+          retailer: s.retailer_name || '—',
+          amount: Number(s.total_amount ?? 0),
+          status: mapOrderStatus(s.status),
+        }));
+      setRecentOrders(recent);
+
+      const expiring = alerts
+        .filter((a) => a.quantity > 0 && a.days_until_expiry >= 0 && a.days_until_expiry <= 30)
+        .slice(0, 5)
+        .map((a) => ({
+          name: a.product_name,
+          batch: a.batch_number,
+          expiry: formatExpiryLabel(a.expiry_date),
+          qty: a.quantity,
+        }));
+      setExpiringRows(expiring);
+      setLastUpdated(new Date());
+    } catch (err: unknown) {
+      const e = err as {
+        isTimeout?: boolean;
+        code?: string;
+        message?: string;
+        isNetworkError?: boolean;
+        response?: { status?: number; data?: { detail?: string } };
+      };
+      console.error('[Dashboard] Error fetching dashboard data:', err);
+
+      if (e.isTimeout || e.code === 'ECONNABORTED' || e.message?.includes?.('timeout')) {
+        setError(t('dashboard.error_cold_start'));
+      } else if (e.isNetworkError || e.code === 'ERR_NETWORK') {
+        setError(t('dashboard.error_network'));
+      } else {
+        const d = e.response?.data?.detail;
+        setError(typeof d === 'string' ? d : t('dashboard.error_generic'));
+      }
+
+      if (e.response?.status === 401) {
         return;
       }
+    } finally {
+      setLoading(false);
+    }
+  }, [language, t]);
 
-      try {
-        setLoading(true);
-        setError(null);
-        const response = await api.get('/api/dashboard/stats');
-        setStats(response.data);
-      } catch (err: any) {
-        console.error('[Dashboard] Error fetching stats:', err);
-
-        if (err.isTimeout || err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
-          setError('Backend is starting up (cold start). This may take 30-60 seconds. Please wait and refresh the page.');
-        } else if (err.isNetworkError || err.code === 'ERR_NETWORK') {
-          setError('Cannot connect to the server. Please check your internet connection.');
-        } else {
-          setError(err.response?.data?.detail || err.message || 'Failed to load dashboard stats');
-        }
-
-        if (err.response?.status === 401) {
-          return;
-        }
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchDashboardStats();
-  }, []);
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
 
   const formatCurrency = (amount: number | null | undefined): string => {
-    return `৳\u00A0${(amount ?? 0).toLocaleString()}`;
+    return `৳\u00A0${(amount ?? 0).toLocaleString(locale)}`;
   };
 
-  const safeStats = stats ? {
-    total_sales: stats.total_sales ?? 0,
-    total_due: stats.total_due ?? 0,
-    total_products: stats.total_products ?? 0,
-    total_categories: stats.total_categories ?? 0,
-    total_purchases: stats.total_purchases ?? 0,
-    active_retailers: stats.active_retailers ?? 0,
-    low_stock_count: stats.low_stock_count ?? 0,
-    expiring_soon_count: stats.expiring_soon_count ?? 0,
-    payable_to_supplier: stats.payable_to_supplier ?? 0,
-    receivable_from_customers: stats.receivable_from_customers ?? 0,
-    sales_this_month: stats.sales_this_month ?? 0,
-    collections_this_month: stats.collections_this_month ?? 0,
-  } : null;
+  const orderStatusLabel = (status: RecentOrderStatus): string => {
+    switch (status) {
+      case 'delivered':
+        return t('dashboard.order_delivered');
+      case 'confirmed':
+        return t('dashboard.order_confirmed');
+      case 'cancelled':
+        return t('dashboard.order_cancelled');
+      default:
+        return t('dashboard.order_pending');
+    }
+  };
 
-  const displayStats = safeStats ? [
-    {
-      title: t('dashboard.total_sales'),
-      value: formatCurrency(safeStats.total_sales),
-      change: safeStats.sales_this_month > 0 ? `+${formatCurrency(safeStats.sales_this_month)}` : formatCurrency(0),
-      trend: 'up' as const,
-      icon: TrendingUp,
-      color: 'from-emerald-500 to-emerald-600',
-      bgTint: 'bg-emerald-500/10',
-      to: '/sales',
-    },
-    {
-      title: t('dashboard.receivable'),
-      value: formatCurrency(safeStats.receivable_from_customers),
-      change: safeStats.collections_this_month > 0 ? `+${formatCurrency(safeStats.collections_this_month)}` : formatCurrency(0),
-      trend: safeStats.receivable_from_customers > 0 ? 'down' as const : 'up' as const,
-      icon: TrendingDown,
-      color: 'from-rose-500 to-rose-600',
-      bgTint: 'bg-rose-500/10',
-      to: '/receivables',
-    },
-    {
-      title: t('dashboard.total_products'),
-      value: safeStats.total_products.toString(),
-      change: `${t('dashboard.total_categories')}: ${safeStats.total_categories}`,
-      trend: 'up' as const,
-      icon: Package,
-      color: 'from-blue-500 to-blue-600',
-      bgTint: 'bg-blue-500/10',
-      to: '/products',
-    },
-    {
-      title: t('dashboard.active_retailers'),
-      value: safeStats.active_retailers.toString(),
-      change: `${t('common.purchase')}: ${safeStats.total_purchases}`,
-      trend: 'up' as const,
-      icon: Users,
-      color: 'from-violet-500 to-violet-600',
-      bgTint: 'bg-violet-500/10',
-      to: '/retailers',
-    },
-    {
-      title: t('dashboard.low_stock'),
-      value: safeStats.low_stock_count.toString(),
-      change: t('dashboard.items'),
-      trend: safeStats.low_stock_count > 0 ? 'down' as const : 'up' as const,
-      icon: AlertTriangle,
-      color: 'from-amber-500 to-amber-600',
-      bgTint: 'bg-amber-500/10',
-      to: '/inventory?filter=low-stock',
-    },
-    {
-      title: t('dashboard.expiring_soon'),
-      value: safeStats.expiring_soon_count.toString(),
-      change: t('dashboard.within_30_days'),
-      trend: safeStats.expiring_soon_count > 0 ? 'down' as const : 'up' as const,
-      icon: AlertTriangle,
-      color: 'from-orange-500 to-orange-600',
-      bgTint: 'bg-orange-500/10',
-      to: '/expiry',
-    },
-    {
-      title: t('dashboard.payable_to_suppliers'),
-      value: formatCurrency(safeStats.payable_to_supplier),
-      change: t('dashboard.outstanding'),
-      trend: safeStats.payable_to_supplier > 0 ? 'down' as const : 'up' as const,
-      icon: ShoppingCart,
-      color: 'from-indigo-500 to-indigo-600',
-      bgTint: 'bg-indigo-500/10',
-      to: '/purchase',
-    },
-    {
-      title: t('dashboard.total_categories'),
-      value: safeStats.total_categories.toString(),
-      change: `${t('common.products')}: ${safeStats.total_products}`,
-      trend: 'up' as const,
-      icon: FolderOpen,
-      color: 'from-teal-500 to-teal-600',
-      bgTint: 'bg-teal-500/10',
-      to: '/products',
-    },
-  ] : [];
+  const safeStats = stats
+    ? {
+        total_sales: stats.total_sales ?? 0,
+        total_due: stats.total_due ?? 0,
+        total_products: stats.total_products ?? 0,
+        total_categories: stats.total_categories ?? 0,
+        total_purchases: stats.total_purchases ?? 0,
+        active_retailers: stats.active_retailers ?? 0,
+        low_stock_count: stats.low_stock_count ?? 0,
+        expiring_soon_count: stats.expiring_soon_count ?? 0,
+        payable_to_supplier: stats.payable_to_supplier ?? 0,
+        receivable_from_customers: stats.receivable_from_customers ?? 0,
+        sales_this_month: stats.sales_this_month ?? 0,
+        collections_this_month: stats.collections_this_month ?? 0,
+      }
+    : null;
+
+  const displayStats = safeStats
+    ? [
+        {
+          title: t('dashboard.total_sales'),
+          value: formatCurrency(safeStats.total_sales),
+          change:
+            safeStats.sales_this_month > 0
+              ? `+${formatCurrency(safeStats.sales_this_month)}`
+              : formatCurrency(0),
+          trend: 'up' as const,
+          icon: TrendingUp,
+          color: 'from-emerald-500 to-emerald-600',
+          bgTint: 'bg-emerald-500/10',
+          to: '/sales',
+        },
+        {
+          title: t('dashboard.receivable'),
+          value: formatCurrency(safeStats.receivable_from_customers),
+          change:
+            safeStats.collections_this_month > 0
+              ? `+${formatCurrency(safeStats.collections_this_month)}`
+              : formatCurrency(0),
+          trend: safeStats.receivable_from_customers > 0 ? ('down' as const) : ('up' as const),
+          icon: TrendingDown,
+          color: 'from-rose-500 to-rose-600',
+          bgTint: 'bg-rose-500/10',
+          to: '/receivables',
+        },
+        {
+          title: t('dashboard.total_products'),
+          value: safeStats.total_products.toString(),
+          change: `${t('dashboard.total_categories')}: ${safeStats.total_categories}`,
+          trend: 'up' as const,
+          icon: Package,
+          color: 'from-blue-500 to-blue-600',
+          bgTint: 'bg-blue-500/10',
+          to: '/products',
+        },
+        {
+          title: t('dashboard.active_retailers'),
+          value: safeStats.active_retailers.toString(),
+          change: `${t('common.purchase')}: ${safeStats.total_purchases}`,
+          trend: 'up' as const,
+          icon: Users,
+          color: 'from-violet-500 to-violet-600',
+          bgTint: 'bg-violet-500/10',
+          to: '/retailers',
+        },
+        {
+          title: t('dashboard.low_stock'),
+          value: safeStats.low_stock_count.toString(),
+          change: t('dashboard.items'),
+          trend: safeStats.low_stock_count > 0 ? ('down' as const) : ('up' as const),
+          icon: AlertTriangle,
+          color: 'from-amber-500 to-amber-600',
+          bgTint: 'bg-amber-500/10',
+          to: '/inventory?filter=low-stock',
+        },
+        {
+          title: t('dashboard.expiring_soon'),
+          value: safeStats.expiring_soon_count.toString(),
+          change: t('dashboard.within_30_days'),
+          trend: safeStats.expiring_soon_count > 0 ? ('down' as const) : ('up' as const),
+          icon: AlertTriangle,
+          color: 'from-orange-500 to-orange-600',
+          bgTint: 'bg-orange-500/10',
+          to: '/expiry',
+        },
+        {
+          title: t('dashboard.payable_to_suppliers'),
+          value: formatCurrency(safeStats.payable_to_supplier),
+          change: t('dashboard.outstanding'),
+          trend: safeStats.payable_to_supplier > 0 ? ('down' as const) : ('up' as const),
+          icon: ShoppingCart,
+          color: 'from-indigo-500 to-indigo-600',
+          bgTint: 'bg-indigo-500/10',
+          to: '/purchase',
+        },
+        {
+          title: t('dashboard.total_categories'),
+          value: safeStats.total_categories.toString(),
+          change: `${t('common.products')}: ${safeStats.total_products}`,
+          trend: 'up' as const,
+          icon: FolderOpen,
+          color: 'from-teal-500 to-teal-600',
+          bgTint: 'bg-teal-500/10',
+          to: '/products',
+        },
+      ]
+    : [];
+
+  const chartHasActivity = useMemo(
+    () => salesMonthly.some((row) => row.sales > 0 || row.collections > 0),
+    [salesMonthly]
+  );
 
   return (
     <div className="min-h-screen bg-background">
-      <Header title="Dashboard" />
+      <Header title={t('dashboard.title')} />
+
+      <div className="px-4 lg:px-6 pt-3 pb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border/60">
+        <p className="text-sm text-muted-foreground max-w-2xl">{t('dashboard.subtitle')}</p>
+        <div className="flex flex-wrap items-center gap-3">
+          {lastUpdated && !loading && (
+            <span className="text-xs text-muted-foreground tabular-nums">
+              {t('dashboard.last_updated')}:{' '}
+              {lastUpdated.toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' })}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => loadDashboard()}
+            disabled={loading}
+            className={cn(
+              'inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-medium',
+              'hover:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'disabled:opacity-60'
+            )}
+          >
+            <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} aria-hidden />
+            {t('dashboard.refresh')}
+          </button>
+        </div>
+      </div>
 
       <div className="p-4 lg:p-6 space-y-6">
-        {/* Stats Grid */}
         {loading ? (
-          <div className="bg-card rounded-xl p-8 text-center text-muted-foreground border border-border">
-            <div className="flex items-center justify-center gap-2">
-              <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-              <span>Loading dashboard statistics...</span>
-            </div>
+          <div aria-busy="true" aria-label={t('dashboard.loading')}>
+            <p className="sr-only">{t('dashboard.loading')}</p>
+            <DashboardSkeleton />
           </div>
         ) : error ? (
-          <div className="bg-destructive/10 border border-destructive/20 rounded-xl p-4 text-center text-destructive">
-            {error}
+          <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-6 text-center space-y-4">
+            <p className="text-destructive font-medium">{error}</p>
+            <button
+              type="button"
+              onClick={() => loadDashboard()}
+              className="inline-flex items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+            >
+              {t('dashboard.retry')}
+            </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {displayStats.map((stat) => (
-              <Link
-                key={stat.title}
-                to={stat.to}
-                className={cn(
-                  'group relative rounded-xl p-5 border border-border bg-card',
-                  'transition-all duration-300 ease-out',
-                  'hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5',
-                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-                )}
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className={cn(
-                    'w-11 h-11 rounded-xl flex items-center justify-center',
-                    'bg-gradient-to-br shadow-lg',
-                    stat.color
-                  )}>
-                    <stat.icon className="w-5 h-5 text-white" />
-                  </div>
-                  <span
-                    className={cn(
-                      'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium',
-                      stat.trend === 'up' 
-                        ? 'bg-emerald-500/10 text-emerald-600' 
-                        : 'bg-rose-500/10 text-rose-600'
-                    )}
-                  >
-                    {stat.trend === 'up' ? (
-                      <ArrowUpRight className="w-3 h-3" />
-                    ) : (
-                      <ArrowDownRight className="w-3 h-3" />
-                    )}
-                    <span className="truncate max-w-[100px]">{stat.change}</span>
-                  </span>
-                </div>
-                <h3 className="text-2xl lg:text-3xl font-bold text-foreground mb-1 tracking-tight">
-                  {stat.value}
-                </h3>
-                <p className="text-sm text-muted-foreground font-medium">{stat.title}</p>
-                
-                {/* Hover decoration */}
-                <div className={cn(
-                  'absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none',
-                  stat.bgTint
-                )} />
-              </Link>
-            ))}
-          </div>
-        )}
-
-        {/* Charts Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-          {/* Sales & Collections Chart */}
-          <div className="bg-card rounded-xl p-5 border border-border">
-            <h3 className="text-lg font-semibold text-foreground mb-4">{t('dashboard.sales_collections')}</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={salesData} margin={{ left: 0, right: 10, top: 10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis
-                  dataKey="name"
-                  stroke="hsl(var(--muted-foreground))"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis 
-                  stroke="hsl(var(--muted-foreground))" 
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(value) => `${(value / 1000).toFixed(0)}k`}
-                />
-                <Tooltip 
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                  }}
-                  labelStyle={{ color: 'hsl(var(--foreground))' }}
-                />
-                <Legend
-                  wrapperStyle={{ paddingTop: '10px' }}
-                  iconType="circle"
-                  formatter={(value) => (
-                    <span className="text-sm text-muted-foreground capitalize">{value}</span>
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {displayStats.map((stat) => (
+                <Link
+                  key={stat.title}
+                  to={stat.to}
+                  className={cn(
+                    'group relative rounded-xl p-5 border border-border bg-card',
+                    'transition-all duration-300 ease-out',
+                    'hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
                   )}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="sales"
-                  name="sales"
-                  stroke="hsl(var(--chart-1))"
-                  strokeWidth={2}
-                  dot={{ fill: 'hsl(var(--chart-1))', r: 4, strokeWidth: 0 }}
-                  activeDot={{ r: 6, strokeWidth: 0 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="collections"
-                  name="collections"
-                  stroke="hsl(var(--chart-2))"
-                  strokeWidth={2}
-                  dot={{ fill: 'hsl(var(--chart-2))', r: 4, strokeWidth: 0 }}
-                  activeDot={{ r: 6, strokeWidth: 0 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+                >
+                  <div className="flex items-start justify-between mb-4">
+                    <div
+                      className={cn(
+                        'w-11 h-11 rounded-xl flex items-center justify-center',
+                        'bg-gradient-to-br shadow-lg',
+                        stat.color
+                      )}
+                    >
+                      <stat.icon className="w-5 h-5 text-white" />
+                    </div>
+                    <span
+                      className={cn(
+                        'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium',
+                        stat.trend === 'up'
+                          ? 'bg-emerald-500/10 text-emerald-600'
+                          : 'bg-rose-500/10 text-rose-600'
+                      )}
+                    >
+                      {stat.trend === 'up' ? (
+                        <ArrowUpRight className="w-3 h-3" />
+                      ) : (
+                        <ArrowDownRight className="w-3 h-3" />
+                      )}
+                      <span className="truncate max-w-[100px]">{stat.change}</span>
+                    </span>
+                  </div>
+                  <h3 className="text-2xl lg:text-3xl font-bold text-foreground mb-1 tracking-tight">
+                    {stat.value}
+                  </h3>
+                  <p className="text-sm text-muted-foreground font-medium">{stat.title}</p>
 
-          {/* Top Products Chart */}
-          <div className="bg-card rounded-xl p-5 border border-border">
-            <h3 className="text-lg font-semibold text-foreground mb-4">Top Selling Products</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={topProducts} layout="vertical" margin={{ left: 0, right: 30, top: 10, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
-                <XAxis 
-                  type="number" 
-                  stroke="hsl(var(--muted-foreground))"
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis 
-                  dataKey="name" 
-                  type="category" 
-                  stroke="hsl(var(--muted-foreground))" 
-                  width={100}
-                  fontSize={12}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <Tooltip
-                  formatter={(value: number) => [`${value.toLocaleString()}`, 'Sales']}
-                  contentStyle={{
-                    backgroundColor: 'hsl(var(--card))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                  }}
-                  labelStyle={{ color: 'hsl(var(--foreground))' }}
-                />
-                <Bar dataKey="sales" fill="hsl(var(--primary))" radius={[0, 6, 6, 0]}>
-                  <LabelList
-                    dataKey="sales"
-                    position="insideRight"
-                    formatter={(value: number) => value.toLocaleString()}
-                    style={{ fill: 'white', fontSize: '11px', fontWeight: '600' }}
-                    offset={8}
+                  <div
+                    className={cn(
+                      'absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none',
+                      stat.bgTint
+                    )}
                   />
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Bottom Row */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-          {/* Recent Orders */}
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
-            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-foreground">{t('dashboard.recent_orders')}</h3>
-              <Link 
-                to="/sales" 
-                className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
-              >
-                {t('dashboard.view_all')}
-              </Link>
+                </Link>
+              ))}
             </div>
-            <div className="divide-y divide-border">
-              {recentOrders.length === 0 ? (
-                <div className="p-8 text-center">
-                  <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
-                    <Package className="w-6 h-6 text-muted-foreground" />
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+              <div className="bg-card rounded-xl p-5 border border-border">
+                <h3 className="text-lg font-semibold text-foreground mb-4">{t('dashboard.sales_collections')}</h3>
+                {!chartHasActivity ? (
+                  <div className="h-[300px] flex items-center justify-center text-sm text-muted-foreground text-center px-4">
+                    {t('dashboard.no_chart_data')}
                   </div>
-                  <p className="text-sm text-muted-foreground">{t('dashboard.no_recent_orders')}</p>
-                </div>
-              ) : (
-                recentOrders.map((order) => (
-                  <div key={order.id} className="px-5 py-4 flex items-center justify-between hover:bg-accent/50 transition-colors">
-                    <div>
-                      <p className="font-medium text-foreground">{order.id}</p>
-                      <p className="text-sm text-muted-foreground">{order.retailer}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-foreground">{formatCurrency(order.amount)}</p>
-                      <span
-                        className={cn(
-                          'inline-block px-2 py-0.5 text-xs font-medium rounded-full',
-                          order.status === 'delivered'
-                            ? 'bg-emerald-500/10 text-emerald-600'
-                            : order.status === 'confirmed'
-                              ? 'bg-blue-500/10 text-blue-600'
-                              : 'bg-amber-500/10 text-amber-600'
+                ) : (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={salesMonthly} margin={{ left: 0, right: 10, top: 10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                      <XAxis
+                        dataKey="name"
+                        stroke="hsl(var(--muted-foreground))"
+                        fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <YAxis
+                        stroke="hsl(var(--muted-foreground))"
+                        fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(value: number) =>
+                          value >= 1000 ? `${(value / 1000).toFixed(0)}k` : `${value}`
+                        }
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--card))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                        }}
+                        labelStyle={{ color: 'hsl(var(--foreground))' }}
+                        formatter={(value: number) => formatCurrency(value)}
+                      />
+                      <Legend
+                        wrapperStyle={{ paddingTop: '10px' }}
+                        iconType="circle"
+                        formatter={(value) => (
+                          <span className="text-sm text-muted-foreground">{value}</span>
                         )}
-                      >
-                        {order.status}
-                      </span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="sales"
+                        name={t('dashboard.chart_legend_sales')}
+                        stroke="hsl(var(--chart-1))"
+                        strokeWidth={2}
+                        dot={{ fill: 'hsl(var(--chart-1))', r: 4, strokeWidth: 0 }}
+                        activeDot={{ r: 6, strokeWidth: 0 }}
+                      />
+                      <Line
+                        type="monotone"
+                        dataKey="collections"
+                        name={t('dashboard.chart_legend_collections')}
+                        stroke="hsl(var(--chart-2))"
+                        strokeWidth={2}
+                        dot={{ fill: 'hsl(var(--chart-2))', r: 4, strokeWidth: 0 }}
+                        activeDot={{ r: 6, strokeWidth: 0 }}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
 
-          {/* Expiring Products */}
-          <div className="bg-card rounded-xl border border-border overflow-hidden">
-            <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                <AlertTriangle className="w-5 h-5 text-amber-500" />
-                {t('dashboard.expiring_soon')}
-              </h3>
-              <Link 
-                to="/expiry" 
-                className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
-              >
-                {t('dashboard.view_all')}
-              </Link>
-            </div>
-            <div className="divide-y divide-border">
-              {safeStats?.expiring_soon_count === 0 ? (
-                <div className="p-8 text-center">
-                  <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-3">
-                    <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+              <div className="bg-card rounded-xl p-5 border border-border">
+                <h3 className="text-lg font-semibold text-foreground mb-4">{t('dashboard.top_selling_products')}</h3>
+                {topProducts.length === 0 ? (
+                  <div className="h-[300px] flex items-center justify-center text-sm text-muted-foreground text-center px-4">
+                    {t('dashboard.no_top_products')}
                   </div>
-                  <p className="text-sm text-muted-foreground">No products expiring soon</p>
+                ) : (
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={topProducts} layout="vertical" margin={{ left: 0, right: 30, top: 10, bottom: 5 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
+                      <XAxis
+                        type="number"
+                        stroke="hsl(var(--muted-foreground))"
+                        fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <YAxis
+                        dataKey="name"
+                        type="category"
+                        stroke="hsl(var(--muted-foreground))"
+                        width={100}
+                        fontSize={12}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <Tooltip
+                        formatter={(value: number) => [formatCurrency(value), t('dashboard.total_sales')]}
+                        contentStyle={{
+                          backgroundColor: 'hsl(var(--card))',
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '8px',
+                          boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                        }}
+                        labelStyle={{ color: 'hsl(var(--foreground))' }}
+                      />
+                      <Bar dataKey="sales" fill="hsl(var(--primary))" radius={[0, 6, 6, 0]}>
+                        <LabelList
+                          dataKey="sales"
+                          position="insideRight"
+                          formatter={(value: number) => formatCurrency(value)}
+                          style={{ fill: 'white', fontSize: '11px', fontWeight: '600' }}
+                          offset={8}
+                        />
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+              <div className="bg-card rounded-xl border border-border overflow-hidden">
+                <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-foreground">{t('dashboard.recent_orders')}</h3>
+                  <Link
+                    to="/sales"
+                    className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                  >
+                    {t('dashboard.view_all')}
+                  </Link>
                 </div>
-              ) : (
-                expiringProducts.map((product, index) => (
-                  <div key={index} className="px-5 py-4 flex items-center justify-between hover:bg-accent/50 transition-colors">
-                    <div>
-                      <p className="font-medium text-foreground">{product.name}</p>
-                      <p className="text-sm text-muted-foreground">Batch: {product.batch}</p>
+                <div className="divide-y divide-border">
+                  {recentOrders.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
+                        <Package className="w-6 h-6 text-muted-foreground" />
+                      </div>
+                      <p className="text-sm text-muted-foreground">{t('dashboard.no_recent_orders')}</p>
                     </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-amber-600">{product.expiry}</p>
-                      <p className="text-sm text-muted-foreground">{product.qty} units</p>
+                  ) : (
+                    recentOrders.map((order) => (
+                      <div
+                        key={order.id}
+                        className="px-5 py-4 flex items-center justify-between hover:bg-accent/50 transition-colors"
+                      >
+                        <div>
+                          <p className="font-medium text-foreground">{order.id}</p>
+                          <p className="text-sm text-muted-foreground">{order.retailer}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-foreground">{formatCurrency(order.amount)}</p>
+                          <span
+                            className={cn(
+                              'inline-block px-2 py-0.5 text-xs font-medium rounded-full',
+                              order.status === 'delivered'
+                                ? 'bg-emerald-500/10 text-emerald-600'
+                                : order.status === 'confirmed'
+                                  ? 'bg-blue-500/10 text-blue-600'
+                                  : order.status === 'cancelled'
+                                    ? 'bg-slate-500/10 text-slate-600'
+                                    : 'bg-amber-500/10 text-amber-600'
+                            )}
+                          >
+                            {orderStatusLabel(order.status)}
+                          </span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-card rounded-xl border border-border overflow-hidden">
+                <div className="px-5 py-4 border-b border-border flex items-center justify-between">
+                  <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 text-amber-500" />
+                    {t('dashboard.expiring_soon')}
+                  </h3>
+                  <Link to="/expiry" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
+                    {t('dashboard.view_all')}
+                  </Link>
+                </div>
+                <div className="divide-y divide-border">
+                  {expiringRows.length === 0 ? (
+                    <div className="p-8 text-center">
+                      <div className="w-12 h-12 rounded-full bg-emerald-500/10 flex items-center justify-center mx-auto mb-3">
+                        <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+                      </div>
+                      <p className="text-sm text-muted-foreground">{t('dashboard.no_expiring_list')}</p>
                     </div>
-                  </div>
-                ))
-              )}
+                  ) : (
+                    expiringRows.map((product, index) => (
+                      <div
+                        key={`${product.batch}-${index}`}
+                        className="px-5 py-4 flex items-center justify-between hover:bg-accent/50 transition-colors"
+                      >
+                        <div>
+                          <p className="font-medium text-foreground">{product.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {t('common.batch')}: {product.batch}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-semibold text-amber-600">{product.expiry}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {product.qty} {t('dashboard.items')}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
     </div>
   );

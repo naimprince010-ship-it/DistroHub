@@ -329,25 +329,13 @@ export function Products() {
   const activeFiltersCount = [categoryFilter, stockFilter, expiryFilter].filter(f => f !== 'all').length;
 
   const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    // #region agent log
-    fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'Products.tsx:261', message: 'Excel import function called', data: { hasFile: !!e.target.files?.[0] }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
-    // #endregion
     const file = e.target.files?.[0];
     if (!file) return;
 
     try {
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'Products.tsx:266', message: 'Excel import started', data: { hasWorkbook: typeof Workbook !== 'undefined' }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
-      // #endregion
       const workbook = new Workbook();
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'Products.tsx:268', message: 'Workbook created', data: { workbookType: typeof workbook }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
-      // #endregion
       const buffer = await file.arrayBuffer();
       await workbook.xlsx.load(buffer);
-      // #region agent log
-      fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ location: 'Products.tsx:271', message: 'Workbook loaded', data: { worksheetsCount: workbook.worksheets?.length || 0 }, timestamp: Date.now(), sessionId: 'debug-session', runId: 'run1', hypothesisId: 'C' }) }).catch(() => { });
-      // #endregion
 
       const worksheet = workbook.worksheets[0];
       const jsonData: Product[] = [];

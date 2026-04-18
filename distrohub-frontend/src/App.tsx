@@ -26,7 +26,7 @@ import { useEffect } from 'react';
 const queryClient = new QueryClient();
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('token')?.trim();
   if (!token) {
     return <Navigate to="/login" replace />;
   }

@@ -1,8 +1,9 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import {
   User,
+  UserCircle,
   Building,
   Bell,
   Shield,
@@ -57,47 +58,63 @@ export function Settings() {
     setActiveTab(urlTab);
   }, [searchParams]);
 
-  const tabs = [
-    { id: 'suppliers', label: t('common.suppliers'), icon: Truck },
-    { id: 'categories', label: t('common.categories'), icon: Tags },
-    { id: 'units', label: t('common.units'), icon: Ruler },
-    { id: 'market-routes', label: t('common.routes'), icon: MapPin },
-    { id: 'sales-reps', label: t('common.sales_reps'), icon: User },
-    { id: 'profile', label: t('common.profile'), icon: User },
-    { id: 'business', label: t('common.business'), icon: Building },
-    { id: 'notifications', label: t('common.notifications'), icon: Bell },
-    { id: 'security', label: t('common.security'), icon: Shield },
-    { id: 'appearance', label: t('settings.appearance'), icon: Palette },
-  ];
+  const tabs = useMemo(
+    () => [
+      { id: 'suppliers', label: t('common.suppliers'), icon: Truck },
+      { id: 'categories', label: t('common.categories'), icon: Tags },
+      { id: 'units', label: t('common.units'), icon: Ruler },
+      { id: 'market-routes', label: t('common.routes'), icon: MapPin },
+      { id: 'sales-reps', label: t('common.sales_reps'), icon: User },
+      { id: 'profile', label: t('common.profile'), icon: UserCircle },
+      { id: 'business', label: t('common.business'), icon: Building },
+      { id: 'notifications', label: t('common.notifications'), icon: Bell },
+      { id: 'security', label: t('common.security'), icon: Shield },
+      { id: 'appearance', label: t('settings.appearance'), icon: Palette },
+    ],
+    [t]
+  );
 
-  const handleTabChange = (tabId: string) => {
-    setActiveTab(tabId);
-    setSearchParams({ tab: tabId });
-  };
+  const handleTabChange = useCallback(
+    (tabId: string) => {
+      setActiveTab(tabId);
+      setSearchParams({ tab: tabId });
+    },
+    [setSearchParams]
+  );
 
   return (
     <div className="min-h-screen">
-      <Header title="Settings" />
+      <Header title={t('settings.title')} />
 
-      <div className="p-3">
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="flex border-b border-slate-200">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => handleTabChange(tab.id)}
-                className={`flex items-center gap-2 px-3 py-2 font-medium transition-colors ${activeTab === tab.id
-                  ? 'text-primary-600 border-b-2 border-primary-600'
-                  : 'text-slate-500 hover:text-slate-700'
-                  }`}
-              >
-                <tab.icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            ))}
+      <div className="p-3 md:p-4 max-w-[1600px] mx-auto">
+        <p className="text-sm text-slate-600 mb-3">{t('settings.subtitle')}</p>
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+          <div
+            className="border-b border-slate-200 bg-slate-50/80"
+            role="tablist"
+            aria-label={t('settings.tabs_aria')}
+          >
+            <div className="flex gap-0 overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent px-1">
+              {tabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={activeTab === tab.id}
+                  onClick={() => handleTabChange(tab.id)}
+                  className={`flex shrink-0 items-center gap-2 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${activeTab === tab.id
+                    ? 'text-primary-600 border-primary-600 bg-white'
+                    : 'text-slate-500 border-transparent hover:text-slate-800 hover:bg-white/60'
+                    }`}
+                >
+                  <tab.icon className="w-4 h-4 shrink-0 opacity-90" aria-hidden />
+                  {tab.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          <div className="p-3">
+          <div className="p-3 md:p-4">
             {activeTab === 'suppliers' && <SupplierManagement />}
             {activeTab === 'categories' && <CategoryManagement />}
             {activeTab === 'units' && <UnitManagement />}
@@ -106,8 +123,6 @@ export function Settings() {
             {activeTab === 'profile' && <ProfileSettings />}
             {activeTab === 'business' && <BusinessSettings />}
             {activeTab === 'notifications' && <NotificationSettings />}
-            {activeTab === 'sms-templates' && <div className="p-4 text-center text-slate-500">SMS Template Management - Coming Soon</div>}
-            {activeTab === 'sms-logs' && <div className="p-4 text-center text-slate-500">SMS Logs View - Coming Soon</div>}
             {activeTab === 'security' && <SecuritySettings />}
             {activeTab === 'appearance' && <AppearanceSettings />}
           </div>
@@ -129,6 +144,7 @@ interface Supplier {
 }
 
 function SupplierManagement() {
+  const { t } = useLanguage();
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -279,7 +295,7 @@ function SupplierManagement() {
         // Don't clear suppliers - keep what we have
       } else {
         // Only show error for actual errors (not timeouts/network)
-        setError(error?.response?.data?.detail || error?.message || 'Failed to load suppliers');
+        setError(error?.response?.data?.detail || error?.message || t('settings.load_failed'));
         // Only clear if we don't have any suppliers yet
         if (storedSuppliers.length === 0) {
           setSuppliers([]);
@@ -306,7 +322,7 @@ function SupplierManagement() {
     }
 
     if (!formData.name || !formData.name.trim() || !formData.phone || !formData.phone.trim()) {
-      alert('Supplier name and phone are required');
+      alert(t('settings.required_supplier'));
       return;
     }
 
@@ -417,9 +433,9 @@ function SupplierManagement() {
       logger.log('[SupplierManagement] Supplier operation completed successfully');
     } catch (error: any) {
       console.error('[SupplierManagement] Failed to save supplier:', error);
-      const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to save supplier';
+      const errorMessage = error?.response?.data?.detail || error?.message || t('settings.save_failed');
       setError(errorMessage);
-      alert(`Failed to save supplier: ${errorMessage}`);
+      alert(`${t('settings.save_failed')}: ${errorMessage}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -460,16 +476,16 @@ function SupplierManagement() {
         console.error('[SupplierManagement] Failed to delete supplier on server:', deleteError);
         // Revert optimistic update
         await fetchSuppliers();
-        const errorMessage = deleteError?.response?.data?.detail || deleteError?.message || 'Failed to delete supplier';
-        alert(`Failed to delete supplier: ${errorMessage}`);
+        const errorMessage = deleteError?.response?.data?.detail || deleteError?.message || t('settings.delete_failed');
+        alert(`${t('settings.delete_failed')}: ${errorMessage}`);
         return;
       }
 
       setDeleteConfirm(null);
     } catch (error: any) {
       console.error('[SupplierManagement] Failed to delete supplier:', error);
-      const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to delete supplier';
-      alert(`Failed to delete supplier: ${errorMessage}`);
+      const errorMessage = error?.response?.data?.detail || error?.message || t('settings.delete_failed');
+      alert(`${t('settings.delete_failed')}: ${errorMessage}`);
     }
   };
 
@@ -477,9 +493,9 @@ function SupplierManagement() {
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-900">Supplier Management</h3>
+          <h3 className="text-lg font-semibold text-slate-900">{t('settings.supplier_title')}</h3>
         </div>
-        <div className="text-center py-8 text-slate-500">Loading suppliers...</div>
+        <div className="text-center py-8 text-slate-500">{t('settings.supplier_loading')}</div>
       </div>
     );
   }
@@ -487,10 +503,10 @@ function SupplierManagement() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-slate-900">Supplier Management</h3>
+        <h3 className="text-lg font-semibold text-slate-900">{t('settings.supplier_title')}</h3>
         <button onClick={() => { setShowModal(true); setEditingSupplier(null); setFormData({ name: '', phone: '', address: '', company: '' }); }} className="btn-primary flex items-center gap-2">
           <Plus className="w-4 h-4" />
-          Add Supplier
+          {t('settings.supplier_add')}
         </button>
       </div>
 
@@ -504,7 +520,7 @@ function SupplierManagement() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <input
           type="text"
-          placeholder="Search suppliers..."
+          placeholder={t('settings.supplier_search_ph')}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="input-field pl-10"
@@ -515,11 +531,11 @@ function SupplierManagement() {
         <table className="w-full">
           <thead>
             <tr className="bg-slate-50">
-              <th className="text-left p-2 font-medium text-slate-600">Name</th>
-              <th className="text-left p-2 font-medium text-slate-600">Contact Person</th>
-              <th className="text-left p-2 font-medium text-slate-600">Phone</th>
-              <th className="text-left p-2 font-medium text-slate-600">Address</th>
-              <th className="text-left p-2 font-medium text-slate-600">Actions</th>
+              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_name')}</th>
+              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_contact')}</th>
+              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_phone')}</th>
+              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_address')}</th>
+              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -566,7 +582,7 @@ function SupplierManagement() {
           </tbody>
         </table>
         {filteredSuppliers.length === 0 && !loading && (
-          <div className="text-center py-8 text-slate-500">No suppliers found</div>
+          <div className="text-center py-8 text-slate-500">{t('settings.supplier_none')}</div>
         )}
       </div>
 
@@ -574,7 +590,7 @@ function SupplierManagement() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-4 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h4 className="text-lg font-semibold">{editingSupplier ? 'Edit Supplier' : 'Add Supplier'}</h4>
+              <h4 className="text-lg font-semibold">{editingSupplier ? t('settings.supplier_modal_edit') : t('settings.supplier_modal_add')}</h4>
               <button
                 onClick={() => {
                   setShowModal(false);
@@ -589,43 +605,43 @@ function SupplierManagement() {
             </div>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Supplier Name *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.field_supplier_name')} *</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="input-field"
-                  placeholder="Enter supplier name"
+                  placeholder={t('settings.field_supplier_name_ph')}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Company Name *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.field_company')} *</label>
                 <input
                   type="text"
                   value={formData.company}
                   onChange={(e) => setFormData({ ...formData, company: e.target.value })}
                   className="input-field"
-                  placeholder="Enter company name"
+                  placeholder={t('settings.field_company_ph')}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Phone Number *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.field_phone')} *</label>
                 <input
                   type="tel"
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   className="input-field"
-                  placeholder="01XXXXXXXXX"
+                  placeholder={t('settings.field_phone_ph')}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Address</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.field_address')}</label>
                 <textarea
                   value={formData.address}
                   onChange={(e) => setFormData({ ...formData, address: e.target.value })}
                   className="input-field"
                   rows={2}
-                  placeholder="Enter address"
+                  placeholder={t('settings.field_address_ph')}
                 />
               </div>
               <div className="flex gap-2 pt-2">
@@ -638,14 +654,14 @@ function SupplierManagement() {
                   }}
                   className="btn-secondary flex-1"
                 >
-                  Cancel
+                  {t('products.cancel')}
                 </button>
                 <button
                   onClick={handleSubmit}
                   disabled={!formData.name || !formData.phone || isSubmitting}
                   className="btn-primary flex-1 disabled:opacity-50"
                 >
-                  {isSubmitting ? 'Saving...' : editingSupplier ? 'Update' : 'Add'} Supplier
+                  {isSubmitting ? t('settings.saving') : editingSupplier ? t('settings.supplier_modal_edit') : t('settings.supplier_modal_add')}
                 </button>
               </div>
             </div>
@@ -661,13 +677,13 @@ function SupplierManagement() {
                 <AlertTriangle className="w-5 h-5 text-red-600" />
               </div>
               <div>
-                <h4 className="font-semibold text-slate-900">Delete Supplier?</h4>
-                <p className="text-sm text-slate-500">This action cannot be undone.</p>
+                <h4 className="font-semibold text-slate-900">{t('settings.delete_supplier_title')}</h4>
+                <p className="text-sm text-slate-500">{t('settings.delete_supplier_body')}</p>
               </div>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setDeleteConfirm(null)} className="btn-secondary flex-1">Cancel</button>
-              <button onClick={() => handleDelete(deleteConfirm)} className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 flex-1">Delete</button>
+              <button onClick={() => setDeleteConfirm(null)} className="btn-secondary flex-1">{t('products.cancel')}</button>
+              <button onClick={() => handleDelete(deleteConfirm)} className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 flex-1">{t('common.delete')}</button>
             </div>
           </div>
         </div>
@@ -686,6 +702,7 @@ interface SalesRep {
 }
 
 function SalesRepManagement() {
+  const { t } = useLanguage();
   const [salesReps, setSalesReps] = useState<SalesRep[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -725,7 +742,7 @@ function SalesRepManagement() {
       }
     } catch (error: any) {
       console.error('[SalesRepManagement] Failed to fetch sales reps:', error);
-      setError(error?.response?.data?.detail || error?.message || 'Failed to load sales reps');
+      setError(error?.response?.data?.detail || error?.message || t('settings.load_failed'));
       setSalesReps([]);
     } finally {
       setLoading(false);
@@ -744,12 +761,12 @@ function SalesRepManagement() {
     if (isSubmitting) return;
 
     if (!formData.name || !formData.name.trim() || !formData.email || !formData.email.trim()) {
-      alert('Name and email are required');
+      alert(t('settings.required_sales_rep'));
       return;
     }
 
     if (!editingRep && !formData.password) {
-      alert('Password is required for new sales rep');
+      alert(t('settings.required_sales_rep_password'));
       return;
     }
 
@@ -786,9 +803,9 @@ function SalesRepManagement() {
       setFormData({ name: '', email: '', phone: '', password: '' });
     } catch (error: any) {
       console.error('[SalesRepManagement] Failed to save sales rep:', error);
-      const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to save sales rep';
+      const errorMessage = error?.response?.data?.detail || error?.message || t('settings.save_failed');
       setError(errorMessage);
-      alert(`Failed to save sales rep: ${errorMessage}`);
+      alert(`${t('settings.save_failed')}: ${errorMessage}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -807,21 +824,13 @@ function SalesRepManagement() {
 
   const handleDelete = async (id: string) => {
     try {
-      // Get rep name for confirmation
-      const rep = salesReps.find(r => r.id === id);
-      const repName = rep?.name || 'this sales rep';
-
-      if (!confirm(`Are you sure you want to delete ${repName}? This will remove their assignment from any assigned orders. This action cannot be undone.`)) {
-        return;
-      }
-
       await api.delete(`/api/users/${id}`);
       await fetchSalesReps();
       setDeleteConfirm(null);
     } catch (error: any) {
       console.error('[SalesRepManagement] Failed to delete sales rep:', error);
-      const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to delete sales rep';
-      alert(`Failed to delete sales rep: ${errorMessage}`);
+      const errorMessage = error?.response?.data?.detail || error?.message || t('settings.delete_failed');
+      alert(`${t('settings.delete_failed')}: ${errorMessage}`);
     }
   };
 
@@ -829,9 +838,9 @@ function SalesRepManagement() {
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-900">Sales Rep Management</h3>
+          <h3 className="text-lg font-semibold text-slate-900">{t('settings.sales_rep_title')}</h3>
         </div>
-        <div className="text-center py-8 text-slate-500">Loading sales reps...</div>
+        <div className="text-center py-8 text-slate-500">{t('settings.sales_rep_loading')}</div>
       </div>
     );
   }
@@ -839,7 +848,7 @@ function SalesRepManagement() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-slate-900">Sales Rep Management</h3>
+        <h3 className="text-lg font-semibold text-slate-900">{t('settings.sales_rep_title')}</h3>
         <button
           onClick={() => {
             setShowModal(true);
@@ -850,7 +859,7 @@ function SalesRepManagement() {
           className="btn-primary flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
-          Add Sales Rep
+          {t('settings.sales_rep_add')}
         </button>
       </div>
 
@@ -864,7 +873,7 @@ function SalesRepManagement() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <input
           type="text"
-          placeholder="Search sales reps..."
+          placeholder={t('settings.sales_rep_search_ph')}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="input-field pl-10"
@@ -875,10 +884,10 @@ function SalesRepManagement() {
         <table className="w-full">
           <thead>
             <tr className="bg-slate-50">
-              <th className="text-left p-2 font-medium text-slate-600">Name</th>
-              <th className="text-left p-2 font-medium text-slate-600">Email</th>
-              <th className="text-left p-2 font-medium text-slate-600">Phone</th>
-              <th className="text-left p-2 font-medium text-slate-600">Actions</th>
+              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_name')}</th>
+              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_email')}</th>
+              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_phone')}</th>
+              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -917,7 +926,7 @@ function SalesRepManagement() {
           </tbody>
         </table>
         {filteredReps.length === 0 && !loading && (
-          <div className="text-center py-8 text-slate-500">No sales reps found</div>
+          <div className="text-center py-8 text-slate-500">{t('settings.sales_rep_none')}</div>
         )}
       </div>
 
@@ -925,7 +934,7 @@ function SalesRepManagement() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-4 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h4 className="text-lg font-semibold">{editingRep ? 'Edit Sales Rep' : 'Add Sales Rep'}</h4>
+              <h4 className="text-lg font-semibold">{editingRep ? t('settings.sales_rep_modal_edit') : t('settings.sales_rep_modal_add')}</h4>
               <button
                 onClick={() => {
                   setShowModal(false);
@@ -940,47 +949,47 @@ function SalesRepManagement() {
             </div>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Name *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.field_full_name')} *</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="input-field"
-                  placeholder="Enter sales rep name"
+                  placeholder={t('settings.field_name_ph')}
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Email *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.field_email')} *</label>
                 <input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="input-field"
-                  placeholder="salesrep@example.com"
+                  placeholder={t('settings.field_email_ph')}
                   required
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.table_phone')}</label>
                 <input
                   type="tel"
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   className="input-field"
-                  placeholder="01XXXXXXXXX"
+                  placeholder={t('settings.field_phone_ph')}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Password {editingRep ? '(leave empty to keep current)' : '*'}
+                  {t('settings.field_password')} {editingRep ? t('settings.field_password_edit_hint') : '*'}
                 </label>
                 <input
                   type="password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="input-field"
-                  placeholder={editingRep ? 'Enter new password (optional)' : 'Enter password'}
+                  placeholder={editingRep ? t('settings.field_password_new_ph') : t('settings.field_password_create_ph')}
                   required={!editingRep}
                 />
               </div>
@@ -994,14 +1003,14 @@ function SalesRepManagement() {
                   }}
                   className="btn-secondary flex-1"
                 >
-                  Cancel
+                  {t('products.cancel')}
                 </button>
                 <button
                   onClick={handleSubmit}
                   disabled={!formData.name || !formData.email || (!editingRep && !formData.password) || isSubmitting}
                   className="btn-primary flex-1 disabled:opacity-50"
                 >
-                  {isSubmitting ? 'Saving...' : editingRep ? 'Update' : 'Add'} Sales Rep
+                  {isSubmitting ? t('settings.saving') : editingRep ? t('settings.sales_rep_modal_edit') : t('settings.sales_rep_modal_add')}
                 </button>
               </div>
             </div>
@@ -1017,13 +1026,13 @@ function SalesRepManagement() {
                 <AlertTriangle className="w-5 h-5 text-red-600" />
               </div>
               <div>
-                <h4 className="font-semibold text-slate-900">Delete Sales Rep?</h4>
-                <p className="text-sm text-slate-500">This will remove their assignment from any assigned orders. This action cannot be undone.</p>
+                <h4 className="font-semibold text-slate-900">{t('settings.delete_sales_rep_title')}</h4>
+                <p className="text-sm text-slate-500">{t('settings.delete_sales_rep_body')}</p>
               </div>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setDeleteConfirm(null)} className="btn-secondary flex-1">Cancel</button>
-              <button onClick={() => handleDelete(deleteConfirm)} className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 flex-1">Delete</button>
+              <button onClick={() => setDeleteConfirm(null)} className="btn-secondary flex-1">{t('products.cancel')}</button>
+              <button onClick={() => handleDelete(deleteConfirm)} className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 flex-1">{t('common.delete')}</button>
             </div>
           </div>
         </div>
@@ -1033,6 +1042,7 @@ function SalesRepManagement() {
 }
 
 function CategoryManagement() {
+  const { t } = useLanguage();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -1066,11 +1076,11 @@ function CategoryManagement() {
 
       // Show user-friendly error message
       if (error.isTimeout || error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-        alert('Backend is starting up (cold start). This may take 30-60 seconds. Please wait and try again.');
+        alert(t('dashboard.error_cold_start'));
       } else if (error.isNetworkError || error.code === 'ERR_NETWORK') {
-        alert('Cannot connect to the server. Please check your internet connection.');
+        alert(t('dashboard.error_network'));
       } else {
-        alert(`Failed to load categories: ${error.response?.data?.detail || error.message || 'Unknown error'}`);
+        alert(`${t('settings.load_failed')}: ${error.response?.data?.detail || error.message || ''}`);
       }
     } finally {
       setLoading(false);
@@ -1093,7 +1103,7 @@ function CategoryManagement() {
     }
 
     if (!formData.name || !formData.name.trim()) {
-      alert('Category name is required');
+      alert(t('settings.required_category_name'));
       return;
     }
 
@@ -1197,7 +1207,7 @@ function CategoryManagement() {
         errorMessage = error.message;
       }
 
-      alert(`Failed to save category: ${errorMessage}`);
+      alert(`${t('settings.save_failed')}: ${errorMessage}`);
     }
   };
 
@@ -1227,9 +1237,9 @@ function CategoryManagement() {
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-900">Category Management</h3>
+          <h3 className="text-lg font-semibold text-slate-900">{t('settings.category_title')}</h3>
         </div>
-        <div className="text-center py-8 text-slate-500">Loading categories...</div>
+        <div className="text-center py-8 text-slate-500">{t('settings.category_loading')}</div>
       </div>
     );
   }
@@ -1237,10 +1247,10 @@ function CategoryManagement() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-slate-900">Category Management</h3>
+        <h3 className="text-lg font-semibold text-slate-900">{t('settings.category_title')}</h3>
         <button onClick={() => { setShowModal(true); setEditingCategory(null); setFormData({ name: '', description: '', color: '#4F46E5' }); }} className="btn-primary flex items-center gap-2">
           <Plus className="w-4 h-4" />
-          Add Category
+          {t('settings.category_add')}
         </button>
       </div>
 
@@ -1248,7 +1258,7 @@ function CategoryManagement() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <input
           type="text"
-          placeholder="Search categories..."
+          placeholder={t('settings.category_search_ph')}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="input-field pl-10"
@@ -1265,7 +1275,7 @@ function CategoryManagement() {
                 </div>
                 <div>
                   <h4 className="font-medium text-slate-900">{category.name}</h4>
-                  <p className="text-xs text-slate-500">{category.product_count} products</p>
+                  <p className="text-xs text-slate-500">{category.product_count} {t('settings.products_suffix')}</p>
                 </div>
               </div>
               <div className="flex items-center gap-1">
@@ -1284,14 +1294,14 @@ function CategoryManagement() {
         ))}
       </div>
       {filteredCategories.length === 0 && !loading && (
-        <div className="text-center py-8 text-slate-500">No categories found</div>
+        <div className="text-center py-8 text-slate-500">{t('settings.category_none')}</div>
       )}
 
       {showModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-4 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h4 className="text-lg font-semibold">{editingCategory ? 'Edit Category' : 'Add Category'}</h4>
+              <h4 className="text-lg font-semibold">{editingCategory ? t('settings.category_modal_edit') : t('settings.category_modal_add')}</h4>
               <button
                 onClick={() => {
                   setShowModal(false);
@@ -1305,23 +1315,23 @@ function CategoryManagement() {
             </div>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Category Name *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.field_category_name')} *</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="input-field"
-                  placeholder="e.g., Beverages, Snacks"
+                  placeholder={t('settings.field_category_name_ph')}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.field_description')}</label>
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className="input-field"
                   rows={2}
-                  placeholder="Brief description of this category"
+                  placeholder={t('settings.field_description_ph')}
                 />
               </div>
               <div className="flex gap-2 pt-2">
@@ -1333,14 +1343,14 @@ function CategoryManagement() {
                   }}
                   className="btn-secondary flex-1"
                 >
-                  Cancel
+                  {t('products.cancel')}
                 </button>
                 <button
                   onClick={handleSubmit}
                   disabled={!formData.name}
                   className="btn-primary flex-1 disabled:opacity-50"
                 >
-                  {editingCategory ? 'Update' : 'Add'} Category
+                  {editingCategory ? t('settings.category_modal_edit') : t('settings.category_modal_add')}
                 </button>
               </div>
             </div>
@@ -1356,13 +1366,13 @@ function CategoryManagement() {
                 <AlertTriangle className="w-5 h-5 text-red-600" />
               </div>
               <div>
-                <h4 className="font-semibold text-slate-900">Delete Category?</h4>
-                <p className="text-sm text-slate-500">Products in this category will become uncategorized.</p>
+                <h4 className="font-semibold text-slate-900">{t('settings.delete_category_title')}</h4>
+                <p className="text-sm text-slate-500">{t('settings.delete_category_body')}</p>
               </div>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setDeleteConfirm(null)} className="btn-secondary flex-1">Cancel</button>
-              <button onClick={() => handleDelete(deleteConfirm)} className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 flex-1">Delete</button>
+              <button onClick={() => setDeleteConfirm(null)} className="btn-secondary flex-1">{t('products.cancel')}</button>
+              <button onClick={() => handleDelete(deleteConfirm)} className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 flex-1">{t('common.delete')}</button>
             </div>
           </div>
         </div>
@@ -1390,6 +1400,7 @@ interface MarketRoute {
 }
 
 function MarketRouteManagement() {
+  const { t } = useLanguage();
   const [routes, setRoutes] = useState<MarketRoute[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -1418,7 +1429,7 @@ function MarketRouteManagement() {
       const response = await api.get('/api/market-routes');
       setRoutes(response.data || []);
     } catch (err: any) {
-      setError(err?.response?.data?.detail || err?.message || 'Failed to load routes');
+      setError(err?.response?.data?.detail || err?.message || t('settings.load_failed'));
       setRoutes([]);
     } finally {
       setLoading(false);
@@ -1435,7 +1446,7 @@ function MarketRouteManagement() {
 
   const handleSubmit = async () => {
     if (!formData.name.trim()) {
-      alert('Route name is required');
+      alert(t('settings.required_route_name'));
       return;
     }
 
@@ -1461,9 +1472,9 @@ function MarketRouteManagement() {
       setEditingRoute(null);
       setFormData({ name: '', sub_area: '', market_day: '', notes: '' });
     } catch (err: any) {
-      const message = err?.response?.data?.detail || err?.message || 'Failed to save route';
+      const message = err?.response?.data?.detail || err?.message || t('settings.save_failed');
       setError(message);
-      alert(`Failed to save route: ${message}`);
+      alert(`${t('settings.save_failed')}: ${message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -1486,8 +1497,8 @@ function MarketRouteManagement() {
       await fetchMarketRoutes();
       setDeleteConfirm(null);
     } catch (err: any) {
-      const message = err?.response?.data?.detail || err?.message || 'Failed to delete route';
-      alert(`Failed to delete route: ${message}`);
+      const message = err?.response?.data?.detail || err?.message || t('settings.delete_failed');
+      alert(`${t('settings.delete_failed')}: ${message}`);
     }
   };
 
@@ -1495,9 +1506,9 @@ function MarketRouteManagement() {
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-900">Routes / Areas</h3>
+          <h3 className="text-lg font-semibold text-slate-900">{t('settings.route_title')}</h3>
         </div>
-        <div className="text-center py-8 text-slate-500">Loading routes...</div>
+        <div className="text-center py-8 text-slate-500">{t('settings.route_loading')}</div>
       </div>
     );
   }
@@ -1505,7 +1516,7 @@ function MarketRouteManagement() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-slate-900">Routes / Areas</h3>
+        <h3 className="text-lg font-semibold text-slate-900">{t('settings.route_title')}</h3>
         <button
           onClick={() => {
             setEditingRoute(null);
@@ -1515,7 +1526,7 @@ function MarketRouteManagement() {
           className="btn-primary flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
-          Add Route
+          {t('settings.route_add')}
         </button>
       </div>
 
@@ -1529,7 +1540,7 @@ function MarketRouteManagement() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <input
           type="text"
-          placeholder="Search routes..."
+          placeholder={t('settings.route_search_ph')}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="input-field pl-10"
@@ -1540,10 +1551,10 @@ function MarketRouteManagement() {
         <table className="w-full">
           <thead>
             <tr className="bg-slate-50">
-              <th className="text-left p-2 font-medium text-slate-600">Route/Area</th>
-              <th className="text-left p-2 font-medium text-slate-600">Sub-area</th>
-              <th className="text-left p-2 font-medium text-slate-600">Market Day</th>
-              <th className="text-left p-2 font-medium text-slate-600">Actions</th>
+              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_route')}</th>
+              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_subarea')}</th>
+              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_market_day')}</th>
+              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -1582,7 +1593,7 @@ function MarketRouteManagement() {
             {filteredRoutes.length === 0 && (
               <tr>
                 <td colSpan={4} className="p-4 text-center text-slate-500">
-                  No routes found.
+                  {t('settings.route_none')}
                 </td>
               </tr>
             )}
@@ -1595,7 +1606,7 @@ function MarketRouteManagement() {
           <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
             <div className="p-3 border-b border-slate-200 flex items-center justify-between">
               <h2 className="text-xl font-semibold text-slate-900">
-                {editingRoute ? 'Edit Route' : 'Add Route'}
+                {editingRoute ? t('settings.route_modal_edit') : t('settings.route_modal_add')}
               </h2>
               <button
                 type="button"
@@ -1609,7 +1620,7 @@ function MarketRouteManagement() {
 
             <div className="p-3 space-y-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Route/Area Name</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.field_route_name')}</label>
                 <input
                   type="text"
                   value={formData.name}
@@ -1620,7 +1631,7 @@ function MarketRouteManagement() {
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Sub-area</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.field_subarea')}</label>
                   <input
                     type="text"
                     value={formData.sub_area}
@@ -1629,18 +1640,18 @@ function MarketRouteManagement() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Market Day</label>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.field_market_day')}</label>
                   <input
                     type="text"
                     value={formData.market_day}
                     onChange={(e) => setFormData({ ...formData, market_day: e.target.value })}
                     className="input-field"
-                    placeholder="যেমন: সোমবার"
+                    placeholder={t('settings.field_market_day_ph')}
                   />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Notes</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.field_notes')}</label>
                 <textarea
                   value={formData.notes}
                   onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
@@ -1649,10 +1660,10 @@ function MarketRouteManagement() {
               </div>
               <div className="flex justify-end gap-2 pt-2">
                 <button type="button" onClick={() => setShowModal(false)} className="btn-secondary">
-                  Cancel
+                  {t('products.cancel')}
                 </button>
                 <button type="button" onClick={handleSubmit} className="btn-primary" disabled={isSubmitting}>
-                  {editingRoute ? 'Update Route' : 'Add Route'}
+                  {editingRoute ? t('settings.route_modal_edit') : t('settings.route_modal_add')}
                 </button>
               </div>
             </div>
@@ -1663,11 +1674,11 @@ function MarketRouteManagement() {
       {deleteConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-4 w-full max-w-md">
-            <h3 className="text-lg font-semibold text-slate-900 mb-2">Delete Route?</h3>
-            <p className="text-slate-600 mb-4">This will remove the route from the list.</p>
+            <h3 className="text-lg font-semibold text-slate-900 mb-2">{t('settings.delete_route_title')}</h3>
+            <p className="text-slate-600 mb-4">{t('settings.delete_route_body')}</p>
             <div className="flex gap-2">
-              <button onClick={() => setDeleteConfirm(null)} className="btn-secondary flex-1">Cancel</button>
-              <button onClick={() => handleDelete(deleteConfirm)} className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 flex-1">Delete</button>
+              <button onClick={() => setDeleteConfirm(null)} className="btn-secondary flex-1">{t('products.cancel')}</button>
+              <button onClick={() => handleDelete(deleteConfirm)} className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 flex-1">{t('common.delete')}</button>
             </div>
           </div>
         </div>
@@ -1677,6 +1688,7 @@ function MarketRouteManagement() {
 }
 
 function UnitManagement() {
+  const { t } = useLanguage();
   const [units, setUnits] = useState<Unit[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -1713,7 +1725,7 @@ function UnitManagement() {
       }
     } catch (error: any) {
       console.error('[UnitManagement] Failed to fetch units:', error);
-      setError(error?.response?.data?.detail || error?.message || 'Failed to load units');
+      setError(error?.response?.data?.detail || error?.message || t('settings.load_failed'));
       setUnits([]);
     } finally {
       setLoading(false);
@@ -1735,7 +1747,7 @@ function UnitManagement() {
     }
 
     if (!formData.name || !formData.name.trim() || !formData.abbreviation || !formData.abbreviation.trim()) {
-      alert('Unit name and abbreviation are required');
+      alert(t('settings.required_unit'));
       return;
     }
 
@@ -1777,9 +1789,9 @@ function UnitManagement() {
       logger.log('[UnitManagement] Unit operation completed successfully');
     } catch (error: any) {
       console.error('[UnitManagement] Failed to save unit:', error);
-      const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to save unit';
+      const errorMessage = error?.response?.data?.detail || error?.message || t('settings.save_failed');
       setError(errorMessage);
-      alert(`Failed to save unit: ${errorMessage}`);
+      alert(`${t('settings.save_failed')}: ${errorMessage}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -1805,8 +1817,8 @@ function UnitManagement() {
       setDeleteConfirm(null);
     } catch (error: any) {
       console.error('[UnitManagement] Failed to delete unit:', error);
-      const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to delete unit';
-      alert(`Failed to delete unit: ${errorMessage}`);
+      const errorMessage = error?.response?.data?.detail || error?.message || t('settings.delete_failed');
+      alert(`${t('settings.delete_failed')}: ${errorMessage}`);
     }
   };
 
@@ -1814,9 +1826,9 @@ function UnitManagement() {
     return (
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-slate-900">Unit Management</h3>
+          <h3 className="text-lg font-semibold text-slate-900">{t('settings.unit_title')}</h3>
         </div>
-        <div className="text-center py-8 text-slate-500">Loading units...</div>
+        <div className="text-center py-8 text-slate-500">{t('settings.unit_loading')}</div>
       </div>
     );
   }
@@ -1824,10 +1836,10 @@ function UnitManagement() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-slate-900">Unit Management</h3>
+        <h3 className="text-lg font-semibold text-slate-900">{t('settings.unit_title')}</h3>
         <button onClick={() => { setShowModal(true); setEditingUnit(null); setFormData({ name: '', abbreviation: '', description: '' }); }} className="btn-primary flex items-center gap-2">
           <Plus className="w-4 h-4" />
-          Add Unit
+          {t('settings.unit_add')}
         </button>
       </div>
 
@@ -1841,7 +1853,7 @@ function UnitManagement() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
         <input
           type="text"
-          placeholder="Search units..."
+          placeholder={t('settings.unit_search_ph')}
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="input-field pl-10"
@@ -1852,10 +1864,10 @@ function UnitManagement() {
         <table className="w-full">
           <thead>
             <tr className="bg-slate-50">
-              <th className="text-left p-2 font-medium text-slate-600">Unit Name</th>
-              <th className="text-left p-2 font-medium text-slate-600">Abbreviation</th>
-              <th className="text-left p-2 font-medium text-slate-600">Description</th>
-              <th className="text-left p-2 font-medium text-slate-600">Actions</th>
+              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_unit_name')}</th>
+              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_abbr')}</th>
+              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_desc')}</th>
+              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -1890,7 +1902,7 @@ function UnitManagement() {
           </tbody>
         </table>
         {filteredUnits.length === 0 && !loading && (
-          <div className="text-center py-8 text-slate-500">No units found</div>
+          <div className="text-center py-8 text-slate-500">{t('settings.unit_none')}</div>
         )}
       </div>
 
@@ -1898,7 +1910,7 @@ function UnitManagement() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-4 w-full max-w-md">
             <div className="flex items-center justify-between mb-4">
-              <h4 className="text-lg font-semibold">{editingUnit ? 'Edit Unit' : 'Add Unit'}</h4>
+              <h4 className="text-lg font-semibold">{editingUnit ? t('settings.unit_modal_edit') : t('settings.unit_modal_add')}</h4>
               <button
                 onClick={() => {
                   setShowModal(false);
@@ -1913,33 +1925,33 @@ function UnitManagement() {
             </div>
             <div className="space-y-3">
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Unit Name *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.field_unit_name')} *</label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   className="input-field"
-                  placeholder="e.g., Piece, Kilogram, Liter"
+                  placeholder={t('settings.field_unit_name_ph')}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Abbreviation *</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.field_abbr')} *</label>
                 <input
                   type="text"
                   value={formData.abbreviation}
                   onChange={(e) => setFormData({ ...formData, abbreviation: e.target.value })}
                   className="input-field"
-                  placeholder="e.g., Pcs, Kg, L"
+                  placeholder={t('settings.field_abbr_ph')}
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.field_description')}</label>
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className="input-field"
                   rows={2}
-                  placeholder="Optional description of this unit"
+                  placeholder={t('settings.field_unit_desc_ph')}
                 />
               </div>
               <div className="flex gap-2 pt-2">
@@ -1952,14 +1964,14 @@ function UnitManagement() {
                   }}
                   className="btn-secondary flex-1"
                 >
-                  Cancel
+                  {t('products.cancel')}
                 </button>
                 <button
                   onClick={handleSubmit}
                   disabled={!formData.name || !formData.abbreviation || isSubmitting}
                   className="btn-primary flex-1 disabled:opacity-50"
                 >
-                  {isSubmitting ? 'Saving...' : editingUnit ? 'Update' : 'Add'} Unit
+                  {isSubmitting ? t('settings.saving') : editingUnit ? t('settings.unit_modal_edit') : t('settings.unit_modal_add')}
                 </button>
               </div>
             </div>
@@ -1975,13 +1987,13 @@ function UnitManagement() {
                 <AlertTriangle className="w-5 h-5 text-red-600" />
               </div>
               <div>
-                <h4 className="font-semibold text-slate-900">Delete Unit?</h4>
-                <p className="text-sm text-slate-500">Products using this unit may be affected.</p>
+                <h4 className="font-semibold text-slate-900">{t('settings.delete_unit_title')}</h4>
+                <p className="text-sm text-slate-500">{t('settings.delete_unit_body')}</p>
               </div>
             </div>
             <div className="flex gap-2">
-              <button onClick={() => setDeleteConfirm(null)} className="btn-secondary flex-1">Cancel</button>
-              <button onClick={() => handleDelete(deleteConfirm)} className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 flex-1">Delete</button>
+              <button onClick={() => setDeleteConfirm(null)} className="btn-secondary flex-1">{t('products.cancel')}</button>
+              <button onClick={() => handleDelete(deleteConfirm)} className="bg-red-500 text-white px-4 py-2 rounded-lg hover:bg-red-600 flex-1">{t('common.delete')}</button>
             </div>
           </div>
         </div>
@@ -1991,6 +2003,7 @@ function UnitManagement() {
 }
 
 function ProfileSettings() {
+  const { t } = useLanguage();
   const currentUser = useMemo(() => {
     try {
       const stored = localStorage.getItem('user');
@@ -2001,46 +2014,47 @@ function ProfileSettings() {
 
   return (
     <div className="max-w-2xl space-y-3">
-      <h3 className="text-lg font-semibold text-slate-900">Profile Settings</h3>
+      <h3 className="text-lg font-semibold text-slate-900">{t('settings.profile_title')}</h3>
 
       <div className="flex items-center gap-3">
         <div className="w-20 h-20 bg-primary-500 rounded-full flex items-center justify-center">
           <User className="w-10 h-10 text-white" />
         </div>
-        <button className="btn-secondary">Change Photo</button>
+        <button type="button" className="btn-secondary">{t('settings.change_photo')}</button>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Full Name</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.field_full_name')}</label>
           <input type="text" className="input-field" defaultValue={currentUser.name || "Admin User"} />
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.field_email')}</label>
           <input type="email" className="input-field" defaultValue={currentUser.email || "admin@distrohub.com"} />
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.table_phone')}</label>
           <input type="tel" className="input-field" defaultValue="01712345678" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Role</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.profile_role')}</label>
           <input type="text" className="input-field bg-slate-50" defaultValue={currentUser.role || "Administrator"} disabled />
         </div>
       </div>
 
-      <button className="btn-primary flex items-center gap-2">
+      <button type="button" className="btn-primary flex items-center gap-2">
         <Save className="w-4 h-4" />
-        Save Changes
+        {t('settings.save_changes')}
       </button>
     </div>
   );
 }
 
 function BusinessSettings() {
+  const { t } = useLanguage();
   const storageKey = 'distrohub_business_settings';
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
@@ -2073,14 +2087,14 @@ function BusinessSettings() {
     try {
       localStorage.setItem(storageKey, JSON.stringify(formData));
       toast({
-        title: 'Saved',
-        description: 'Business settings saved successfully.',
+        title: t('settings.business_saved_title'),
+        description: t('settings.business_saved_desc'),
       });
     } catch (error) {
       console.error('[BusinessSettings] Failed to save settings:', error);
       toast({
-        title: 'Save failed',
-        description: 'Could not save settings. Please try again.',
+        title: t('settings.business_save_failed_title'),
+        description: t('settings.business_save_failed_desc'),
         variant: 'destructive',
       });
     } finally {
@@ -2090,10 +2104,10 @@ function BusinessSettings() {
 
   return (
     <div className="max-w-2xl space-y-3">
-      <h3 className="text-lg font-semibold text-slate-900">Business Settings</h3>
+      <h3 className="text-lg font-semibold text-slate-900">{t('settings.business_title')}</h3>
 
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Business Name</label>
+        <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.business_name_label')}</label>
         <input
           type="text"
           className="input-field"
@@ -2103,7 +2117,7 @@ function BusinessSettings() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Address</label>
+        <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.business_address_label')}</label>
         <textarea
           className="input-field"
           rows={3}
@@ -2114,7 +2128,7 @@ function BusinessSettings() {
 
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Phone</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.business_phone_label')}</label>
           <input
             type="tel"
             className="input-field"
@@ -2123,7 +2137,7 @@ function BusinessSettings() {
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.business_email_label')}</label>
           <input
             type="email"
             className="input-field"
@@ -2135,7 +2149,7 @@ function BusinessSettings() {
 
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Currency</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.business_currency_label')}</label>
           <select
             className="input-field"
             value={formData.currency}
@@ -2146,7 +2160,7 @@ function BusinessSettings() {
           </select>
         </div>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Timezone</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.business_timezone_label')}</label>
           <select
             className="input-field"
             value={formData.timezone}
@@ -2163,13 +2177,14 @@ function BusinessSettings() {
         disabled={isSaving}
       >
         <Save className="w-4 h-4" />
-        {isSaving ? 'Saving...' : 'Save Changes'}
+        {isSaving ? t('settings.saving') : t('settings.save_changes')}
       </button>
     </div>
   );
 }
 
 function NotificationSettings() {
+  const { t } = useLanguage();
   const [smsSettings, setSmsSettings] = useState<Record<SmsEventType, SmsSettings | null>>({
     low_stock: null,
     expiry_alert: null,
@@ -2196,12 +2211,15 @@ function NotificationSettings() {
     settingsRef.current = smsSettings;
   }, [smsSettings]);
 
-  const eventTypes: { type: SmsEventType; label: string; description: string }[] = [
-    { type: 'low_stock', label: 'Low Stock Alerts', description: 'Get SMS when stock is running low' },
-    { type: 'expiry_alert', label: 'Expiry Alerts', description: 'Get SMS about expiring products' },
-    { type: 'payment_due', label: 'Payment Due Reminders', description: 'Get SMS about overdue payments' },
-    { type: 'new_order', label: 'New Order Notifications', description: 'Get SMS when new orders are placed' },
-  ];
+  const eventTypes: { type: SmsEventType; label: string; description: string }[] = useMemo(
+    () => [
+      { type: 'low_stock', label: t('settings.sms_low_stock'), description: t('settings.sms_low_stock_desc') },
+      { type: 'expiry_alert', label: t('settings.sms_expiry'), description: t('settings.sms_expiry_desc') },
+      { type: 'payment_due', label: t('settings.sms_payment'), description: t('settings.sms_payment_desc') },
+      { type: 'new_order', label: t('settings.sms_new_order'), description: t('settings.sms_new_order_desc') },
+    ],
+    [t]
+  );
 
   useEffect(() => {
     fetchSmsSettings();
@@ -2294,7 +2312,7 @@ function NotificationSettings() {
         }));
 
         logger.error(`Failed to update SMS setting for ${eventType}:`, error);
-        alert(`Failed to update ${eventTypes.find((e) => e.type === eventType)?.label || eventType}. Please try again.`);
+        alert(t('settings.sms_update_failed'));
       } finally {
         setSavingStates((prev) => ({ ...prev, [eventType]: false }));
       }
@@ -2315,24 +2333,24 @@ function NotificationSettings() {
       await fetchSmsSettings();
     } catch (error) {
       logger.error(`Failed to update delivery mode for ${eventType}:`, error);
-      alert('Failed to update delivery mode. Please try again.');
+      alert(t('settings.sms_mode_failed'));
     }
   };
 
   if (loading) {
     return (
       <div className="max-w-2xl space-y-3">
-        <h3 className="text-lg font-semibold text-slate-900">SMS Notification Settings</h3>
-        <p className="text-slate-500">Loading settings...</p>
+        <h3 className="text-lg font-semibold text-slate-900">{t('settings.notifications_title')}</h3>
+        <p className="text-slate-500">{t('settings.notifications_loading')}</p>
       </div>
     );
   }
 
   return (
     <div className="max-w-2xl space-y-3">
-      <h3 className="text-lg font-semibold text-slate-900">SMS Notification Settings</h3>
+      <h3 className="text-lg font-semibold text-slate-900">{t('settings.notifications_title')}</h3>
       <p className="text-sm text-slate-500 mb-4">
-        Configure SMS notifications for different events. Notifications are sent via mimsms.com.
+        {t('settings.notifications_intro')}
       </p>
 
       <div className="space-y-3">
@@ -2350,7 +2368,7 @@ function NotificationSettings() {
                     {isSaving && (
                       <span className="text-xs text-slate-500 flex items-center gap-1">
                         <span className="inline-block w-2 h-2 bg-primary-600 rounded-full animate-pulse"></span>
-                        Saving...
+                        {t('settings.saving')}
                       </span>
                     )}
                   </div>
@@ -2371,32 +2389,34 @@ function NotificationSettings() {
               {enabled && (
                 <div className="mt-3 pt-3 border-t border-slate-200">
                   <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Delivery Mode
+                    {t('settings.delivery_mode')}
                   </label>
                   <div className="flex gap-2">
                     <button
+                      type="button"
                       onClick={() => handleDeliveryModeChange(event.type, 'immediate')}
                       className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${setting?.delivery_mode === 'immediate'
                         ? 'bg-primary-600 text-white'
                         : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
                         }`}
                     >
-                      Immediate
+                      {t('settings.delivery_immediate')}
                     </button>
                     <button
+                      type="button"
                       onClick={() => handleDeliveryModeChange(event.type, 'queued')}
                       className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${setting?.delivery_mode === 'queued'
                         ? 'bg-primary-600 text-white'
                         : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
                         }`}
                     >
-                      Queued
+                      {t('settings.delivery_queued')}
                     </button>
                   </div>
                   <p className="text-xs text-slate-500 mt-1">
                     {setting?.delivery_mode === 'immediate'
-                      ? 'SMS will be sent immediately when event occurs'
-                      : 'SMS will be added to queue and sent in batches'}
+                      ? t('settings.delivery_immediate_hint')
+                      : t('settings.delivery_queued_hint')}
                   </p>
                 </div>
               )}
@@ -2409,36 +2429,37 @@ function NotificationSettings() {
 }
 
 function SecuritySettings() {
+  const { t } = useLanguage();
   return (
     <div className="max-w-2xl space-y-3">
-      <h3 className="text-lg font-semibold text-slate-900">Security Settings</h3>
+      <h3 className="text-lg font-semibold text-slate-900">{t('settings.security_title')}</h3>
 
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Current Password</label>
-        <input type="password" className="input-field" placeholder="Enter current password" />
+        <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.security_current_pw')}</label>
+        <input type="password" className="input-field" placeholder={t('settings.ph_current_password')} />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">New Password</label>
-        <input type="password" className="input-field" placeholder="Enter new password" />
+        <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.security_new_pw')}</label>
+        <input type="password" className="input-field" placeholder={t('settings.ph_new_password')} />
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">Confirm New Password</label>
-        <input type="password" className="input-field" placeholder="Confirm new password" />
+        <label className="block text-sm font-medium text-slate-700 mb-1">{t('settings.security_confirm_pw')}</label>
+        <input type="password" className="input-field" placeholder={t('settings.ph_confirm_password')} />
       </div>
 
-      <button className="btn-primary flex items-center gap-2">
+      <button type="button" className="btn-primary flex items-center gap-2">
         <Shield className="w-4 h-4" />
-        Update Password
+        {t('settings.security_update_pw')}
       </button>
 
       <div className="pt-3 border-t border-slate-200">
-        <h4 className="font-medium text-slate-900 mb-2">Two-Factor Authentication</h4>
+        <h4 className="font-medium text-slate-900 mb-2">{t('settings.security_2fa_title')}</h4>
         <p className="text-sm text-slate-500 mb-2">
-          Add an extra layer of security to your account by enabling two-factor authentication.
+          {t('settings.security_2fa_desc')}
         </p>
-        <button className="btn-secondary">Enable 2FA</button>
+        <button type="button" className="btn-secondary">{t('settings.security_2fa_enable')}</button>
       </div>
     </div>
   );
@@ -2468,25 +2489,25 @@ function AppearanceSettings() {
       </div>
 
       <div className="pt-4 border-t border-slate-100">
-        <label className="block text-sm font-medium text-slate-700 mb-2">Theme</label>
+        <label className="block text-sm font-medium text-slate-700 mb-2">{t('settings.theme')}</label>
         <div className="flex gap-2">
-          <button className="flex-1 p-3 border-2 border-primary-500 rounded-lg bg-white">
+          <button type="button" className="flex-1 p-3 border-2 border-primary-500 rounded-lg bg-white">
             <div className="w-full h-8 bg-white border border-slate-200 rounded mb-2"></div>
-            <p className="text-sm font-medium text-center">Light</p>
+            <p className="text-sm font-medium text-center">{t('settings.theme_light')}</p>
           </button>
-          <button className="flex-1 p-3 border-2 border-slate-200 rounded-lg bg-white hover:border-slate-300 transition-colors">
+          <button type="button" className="flex-1 p-3 border-2 border-slate-200 rounded-lg bg-white hover:border-slate-300 transition-colors">
             <div className="w-full h-8 bg-slate-900 rounded mb-2"></div>
-            <p className="text-sm font-medium text-center">Dark</p>
+            <p className="text-sm font-medium text-center">{t('settings.theme_dark')}</p>
           </button>
-          <button className="flex-1 p-3 border-2 border-slate-200 rounded-lg bg-white hover:border-slate-300 transition-colors">
+          <button type="button" className="flex-1 p-3 border-2 border-slate-200 rounded-lg bg-white hover:border-slate-300 transition-colors">
             <div className="w-full h-8 bg-gradient-to-r from-white to-slate-900 rounded mb-2"></div>
-            <p className="text-sm font-medium text-center">System</p>
+            <p className="text-sm font-medium text-center">{t('settings.theme_system')}</p>
           </button>
         </div>
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">Accent Color</label>
+        <label className="block text-sm font-medium text-slate-700 mb-2">{t('settings.accent_color')}</label>
         <div className="flex gap-2">
           <button className="w-10 h-10 bg-primary-500 rounded-lg ring-2 ring-offset-2 ring-primary-500"></button>
           <button className="w-10 h-10 bg-green-500 rounded-lg hover:ring-2 hover:ring-offset-2 hover:ring-green-500 transition-all"></button>
@@ -2497,16 +2518,16 @@ function AppearanceSettings() {
       </div>
 
       <div>
-        <label className="block text-sm font-medium text-slate-700 mb-2">Sidebar Position</label>
+        <label className="block text-sm font-medium text-slate-700 mb-2">{t('settings.sidebar_position')}</label>
         <select className="input-field w-48">
-          <option value="left">Left</option>
-          <option value="right">Right</option>
+          <option value="left">{t('settings.sidebar_left')}</option>
+          <option value="right">{t('settings.sidebar_right')}</option>
         </select>
       </div>
 
-      <button className="btn-primary flex items-center gap-2">
+      <button type="button" className="btn-primary flex items-center gap-2">
         <Save className="w-4 h-4" />
-        Save Changes
+        {t('settings.save_changes')}
       </button>
     </div>
   );

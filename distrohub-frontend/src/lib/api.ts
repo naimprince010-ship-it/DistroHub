@@ -8,22 +8,29 @@ const API_URL = import.meta.env.VITE_API_URL ||
   (import.meta.env.DEV ? 'http://localhost:8001' : 'https://distrohub-backend.vercel.app');
 
 // Validate URL format (but don't crash - just warn)
-let isValidUrl = true;
 try {
   new URL(API_URL);
 } catch (e) {
-  isValidUrl = false;
   console.error(`[API] WARNING: Invalid URL format: "${API_URL}". Please check VITE_API_URL environment variable.`);
 }
 
-// Log API URL for debugging
-console.log('[API] API URL:', API_URL);
-console.log('[API] VITE_API_URL env:', import.meta.env.VITE_API_URL);
-console.log('[API] URL validation:', isValidUrl ? 'PASSED' : 'FAILED (using anyway)');
+if (import.meta.env.DEV) {
+  console.log('[API] API URL:', API_URL);
+}
 
 // Warn if production and URL not set
 if (!import.meta.env.DEV && !import.meta.env.VITE_API_URL) {
   console.warn('[API] WARNING: VITE_API_URL not set in production. Using fallback URL.');
+}
+
+/** Paths that must work without a Bearer token */
+function isPublicAuthPath(url: string | undefined): boolean {
+  if (!url) return false;
+  return (
+    url.includes('/api/auth/login') ||
+    url.includes('/api/auth/register') ||
+    url.includes('/api/auth/google')
+  );
 }
 
 export const api = axios.create({
@@ -36,26 +43,16 @@ export const api = axios.create({
 });
 
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const raw = localStorage.getItem('token');
+  const token = raw?.trim();
   if (token) {
-    // Ensure Authorization header is always set with Bearer token
     config.headers.Authorization = `Bearer ${token}`;
-    console.log('[API] Request with token:', {
-      method: config.method,
-      url: config.url,
-      baseURL: config.baseURL,
-      tokenLength: token.length
-    });
-  } else {
-    // If no token and not a login request, redirect to login
-    const isLoginRequest = config.url?.includes('/api/auth/login');
-    if (!isLoginRequest) {
-      console.warn('[API] No token found in localStorage, redirecting to login');
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
-      return Promise.reject(new Error('No authentication token'));
-    }
+  } else if (!isPublicAuthPath(config.url)) {
+    console.warn('[API] No token for protected request:', config.url);
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.href = '/login';
+    return Promise.reject(new Error('No authentication token'));
   }
   return config;
 }, (error) => {
@@ -65,14 +62,16 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    console.error('[API] Response error:', {
-      message: error?.message,
-      code: error?.code,
-      status: error?.response?.status,
-      data: error?.response?.data,
-      url: error?.config?.url,
-      hasAuthHeader: !!error?.config?.headers?.Authorization
-    });
+    if (import.meta.env.DEV) {
+      console.error('[API] Response error:', {
+        message: error?.message,
+        code: error?.code,
+        status: error?.response?.status,
+        data: error?.response?.data,
+        url: error?.config?.url,
+        hasAuthHeader: !!error?.config?.headers?.Authorization
+      });
+    }
     
     // Handle timeout errors - provide user-friendly message
     if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
@@ -94,14 +93,23 @@ api.interceptors.response.use(
       return Promise.reject(friendlyError);
     }
     
-    // Handle 401 Unauthorized - token expired or invalid
+    // 503: transient backend/DB — do not clear session (same as network failure for UX)
+    if (error.response?.status === 503) {
+      return Promise.reject(error);
+    }
+
+    // 401: invalid/expired token or user removed — clear session once
     if (error.response?.status === 401) {
-      // Don't redirect if we're already on login page
       if (!window.location.pathname.includes('/login')) {
-        console.warn('[API] 401 Unauthorized - clearing token and redirecting to login');
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
+        const lock = 'distrohub_auth_redirect';
+        if (!sessionStorage.getItem(lock)) {
+          sessionStorage.setItem(lock, '1');
+          console.warn('[API] 401 Unauthorized - clearing token and redirecting to login');
+          localStorage.removeItem('token');
+          localStorage.removeItem('user');
+          window.location.href = '/login';
+          setTimeout(() => sessionStorage.removeItem(lock), 2000);
+        }
       }
     }
     return Promise.reject(error);

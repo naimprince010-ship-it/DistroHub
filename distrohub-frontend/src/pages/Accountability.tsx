@@ -55,36 +55,7 @@ export function Accountability() {
         try {
           setLoadingAccountability(true);
           const response = await api.get(`/api/users/${selectedSr}/accountability`);
-          
-          // #region agent log
-          fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              location: 'Accountability.tsx:fetchAccountability:response',
-              message: 'SR Accountability API response received',
-              data: {
-                user_id: response.data?.user_id,
-                user_name: response.data?.user_name,
-                total_collected: response.data?.total_collected,
-                total_collected_exists: response.data?.total_collected !== undefined,
-                total_returns: response.data?.total_returns,
-                total_returns_exists: response.data?.total_returns !== undefined,
-                current_outstanding: response.data?.current_outstanding,
-                total_expected_cash: response.data?.total_expected_cash,
-                active_routes_count: response.data?.active_routes_count,
-                routes: response.data?.routes?.length || 0,
-                reconciliations: response.data?.reconciliations?.length || 0,
-                full_response_keys: Object.keys(response.data || {})
-              },
-              timestamp: Date.now(),
-              sessionId: 'debug-session',
-              runId: 'run1',
-              hypothesisId: 'A'
-            })
-          }).catch(() => {});
-          // #endregion
-          
+
           console.log('[Accountability] API Response:', response.data);
           console.log('[Accountability] total_collected:', response.data?.total_collected);
           console.log('[Accountability] total_returns:', response.data?.total_returns);
@@ -278,29 +249,6 @@ export function Accountability() {
                       <p className="text-xl font-bold text-emerald-700">
                         <span className="text-base font-semibold">৳</span>{accountability.total_collected?.toLocaleString() || '0'}
                       </p>
-                      {/* #region agent log */}
-                      {(() => {
-                        fetch('http://127.0.0.1:7242/ingest/bb54464a-6920-42d2-ab5d-e72077bc0c94', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            location: 'Accountability.tsx:render:TotalCollected',
-                            message: 'Rendering Total Collected value',
-                            data: {
-                              total_collected: accountability.total_collected,
-                              total_collected_type: typeof accountability.total_collected,
-                              total_collected_exists: accountability.total_collected !== undefined,
-                              display_value: accountability.total_collected?.toLocaleString() || '0'
-                            },
-                            timestamp: Date.now(),
-                            sessionId: 'debug-session',
-                            runId: 'run1',
-                            hypothesisId: 'B'
-                          })
-                        }).catch(() => {});
-                        return null;
-                      })()}
-                      {/* #endregion */}
                       <button
                         onClick={async () => {
                           if (!selectedSr) return;

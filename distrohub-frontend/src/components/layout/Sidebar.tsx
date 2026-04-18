@@ -1,5 +1,6 @@
-import { useState, useEffect, createContext, useContext } from 'react';
+import { useState, useEffect, createContext, useContext, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
   Package,
@@ -19,14 +20,16 @@ import {
   Menu,
   X,
   Search,
-  UserPlus,
   BarChart3,
-  Tags
+  Tags,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useLanguage } from '@/contexts/LanguageContext';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
-// Sidebar context for managing state across components
+const SIDEBAR_COLLAPSED_KEY = 'sidebar-collapsed';
+
 interface SidebarContextType {
   isCollapsed: boolean;
   setIsCollapsed: (value: boolean) => void;
@@ -45,7 +48,7 @@ export function useSidebar() {
 }
 
 interface MenuItem {
-  icon: any;
+  icon: LucideIcon;
   label: string;
   path: string;
 }
@@ -55,56 +58,40 @@ interface MenuGroup {
   items: MenuItem[];
 }
 
-const menuGroups: MenuGroup[] = [
-  {
-    label: 'Main',
-    items: [
-      { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-      { icon: Users, label: 'Retailers', path: '/retailers' },
-      { icon: UserPlus, label: 'Customers', path: '/customers' },
-      { icon: BarChart3, label: 'Analytics', path: '/analytics' },
-    ],
-  },
-  {
-    label: 'Inventory',
-    items: [
-      { icon: Package, label: 'Products', path: '/products' },
-      { icon: Tags, label: 'Categories', path: '/categories' },
-      { icon: Warehouse, label: 'Stock Level', path: '/inventory' },
-      { icon: AlertTriangle, label: 'Expiry Alerts', path: '/expiry' },
-    ],
-  },
-  {
-    label: 'Operations',
-    items: [
-      { icon: ShoppingCart, label: 'Purchase', path: '/purchase' },
-      { icon: Receipt, label: 'Sales', path: '/sales' },
-      { icon: RotateCcw, label: 'Returns', path: '/sales-returns' },
-      { icon: MapPin, label: 'Routes', path: '/routes' },
-    ],
-  },
-  {
-    label: 'Finance',
-    items: [
-      { icon: DollarSign, label: 'Supplier Payable', path: '/accountability' },
-      { icon: TrendingUp, label: 'Receivables', path: '/receivables' },
-    ],
-  },
-  {
-    label: 'System',
-    items: [
-      { icon: FileText, label: 'Reports', path: '/reports' },
-      { icon: Settings, label: 'Settings', path: '/settings' },
-    ],
-  },
-];
+function isNavActive(path: string, pathname: string, search: string): boolean {
+  if (path.includes('?')) {
+    const [p, query] = path.split('?');
+    if (pathname !== p) return false;
+    const want = new URLSearchParams(query);
+    const have = new URLSearchParams(search);
+    for (const [k, v] of want.entries()) {
+      if ((have.get(k) ?? '') !== v) return false;
+    }
+    return true;
+  }
+  if (path === '/') return pathname === '/';
+  return pathname === path || pathname.startsWith(`${path}/`);
+}
+
+/** Settings home: /settings or ?tab=suppliers (default in Settings page) */
+function isSettingsHomeActive(pathname: string, search: string): boolean {
+  if (pathname !== '/settings') return false;
+  const tab = new URLSearchParams(search).get('tab') || 'suppliers';
+  return tab === 'suppliers';
+}
 
 interface SidebarProviderProps {
   children: React.ReactNode;
 }
 
 export function SidebarProvider({ children }: SidebarProviderProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
+    } catch {
+      return false;
+    }
+  });
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const isMobile = useIsMobile();
 
@@ -113,7 +100,15 @@ export function SidebarProvider({ children }: SidebarProviderProps) {
     if (isMobile) {
       setIsMobileOpen(false);
     }
-  }, [location.pathname, isMobile]);
+  }, [location.pathname, location.search, isMobile]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, isCollapsed ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  }, [isCollapsed]);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -137,6 +132,7 @@ export function SidebarTrigger({ className }: { className?: string }) {
 
   return (
     <button
+      type="button"
       onClick={() => setIsMobileOpen(!isMobileOpen)}
       className={cn(
         'lg:hidden flex items-center justify-center w-10 h-10 rounded-lg',
@@ -144,6 +140,7 @@ export function SidebarTrigger({ className }: { className?: string }) {
         'transition-colors duration-200 focus-ring',
         className
       )}
+      aria-expanded={isMobileOpen}
       aria-label={isMobileOpen ? 'Close menu' : 'Open menu'}
     >
       {isMobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -151,183 +148,271 @@ export function SidebarTrigger({ className }: { className?: string }) {
   );
 }
 
+const shellClass =
+  'bg-gradient-to-b from-[hsl(var(--sidebar-background))] via-[hsl(195_55%_16%)] to-[hsl(195_60%_11%)]';
+
 export function Sidebar() {
   const location = useLocation();
   const isMobile = useIsMobile();
   const { isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen } = useSidebar();
   const [searchQuery, setSearchQuery] = useState('');
+  const { t } = useLanguage();
 
-  const filteredGroups = menuGroups.map(group => ({
-    ...group,
-    items: group.items.filter(item =>
-      item.label.toLowerCase().includes(searchQuery.toLowerCase())
-    ),
-  })).filter(group => group.items.length > 0);
+  const menuGroups: MenuGroup[] = useMemo(
+    () => [
+      {
+        label: t('sidebar.main'),
+        items: [
+          { icon: LayoutDashboard, label: t('common.dashboard'), path: '/' },
+          { icon: Users, label: t('common.retailers'), path: '/retailers' },
+        ],
+      },
+      {
+        label: t('sidebar.inventory'),
+        items: [
+          { icon: Package, label: t('common.products'), path: '/products' },
+          { icon: Tags, label: t('common.categories'), path: '/settings?tab=categories' },
+          { icon: Warehouse, label: t('common.inventory'), path: '/inventory' },
+          { icon: AlertTriangle, label: t('common.expiry_alerts'), path: '/expiry' },
+        ],
+      },
+      {
+        label: t('sidebar.operations'),
+        items: [
+          { icon: ShoppingCart, label: t('common.purchase'), path: '/purchase' },
+          { icon: Receipt, label: t('common.sales'), path: '/sales' },
+          { icon: RotateCcw, label: t('common.sales_returns'), path: '/sales-returns' },
+          { icon: MapPin, label: t('common.routes'), path: '/routes' },
+        ],
+      },
+      {
+        label: t('sidebar.finance'),
+        items: [
+          { icon: DollarSign, label: t('common.accountability'), path: '/accountability' },
+          { icon: TrendingUp, label: t('common.receivables'), path: '/receivables' },
+          { icon: BarChart3, label: t('common.payments'), path: '/payments' },
+        ],
+      },
+      {
+        label: t('sidebar.system'),
+        items: [
+          { icon: FileText, label: t('common.reports'), path: '/reports' },
+          { icon: Settings, label: t('common.settings'), path: '/settings?tab=suppliers' },
+        ],
+      },
+    ],
+    [t]
+  );
+
+  const filteredGroups = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return menuGroups;
+    return menuGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => item.label.toLowerCase().includes(q)),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [menuGroups, searchQuery]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
+    localStorage.removeItem('user');
     window.location.href = '/login';
   };
 
-  const sidebarContent = (
-    <div className="flex flex-col h-full">
-      {/* Header / Logo */}
-      <div className={cn(
-        'flex items-center transition-all duration-300',
-        isCollapsed ? 'px-3 py-6 justify-center' : 'px-6 py-8 gap-3'
-      )}>
-        <div className="relative flex-shrink-0">
-          <div className={cn(
-            'flex items-center justify-center rounded-xl',
-            'bg-gradient-to-br from-cyan-400 to-emerald-400',
-            'shadow-lg shadow-cyan-400/20',
-            'w-10 h-10'
-          )}>
-            <Package className="w-5 h-5 text-white" />
-          </div>
-        </div>
-        {!isCollapsed && (
-          <div className="flex flex-col min-w-0">
-            <h1 className="text-lg font-bold text-white tracking-tight leading-none">
-              DistroHub
-            </h1>
-            <p className="text-[10px] text-cyan-400 font-semibold uppercase tracking-widest mt-1">
-              Distribution System
-            </p>
-          </div>
+  const NavRow = ({ item }: { item: MenuItem }) => {
+    const active =
+      item.path === '/settings?tab=suppliers'
+        ? isSettingsHomeActive(location.pathname, location.search)
+        : isNavActive(item.path, location.pathname, location.search);
+    const body = (
+      <Link
+        to={item.path}
+        className={cn(
+          'group flex items-center rounded-xl transition-all duration-200',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--sidebar-ring))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--sidebar-background))]',
+          'relative overflow-hidden',
+          isCollapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5',
+          active
+            ? 'bg-white/10 text-white shadow-sm shadow-black/10'
+            : 'text-[hsl(var(--sidebar-muted))] hover:bg-white/5 hover:text-[hsl(var(--sidebar-foreground))]'
         )}
-      </div>
-
-      {/* Search Bar */}
-      {!isCollapsed && (
-        <div className="px-6 mb-8">
-          <div className="relative group">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-cyan-400 transition-colors" />
-            <input
-              type="text"
-              placeholder="Search Features..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className={cn(
-                'w-full pl-9 pr-3 py-2.5 text-xs rounded-lg transition-all duration-200',
-                'bg-slate-800/40 border border-slate-700/50',
-                'text-slate-200 placeholder:text-slate-500',
-                'focus:outline-none focus:ring-1 focus:ring-cyan-500/50 focus:bg-slate-800/80'
-              )}
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Navigation Links */}
-      <nav className="flex-1 px-4 overflow-y-auto custom-scrollbar pb-6">
-        {filteredGroups.map((group, groupIndex) => (
-          <div key={group.label} className={cn(groupIndex > 0 && 'mt-8')}>
-            {!isCollapsed ? (
-              <h2 className="px-2 mb-3 text-[11px] font-medium text-slate-400 uppercase tracking-widest">
-                {group.label}
-              </h2>
-            ) : (
-              <div className="h-px bg-slate-700/30 mx-2 my-6" />
-            )}
-
-            <div className="space-y-1.5">
-              {group.items.map((item) => {
-                const isActive = location.pathname === item.path;
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    className={cn(
-                      'group flex items-center rounded-xl transition-all duration-300',
-                      'focus-ring relative overflow-hidden',
-                      isCollapsed ? 'justify-center p-3' : 'gap-4 px-4 py-3',
-                      isActive
-                        ? 'text-white font-medium bg-[linear-gradient(90deg,rgba(0,201,255,0.1)_0%,rgba(146,254,157,0.1)_100%)]'
-                        : 'text-slate-300 hover:text-white hover:bg-white/5'
-                    )}
-                    title={isCollapsed ? item.label : undefined}
-                  >
-                    {/* Active Indicator Glow */}
-                    {isActive && (
-                      <div className="absolute left-0 top-0 w-1 h-full bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.5)]" />
-                    )}
-                    
-                    <item.icon className={cn(
-                      'flex-shrink-0 transition-all duration-300',
-                      isCollapsed ? 'w-5 h-5' : 'w-5 h-5',
-                      isActive ? 'text-cyan-400' : 'text-slate-400 group-hover:text-slate-200'
-                    )} />
-                    
-                    {!isCollapsed && (
-                      <span className="text-sm truncate">
-                        {item.label}
-                      </span>
-                    )}
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </nav>
-
-      {/* Footer / Toggle & Logout */}
-      <div className="p-4 mt-auto border-t border-slate-700/30 space-y-2">
-        {!isMobile && (
-          <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
-            className={cn(
-              'w-full flex items-center rounded-xl transition-all duration-300',
-              'text-slate-400 hover:text-white hover:bg-white/5',
-              'focus-ring',
-              isCollapsed ? 'justify-center p-3' : 'gap-4 px-4 py-3'
-            )}
-            title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          >
-            <ChevronLeft className={cn(
-              'w-5 h-5 transition-transform duration-300',
-              isCollapsed && 'rotate-180'
-            )} />
-            {!isCollapsed && <span className="text-sm font-medium">Collapse Panel</span>}
-          </button>
+        aria-current={active ? 'page' : undefined}
+        title={isCollapsed ? item.label : undefined}
+      >
+        {active && (
+          <span
+            className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-[60%] rounded-r-full bg-[hsl(var(--sidebar-ring))] shadow-[0_0_12px_hsl(var(--sidebar-ring)/0.45)]"
+            aria-hidden
+          />
         )}
-
-        <button
-          onClick={handleLogout}
+        <item.icon
           className={cn(
-            'w-full flex items-center rounded-xl transition-all duration-300',
-            'text-slate-400 hover:text-rose-400 hover:bg-rose-400/10',
-            'focus-ring',
-            isCollapsed ? 'justify-center p-3' : 'gap-4 px-4 py-3'
+            'flex-shrink-0 w-[1.125rem] h-[1.125rem] transition-colors',
+            active ? 'text-[hsl(var(--sidebar-ring))]' : 'text-slate-400 group-hover:text-slate-200'
+          )}
+          aria-hidden
+        />
+        {!isCollapsed && <span className="text-sm font-medium truncate">{item.label}</span>}
+      </Link>
+    );
+
+    if (isCollapsed && !isMobile) {
+      return (
+        <Tooltip delayDuration={200}>
+          <TooltipTrigger asChild>{body}</TooltipTrigger>
+          <TooltipContent side="right" sideOffset={10} className="font-medium">
+            {item.label}
+          </TooltipContent>
+        </Tooltip>
+      );
+    }
+    return body;
+  };
+
+  const sidebarContent = (
+    <TooltipProvider delayDuration={200}>
+      <div className="flex flex-col h-full min-h-0">
+        <div
+          className={cn(
+            'flex items-center shrink-0 transition-all duration-300 border-b border-white/5',
+            isCollapsed ? 'px-3 py-5 justify-center' : 'px-5 py-6 gap-3'
           )}
         >
-          <LogOut className="w-5 h-5 flex-shrink-0" />
-          {!isCollapsed && <span className="text-sm font-semibold">Logout Account</span>}
-        </button>
+          <div className="relative flex-shrink-0">
+            <div
+              className={cn(
+                'flex items-center justify-center rounded-xl',
+                'bg-gradient-to-br from-[hsl(var(--sidebar-ring))] to-emerald-600',
+                'shadow-lg shadow-cyan-500/15',
+                'w-10 h-10 ring-1 ring-white/10'
+              )}
+            >
+              <Package className="w-5 h-5 text-white" aria-hidden />
+            </div>
+          </div>
+          {!isCollapsed && (
+            <div className="flex flex-col min-w-0">
+              <h1 className="text-base font-bold text-[hsl(var(--sidebar-foreground))] tracking-tight leading-tight">
+                DistroHub
+              </h1>
+              <p className="text-[10px] text-[hsl(var(--sidebar-muted))] font-semibold uppercase tracking-widest mt-0.5">
+                {t('sidebar.brand_tagline')}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {!isCollapsed && (
+          <div className="px-4 pt-4 pb-2 shrink-0">
+            <label htmlFor="sidebar-nav-search" className="sr-only">
+              {t('sidebar.search_menu')}
+            </label>
+            <div className="relative group">
+              <Search
+                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-[hsl(var(--sidebar-ring))] transition-colors pointer-events-none"
+                aria-hidden
+              />
+              <input
+                id="sidebar-nav-search"
+                type="search"
+                autoComplete="off"
+                placeholder={t('sidebar.search_menu')}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className={cn(
+                  'w-full pl-9 pr-3 py-2 text-xs rounded-lg transition-all duration-200',
+                  'bg-black/20 border border-white/10',
+                  'text-[hsl(var(--sidebar-foreground))] placeholder:text-slate-500',
+                  'focus:outline-none focus:ring-2 focus:ring-[hsl(var(--sidebar-ring))]/40 focus:border-[hsl(var(--sidebar-ring))]/30'
+                )}
+              />
+            </div>
+          </div>
+        )}
+
+        <nav className="flex-1 min-h-0 px-3 py-4 overflow-y-auto overscroll-contain custom-scrollbar">
+          {filteredGroups.map((group, groupIndex) => (
+            <div key={group.label} className={cn(groupIndex > 0 && 'mt-6')}>
+              {!isCollapsed ? (
+                <h2 className="px-2 mb-2 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.14em]">
+                  {group.label}
+                </h2>
+              ) : (
+                <div className="h-px bg-white/5 mx-1 my-4" role="separator" />
+              )}
+              <ul className="space-y-1">
+                {group.items.map((item) => (
+                  <li key={item.path}>
+                    <NavRow item={item} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </nav>
+
+        <div className="p-3 mt-auto border-t border-white/5 space-y-1 shrink-0 bg-black/10">
+          {!isMobile && (
+            <button
+              type="button"
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className={cn(
+                'w-full flex items-center rounded-xl transition-colors duration-200',
+                'text-slate-400 hover:text-white hover:bg-white/5',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--sidebar-ring))]',
+                isCollapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5'
+              )}
+              aria-pressed={isCollapsed}
+              title={isCollapsed ? t('sidebar.expand_panel') : t('sidebar.collapse_panel')}
+            >
+              <ChevronLeft
+                className={cn('w-5 h-5 transition-transform duration-300', isCollapsed && 'rotate-180')}
+                aria-hidden
+              />
+              {!isCollapsed && <span className="text-sm font-medium">{t('sidebar.collapse_panel')}</span>}
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className={cn(
+              'w-full flex items-center rounded-xl transition-colors duration-200',
+              'text-slate-400 hover:text-rose-300 hover:bg-rose-500/10',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/50',
+              isCollapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5'
+            )}
+          >
+            <LogOut className="w-5 h-5 flex-shrink-0" aria-hidden />
+            {!isCollapsed && <span className="text-sm font-semibold">{t('common.logout')}</span>}
+          </button>
+        </div>
       </div>
-    </div>
+    </TooltipProvider>
   );
 
-  // Mobile sidebar with glass overlay
   if (isMobile) {
     return (
       <>
         <div
           className={cn(
-            'fixed inset-0 bg-slate-950/40 backdrop-blur-md z-40 transition-opacity duration-500',
+            'fixed inset-0 bg-slate-950/50 backdrop-blur-sm z-40 transition-opacity duration-300',
             isMobileOpen ? 'opacity-100' : 'opacity-0 pointer-events-none'
           )}
           onClick={() => setIsMobileOpen(false)}
+          aria-hidden={!isMobileOpen}
         />
-        
         <aside
-          style={{ background: 'linear-gradient(135deg, rgba(16,68,81,0.97) 0%, rgba(20,92,108,0.97) 100%)' }}
           className={cn(
-            'fixed left-0 top-0 h-full w-[280px] z-50 transition-transform duration-500 ease-out',
-            'backdrop-blur-md border-r border-white/10 shadow-2xl',
+            shellClass,
+            'fixed left-0 top-0 h-full w-[min(288px,88vw)] z-50 transition-transform duration-300 ease-out',
+            'border-r border-white/10 shadow-2xl shadow-black/30',
             isMobileOpen ? 'translate-x-0' : '-translate-x-full'
           )}
+          aria-hidden={!isMobileOpen}
+          id="mobile-sidebar"
         >
           {sidebarContent}
         </aside>
@@ -335,13 +420,12 @@ export function Sidebar() {
     );
   }
 
-  // Desktop sidebar
   return (
     <aside
-      style={{ background: 'linear-gradient(135deg, rgba(16,68,81,0.97) 0%, rgba(20,92,108,0.97) 100%)' }}
       className={cn(
-        'fixed left-0 top-0 h-screen z-40 transition-all duration-500',
-        'backdrop-blur-md border-r border-white/10 shadow-xl',
+        shellClass,
+        'fixed left-0 top-0 h-screen z-40 transition-[width] duration-300 ease-out',
+        'border-r border-white/10 shadow-xl shadow-black/20',
         isCollapsed ? 'w-[76px]' : 'w-[260px]'
       )}
     >
