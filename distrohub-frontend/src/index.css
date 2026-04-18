@@ -141,9 +141,17 @@
     @apply transition-all duration-200 ease-out hover:shadow-lg hover:-translate-y-0.5;
   }
 
-  /* Input field styling */
+  /* Input field styling — explicit text color so <select> shows selected label (Windows/appearance-none) */
   .input-field {
-    @apply w-full px-3 py-2 bg-background border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200;
+    @apply w-full px-3 py-2 bg-background text-foreground placeholder:text-muted-foreground border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200;
+  }
+
+  select.input-field {
+    @apply cursor-pointer text-foreground;
+  }
+
+  select.input-field option {
+    @apply bg-popover text-popover-foreground;
   }
 
   /* Custom scrollbar */

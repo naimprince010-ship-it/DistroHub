@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Header } from '@/components/layout/Header';
 import {
@@ -12,8 +12,33 @@ import {
   Filter,
   X,
   ImagePlus,
+  PackageMinus,
+  Search,
+  RefreshCw,
   TrendingUp,
+  CalendarDays,
+  Activity,
 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { buttonVariants } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useLanguage } from '@/contexts/LanguageContext';
 // @ts-ignore - exceljs types may not be available in build
 import { Workbook } from 'exceljs';
@@ -71,12 +96,39 @@ interface Unit {
   description?: string;
 }
 
+const LOW_STOCK_THRESHOLD = 50;
+
+function isExpiringSoonDate(expiryDate: string): boolean {
+  if (!expiryDate) return false;
+  const expiry = new Date(expiryDate);
+  const today = new Date();
+  const diffDays = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  return diffDays > 0 && diffDays <= 30;
+}
+
+function isExpiredDate(expiryDate: string): boolean {
+  if (!expiryDate) return false;
+  const expiry = new Date(expiryDate);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  expiry.setHours(0, 0, 0, 0);
+  return expiry < today;
+}
+
 export function Products() {
-  const [searchParams] = useSearchParams();
-  const { t } = useLanguage();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const searchTerm = searchParams.get('q') ?? '';
+  const { t, language } = useLanguage();
+  const locale = language === 'bn' ? 'bn-BD' : 'en-GB';
+  const formatMoney = useCallback(
+    (n: number) => `৳\u00A0${(n ?? 0).toLocaleString(locale)}`,
+    [locale]
+  );
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [stockFilter, setStockFilter] = useState<string>('all');
   const [expiryFilter, setExpiryFilter] = useState<string>('all');
@@ -181,17 +233,19 @@ export function Products() {
   };
 
   // Fetch products from API
-  const fetchProducts = async () => {
+  const fetchProducts = async (silent = false) => {
     const token = localStorage.getItem('token');
     if (!token) {
       logger.warn('[Products] No token found, skipping products fetch');
       setProducts([]);
       setLoading(false);
+      setRefreshing(false);
       return;
     }
 
     try {
-      setLoading(true);
+      if (silent) setRefreshing(true);
+      else setLoading(true);
       logger.log('[Products] Fetching products from API...');
       const response = await api.get('/api/products');
       logger.log('[Products] Products fetched successfully:', response.data?.length || 0);
@@ -266,8 +320,20 @@ export function Products() {
       }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
+
+  const updateSearchQuery = useCallback(
+    (q: string) => {
+      const next = new URLSearchParams(searchParams);
+      const trimmed = q.trim();
+      if (trimmed) next.set('q', trimmed);
+      else next.delete('q');
+      setSearchParams(next, { replace: true });
+    },
+    [searchParams, setSearchParams]
+  );
 
   // Fetch on mount
   useEffect(() => {
@@ -275,32 +341,16 @@ export function Products() {
     fetchProducts();
   }, []);
 
-  useEffect(() => {
-    const globalSearch = searchParams.get('q') || '';
-    setSearchTerm(globalSearch);
-  }, [searchParams]);
-
   // Memoize expensive category calculation
   const allCategories = useMemo(() => {
     return [...new Set([...categories, ...products.map(p => p.category)])];
   }, [categories, products]);
 
-  const isExpiringSoon = (expiryDate: string) => {
-    if (!expiryDate) return false;
-    const expiry = new Date(expiryDate);
-    const today = new Date();
-    const diffDays = Math.ceil((expiry.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    return diffDays > 0 && diffDays <= 30;
-  };
-
-  const isExpired = (expiryDate: string) => {
-    if (!expiryDate) return false;
-    const expiry = new Date(expiryDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    expiry.setHours(0, 0, 0, 0);
-    return expiry < today;
-  };
+  useEffect(() => {
+    if (categoryFilter !== 'all' && !allCategories.includes(categoryFilter)) {
+      setCategoryFilter('all');
+    }
+  }, [categoryFilter, allCategories]);
 
   // Memoize expensive filtering calculation
   const filteredProducts = useMemo(() => {
@@ -312,21 +362,35 @@ export function Products() {
 
       const matchesCategory = categoryFilter === 'all' || product.category === categoryFilter;
 
-      const matchesStock = stockFilter === 'all' ||
-        (stockFilter === 'low' && product.stock_quantity < 50) ||
+      const matchesStock =
+        stockFilter === 'all' ||
+        (stockFilter === 'low' && product.stock_quantity < LOW_STOCK_THRESHOLD && product.stock_quantity > 0) ||
         (stockFilter === 'out' && product.stock_quantity === 0) ||
-        (stockFilter === 'in_stock' && product.stock_quantity >= 50);
+        (stockFilter === 'in_stock' && product.stock_quantity >= LOW_STOCK_THRESHOLD);
 
       const matchesExpiry = expiryFilter === 'all' ||
-        (expiryFilter === 'expired' && isExpired(product.expiry_date)) ||
-        (expiryFilter === 'expiring' && isExpiringSoon(product.expiry_date) && !isExpired(product.expiry_date)) ||
-        (expiryFilter === 'safe' && !isExpiringSoon(product.expiry_date));
+        (expiryFilter === 'expired' && isExpiredDate(product.expiry_date)) ||
+        (expiryFilter === 'expiring' && isExpiringSoonDate(product.expiry_date) && !isExpiredDate(product.expiry_date)) ||
+        (expiryFilter === 'safe' && !isExpiringSoonDate(product.expiry_date));
 
       return matchesSearch && matchesCategory && matchesStock && matchesExpiry;
     });
   }, [products, searchTerm, categoryFilter, stockFilter, expiryFilter]);
 
-  const activeFiltersCount = [categoryFilter, stockFilter, expiryFilter].filter(f => f !== 'all').length;
+  const activeFiltersCount =
+    [categoryFilter, stockFilter, expiryFilter].filter((f) => f !== 'all').length + (searchTerm ? 1 : 0);
+
+  const productStats = useMemo(() => {
+    let low = 0;
+    let out = 0;
+    let expiring = 0;
+    for (const p of products) {
+      if (p.stock_quantity === 0) out++;
+      else if (p.stock_quantity < LOW_STOCK_THRESHOLD) low++;
+      if (p.expiry_date && isExpiringSoonDate(p.expiry_date) && !isExpiredDate(p.expiry_date)) expiring++;
+    }
+    return { total: products.length, low, out, expiring };
+  }, [products]);
 
   const handleExcelImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -370,13 +434,16 @@ export function Products() {
 
       if (jsonData.length > 0) {
         setProducts([...products, ...jsonData]);
-        alert(`Successfully imported ${jsonData.length} products!`);
+        toast({
+          title: t('products.import_done'),
+          description: `${jsonData.length}`,
+        });
       } else {
-        alert('No products found in the Excel file.');
+        toast({ title: t('products.no_products'), variant: 'destructive' });
       }
     } catch (error) {
       console.error('[Products] Error importing Excel:', error);
-      alert('Error importing Excel file. Please check the file format.');
+      toast({ title: t('settings.save_failed'), description: String(error), variant: 'destructive' });
     }
   };
 
@@ -442,17 +509,17 @@ export function Products() {
       link.download = 'products.xlsx';
       link.click();
       window.URL.revokeObjectURL(url);
+      toast({ title: t('products.export_done') });
     } catch (error) {
       console.error('[Products] Error exporting Excel:', error);
-      alert('Error exporting Excel file.');
+      toast({ title: t('settings.save_failed'), description: String(error), variant: 'destructive' });
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm(t('products.delete_confirm'))) {
-      return;
-    }
-
+  const executeDelete = async () => {
+    if (!deleteId) return;
+    const id = deleteId;
+    setDeleteBusy(true);
     try {
       logger.log('[Products] Deleting product:', id);
       await deleteWithOfflineQueue('products', `/api/products/${id}`, { id }, {
@@ -460,26 +527,20 @@ export function Products() {
         onOnlineDelete: async () => deleteRecord('products', id),
       });
       logger.log('[Products] Product deleted successfully');
-
-      // Refetch products from API
-      await fetchProducts();
+      await fetchProducts(true);
+      toast({ title: t('products.delete_success') });
+      setDeleteId(null);
     } catch (error: any) {
       console.error('[Products] Failed to delete product:', error);
-      console.error('[Products] Error details:', {
-        message: error?.message,
-        status: error?.response?.status,
-        data: error?.response?.data,
-        code: error?.code
-      });
-
       let errorMessage = 'Failed to delete product';
       if (error?.code === 'ERR_NETWORK' || error?.message?.includes('Cannot connect')) {
-        errorMessage = 'Backend server is not responding. Please check:\n1. Backend is deployed on Render\n2. Backend service is running\n3. Try refreshing the page';
+        errorMessage = 'Backend server is not responding. Please try again.';
       } else {
         errorMessage = error?.response?.data?.detail || error?.message || 'Failed to delete product';
       }
-
-      alert(`Failed to delete product: ${errorMessage}`);
+      toast({ title: t('settings.save_failed'), description: errorMessage, variant: 'destructive' });
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -487,213 +548,428 @@ export function Products() {
     setCategoryFilter('all');
     setStockFilter('all');
     setExpiryFilter('all');
-    setSearchTerm('');
+    const next = new URLSearchParams(searchParams);
+    next.delete('q');
+    setSearchParams(next, { replace: true });
   };
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen bg-slate-50/80">
       <Header title={t('common.products')} />
 
-      <div className="p-3">
-        {/* Actions Bar */}
-        <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 flex-1 flex-wrap">
-            <div className="relative">
-              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder={t('header.search_placeholder')}
-                className="input-field pl-10 pr-10 w-64"
-              />
-              {searchTerm && (
-                <button
-                  onClick={() => setSearchTerm('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
+      <div className="mx-auto max-w-[1680px] space-y-6 p-4 md:p-6">
+        <div className="space-y-1.5">
+          <p className="text-sm leading-relaxed text-slate-700">{t('products.subtitle')}</p>
+          <p className="hidden text-xs leading-relaxed text-slate-500 sm:block">{t('products.search_hint')}</p>
+        </div>
 
-            <div className="relative">
-              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="input-field pl-10 w-40"
-              >
-                <option value="all">{t('common.all_categories')}</option>
-                {allCategories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </div>
-
-            <select
-              value={stockFilter}
-              onChange={(e) => setStockFilter(e.target.value)}
-              className="input-field w-36"
-            >
-              <option value="all">{t('common.all_stock')}</option>
-              <option value="in_stock">{t('products.in_stock')}</option>
-              <option value="low">{t('products.low_stock')}</option>
-              <option value="out">{t('products.out_of_stock')}</option>
-            </select>
-
-            <select
-              value={expiryFilter}
-              onChange={(e) => setExpiryFilter(e.target.value)}
-              className="input-field w-40"
-            >
-              <option value="all">{t('common.all_expiry')}</option>
-              <option value="expired">{t('products.expired')}</option>
-              <option value="expiring">{t('products.expiring_soon')}</option>
-              <option value="safe">{t('products.safe')}</option>
-            </select>
-
-            {activeFiltersCount > 0 && (
-              <button
-                onClick={clearFilters}
-                className="flex items-center gap-1 px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-              >
-                <X className="w-4 h-4" />
-                Clear ({activeFiltersCount})
-              </button>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            <label className="btn-secondary flex items-center gap-2 cursor-pointer">
-              <Upload className="w-4 h-4" />
-              <span>Import Excel</span>
-              <input
-                type="file"
-                accept=".xlsx,.xls"
-                onChange={handleExcelImport}
-                className="hidden"
-              />
-            </label>
-
-            <button onClick={handleExcelExport} className="btn-secondary flex items-center gap-2">
-              <Download className="w-4 h-4" />
-              <span>Export</span>
-            </button>
-
-            <button
-              onClick={() => {
-                // Refetch categories when opening modal to get latest
-                fetchCategoriesAndSuppliers();
-                setShowAddModal(true);
-              }}
-              className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 flex flex-col items-center gap-0.5 shadow-sm hover:shadow-md"
-            >
-              <div className="flex items-center gap-2">
-                <Plus className="w-4 h-4" />
-                <span>{t('common.add_product')}</span>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-xl border border-slate-200/80 bg-slate-50/90 p-3 ring-1 ring-slate-200/60">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-600/90 text-white shadow-sm">
+                <Package className="h-4 w-4" aria-hidden />
               </div>
-            </button>
+              <div className="min-w-0 leading-tight">
+                <p className="text-lg font-bold tabular-nums text-slate-900 sm:text-xl">{productStats.total}</p>
+                <p className="text-xs font-medium text-slate-600">{t('products.stat_total')}</p>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-200/80 bg-slate-50/90 p-3 ring-1 ring-slate-200/60">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-600/90 text-white shadow-sm">
+                <AlertTriangle className="h-4 w-4" aria-hidden />
+              </div>
+              <div className="min-w-0 leading-tight">
+                <p className="text-lg font-bold tabular-nums text-slate-900 sm:text-xl">{productStats.low}</p>
+                <p className="text-xs font-medium text-slate-600">{t('products.stat_low')}</p>
+              </div>
+            </div>
+          </div>
+          <div
+            className={cn(
+              'rounded-xl border bg-slate-50/90 p-3 ring-1 transition-shadow',
+              productStats.total > 0 && productStats.out === productStats.total
+                ? 'border-red-300/90 ring-2 ring-red-200/80 shadow-sm'
+                : 'border-slate-200/80 ring-slate-200/60'
+            )}
+          >
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-600/90 text-white shadow-sm">
+                <PackageMinus className="h-4 w-4" aria-hidden />
+              </div>
+              <div className="min-w-0 leading-tight">
+                <p className="text-lg font-bold tabular-nums text-slate-900 sm:text-xl">{productStats.out}</p>
+                <p className="text-xs font-medium text-slate-600">{t('products.stat_out')}</p>
+              </div>
+            </div>
+          </div>
+          <div className="rounded-xl border border-slate-200/80 bg-slate-50/90 p-3 ring-1 ring-slate-200/60">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-600/90 text-white shadow-sm">
+                <CalendarDays className="h-4 w-4" aria-hidden />
+              </div>
+              <div className="min-w-0 leading-tight">
+                <p className="text-lg font-bold tabular-nums text-slate-900 sm:text-xl">{productStats.expiring}</p>
+                <p className="text-xs font-medium text-slate-600">{t('products.stat_expiring')}</p>
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* Products Table */}
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden max-h-[calc(100vh-180px)] overflow-y-auto">
+        <div className="rounded-xl border border-slate-100 bg-white shadow-sm">
+          <div className="border-b border-slate-100 bg-slate-50/50 px-4 py-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('products.filter_section')}</h2>
+          </div>
+          <div className={cn('p-4', !searchTerm && 'sm:p-0')}>
+            <div className="relative mb-4 border-b border-slate-100 pb-4 sm:hidden">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
+              <input
+                type="search"
+                value={searchTerm}
+                onChange={(e) => updateSearchQuery(e.target.value)}
+                placeholder={t('products.search_mobile')}
+                className="input-field h-10 w-full pl-10"
+                autoComplete="off"
+                aria-label={t('products.search_mobile')}
+              />
+            </div>
+            {searchTerm ? (
+              <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-4">
+                <span className="text-xs font-medium text-slate-500">{t('products.search_chip_label')}:</span>
+                <div className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-sm text-slate-800">
+                  <span className="max-w-[min(100%,220px)] truncate font-medium">{searchTerm}</span>
+                  <button
+                    type="button"
+                    onClick={() => updateSearchQuery('')}
+                    className="rounded-full p-0.5 text-slate-600 hover:bg-primary/20 hover:text-slate-900"
+                    aria-label={t('products.search_clear')}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50/30 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
+            <div className="order-2 sm:order-1">
+              <p className="text-sm text-slate-600" aria-live="polite">
+                {t('products.toolbar_count')
+                  .replace('{{f}}', String(filteredProducts.length))
+                  .replace('{{t}}', String(products.length))}
+              </p>
+            </div>
+            <div className="order-1 flex flex-wrap items-center justify-end gap-2 sm:order-2">
+              <span className="sr-only">{t('products.actions_section')}</span>
+              <button
+                type="button"
+                onClick={() => fetchProducts(true)}
+                disabled={refreshing || loading}
+                className="btn-secondary inline-flex h-10 shrink-0 items-center gap-2 px-3 disabled:opacity-50"
+                aria-busy={refreshing}
+              >
+                <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} aria-hidden />
+                <span className="hidden sm:inline">{t('products.refresh')}</span>
+              </button>
+              <label className="btn-secondary inline-flex h-10 cursor-pointer shrink-0 items-center gap-2 px-3">
+                <Upload className="h-4 w-4" aria-hidden />
+                <span className="hidden sm:inline">{t('common.import')}</span>
+                <input type="file" accept=".xlsx,.xls" onChange={handleExcelImport} className="hidden" />
+              </label>
+              <button
+                type="button"
+                onClick={handleExcelExport}
+                disabled={loading || products.length === 0}
+                className="btn-secondary inline-flex h-10 shrink-0 items-center gap-2 px-3 disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" aria-hidden />
+                <span className="hidden sm:inline">{t('common.export')}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  fetchCategoriesAndSuppliers();
+                  setShowAddModal(true);
+                }}
+                className="btn-primary inline-flex h-10 shrink-0 items-center gap-2 px-4 font-medium shadow-sm"
+              >
+                <Plus className="h-4 w-4" aria-hidden />
+                {t('common.add_product')}
+              </button>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 p-4 pt-5">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-12 xl:items-end">
+              <div className="min-w-0 xl:col-span-4">
+                <label
+                  className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-700"
+                  htmlFor="product-category"
+                >
+                  {t('products.filter_label_category')}
+                </label>
+                <div className="relative">
+                  <Filter className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
+                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                    <SelectTrigger
+                      id="product-category"
+                      className="h-10 w-full border-slate-200 bg-white pl-10 pr-8 text-left text-sm text-slate-900 shadow-sm focus:ring-2 focus:ring-ring [&>span]:line-clamp-1"
+                    >
+                      <SelectValue placeholder={t('common.all_categories')} />
+                    </SelectTrigger>
+                    <SelectContent position="popper" className="max-h-72">
+                      <SelectItem value="all">{t('common.all_categories')}</SelectItem>
+                      {allCategories.map((cat) => (
+                        <SelectItem key={cat} value={cat}>
+                          {cat}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="min-w-0 xl:col-span-4">
+                <label
+                  className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-700"
+                  htmlFor="product-stock"
+                >
+                  {t('products.filter_label_stock')}
+                </label>
+                <div className="relative">
+                  <Activity className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
+                  <Select value={stockFilter} onValueChange={setStockFilter}>
+                    <SelectTrigger
+                      id="product-stock"
+                      className="h-10 w-full border-slate-200 bg-white pl-10 pr-8 text-left text-sm text-slate-900 shadow-sm focus:ring-2 focus:ring-ring [&>span]:line-clamp-1"
+                    >
+                      <SelectValue placeholder={t('common.all_stock')} />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      <SelectItem value="all">{t('common.all_stock')}</SelectItem>
+                      <SelectItem value="in_stock">{t('products.in_stock')}</SelectItem>
+                      <SelectItem value="low">{t('products.low_stock')}</SelectItem>
+                      <SelectItem value="out">{t('products.out_of_stock')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="min-w-0 xl:col-span-2">
+                <label
+                  className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-700"
+                  htmlFor="product-expiry"
+                >
+                  {t('products.filter_label_expiry')}
+                </label>
+                <div className="relative">
+                  <CalendarDays className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
+                  <Select value={expiryFilter} onValueChange={setExpiryFilter}>
+                    <SelectTrigger
+                      id="product-expiry"
+                      className="h-10 w-full border-slate-200 bg-white pl-10 pr-8 text-left text-sm text-slate-900 shadow-sm focus:ring-2 focus:ring-ring [&>span]:line-clamp-1"
+                    >
+                      <SelectValue placeholder={t('common.all_expiry')} />
+                    </SelectTrigger>
+                    <SelectContent position="popper">
+                      <SelectItem value="all">{t('common.all_expiry')}</SelectItem>
+                      <SelectItem value="expired">{t('products.expired')}</SelectItem>
+                      <SelectItem value="expiring">{t('products.expiring_soon')}</SelectItem>
+                      <SelectItem value="safe">{t('products.safe')}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="flex min-w-0 flex-col xl:col-span-2">
+                <span
+                  className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-transparent select-none"
+                  aria-hidden
+                >
+                  {t('products.filter_label_category')}
+                </span>
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  disabled={activeFiltersCount === 0}
+                  className="inline-flex h-10 w-full shrink-0 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-sm font-medium text-slate-500 transition-colors enabled:border-red-200 enabled:bg-red-50 enabled:text-red-700 enabled:hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 xl:w-auto xl:min-w-[7rem]"
+                >
+                  <X className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="truncate">{t('products.clear_filters')}</span>
+                  {activeFiltersCount > 0 ? (
+                    <span className="tabular-nums">({activeFiltersCount})</span>
+                  ) : null}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* overflow-hidden breaks position:sticky on thead — keep scroll + rounding on inner wrapper */}
+        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/50 px-4 py-2.5">
+            <h2 className="text-sm font-semibold text-slate-800">{t('products.title')}</h2>
+            <span className="max-w-[min(100%,18rem)] truncate text-xs text-slate-500 sm:max-w-none">
+              {t('products.toolbar_count')
+                .replace('{{f}}', String(filteredProducts.length))
+                .replace('{{t}}', String(products.length))}
+            </span>
+          </div>
+          {/* Single scrollport: vertical + horizontal — nested overflow-x was breaking sticky header */}
+          <div className="relative isolate max-h-[min(70vh,calc(100vh-14rem))] overflow-auto overscroll-contain">
           {loading ? (
-            <div className="p-8 text-center text-slate-500">Loading...</div>
+            <div className="space-y-2 p-4">
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                <div key={i} className="flex gap-3 rounded-lg border border-slate-100 p-3">
+                  <Skeleton className="h-10 w-10 shrink-0 rounded-lg" />
+                  <div className="flex flex-1 flex-col gap-2">
+                    <Skeleton className="h-4 w-2/3" />
+                    <Skeleton className="h-3 w-1/3" />
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : (
             <>
-              <div className="relative overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead className="bg-slate-50 border-b border-slate-200 sticky top-0 z-10">
+                <table className="w-full min-w-[1100px] border-separate border-spacing-0 text-sm">
+                  <thead>
                     <tr>
-                      <th className="text-center p-2 font-semibold text-slate-700 w-12 sticky top-0 bg-slate-50">#</th>
-                      <th className="text-left p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.products')}</th>
-                      <th className="text-left p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.sku')}</th>
-                      <th className="text-left p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.category')}</th>
-                      <th className="text-right p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.unit')}</th>
-                      <th className="text-right p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.purchase')}</th>
-                      <th className="text-right p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.selling')}</th>
-                      <th className="text-right p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.stock')}</th>
-                      <th className="text-right p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.pcs_ctn')}</th>
-                      <th className="text-left p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.batch')}</th>
-                      <th className="text-left p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.expiry')}</th>
-                      <th className="text-center p-2 font-semibold text-slate-700 sticky top-0 bg-slate-50">{t('common.actions')}</th>
+                      <th className="sticky top-0 z-30 w-12 border-b border-slate-200 bg-slate-50 p-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        #
+                      </th>
+                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        {t('common.products')}
+                      </th>
+                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        {t('common.sku')}
+                      </th>
+                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        {t('common.category')}
+                      </th>
+                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        {t('common.unit')}
+                      </th>
+                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        {t('common.purchase')}
+                      </th>
+                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        {t('common.selling')}
+                      </th>
+                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        {t('common.stock')}
+                      </th>
+                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        {t('common.pcs_ctn')}
+                      </th>
+                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        {t('common.batch')}
+                      </th>
+                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        {t('common.expiry')}
+                      </th>
+                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-600">
+                        {t('common.actions')}
+                      </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-slate-100/90">
                     {filteredProducts.map((product, index) => {
-                      const stockLevel = product.stock_quantity < 50 ? 'low' : product.stock_quantity === 0 ? 'out' : 'ok';
-                      const expiryStatus = isExpired(product.expiry_date) ? 'expired' : isExpiringSoon(product.expiry_date) ? 'soon' : 'ok';
+                      const stockLevel =
+                        product.stock_quantity === 0
+                          ? 'out'
+                          : product.stock_quantity < LOW_STOCK_THRESHOLD
+                            ? 'low'
+                            : 'ok';
+                      const expiryStatus = isExpiredDate(product.expiry_date)
+                        ? 'expired'
+                        : isExpiringSoonDate(product.expiry_date)
+                          ? 'soon'
+                          : 'ok';
                       const isAlert = stockLevel === 'out' || stockLevel === 'low' || expiryStatus === 'expired' || expiryStatus === 'soon';
 
                       return (
-                        <tr key={product.id} className={`hover:bg-slate-100 transition-colors ${isAlert ? 'bg-red-50/50' : ''}`}>
-                          <td className="p-2 text-center text-slate-600 font-medium">
-                            {index + 1}
-                          </td>
-                          <td className="p-2">
-                            <div className="flex items-center gap-2 max-w-[200px]">
-                              <div className="w-8 h-8 bg-primary-100 rounded-lg flex items-center justify-center flex-shrink-0">
-                                <Package className="w-4 h-4 text-primary-600" />
+                        <tr
+                          key={product.id}
+                          className={cn(
+                            'transition-colors hover:bg-slate-50/90',
+                            isAlert && 'bg-amber-50/40',
+                            stockLevel === 'out' && 'bg-red-50/30'
+                          )}
+                        >
+                          <td className="p-2.5 text-center text-xs font-medium tabular-nums text-slate-500">{index + 1}</td>
+                          <td className="p-2.5">
+                            <div className="flex max-w-[220px] items-center gap-2.5">
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/15">
+                                <Package className="h-4 w-4 text-primary-700" aria-hidden />
                               </div>
-                              <span className="font-medium text-slate-900 truncate" title={product.name}>{product.name}</span>
+                              <span className="truncate font-medium text-slate-900" title={product.name}>
+                                {product.name}
+                              </span>
                             </div>
                           </td>
-                          <td className="p-2 text-slate-600 font-mono text-sm">{product.sku}</td>
-                          <td className="p-2">
-                            <span className="px-2 py-1 bg-slate-100 text-slate-700 rounded-full text-sm">
+                          <td className="p-2.5 font-mono text-xs text-slate-600">{product.sku}</td>
+                          <td className="p-2.5">
+                            <span className="inline-block max-w-[140px] truncate rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
                               {product.category}
                             </span>
                           </td>
-                          <td className="p-2 text-right text-slate-600">
-                            {product.unit}
-                          </td>
-                          <td className="p-2 text-right text-slate-600">৳ {product.purchase_price}</td>
-                          <td className="p-2 text-right font-bold text-slate-900">৳ {product.selling_price}</td>
-                          <td className="p-2 text-right">
+                          <td className="p-2.5 text-right text-slate-600">{product.unit}</td>
+                          <td className="p-2.5 text-right tabular-nums text-slate-700">{formatMoney(product.purchase_price)}</td>
+                          <td className="p-2.5 text-right font-semibold tabular-nums text-slate-900">{formatMoney(product.selling_price)}</td>
+                          <td className="p-2.5 text-right">
                             <span
-                              className={`${product.stock_quantity === 0
-                                ? 'font-bold text-red-600'
-                                : product.stock_quantity < 50
-                                  ? 'font-medium text-orange-600'
-                                  : 'font-medium text-green-600'
-                                }`}
+                              className={cn(
+                                'inline-flex min-w-[2rem] justify-end tabular-nums font-medium',
+                                product.stock_quantity === 0 && 'font-semibold text-red-600',
+                                product.stock_quantity > 0 &&
+                                  product.stock_quantity < LOW_STOCK_THRESHOLD &&
+                                  'text-amber-700',
+                                product.stock_quantity >= LOW_STOCK_THRESHOLD && 'text-emerald-700'
+                              )}
                             >
                               {product.stock_quantity}
                             </span>
                           </td>
-                          <td className="p-2 text-right text-slate-600 text-sm">
-                            {product.pieces_per_carton || product.pack_size || '-'}
+                          <td className="p-2.5 text-right text-xs tabular-nums text-slate-600">
+                            {product.pieces_per_carton || product.pack_size || '—'}
                           </td>
-                          <td className="p-2 text-slate-600 font-mono text-sm">{product.batch_number}</td>
-                          <td className="p-2">
+                          <td className="p-2.5 font-mono text-xs text-slate-600">{product.batch_number || '—'}</td>
+                          <td className="p-2.5">
                             <div className="flex items-center gap-1">
-                              {isExpiringSoon(product.expiry_date) && (
-                                <AlertTriangle className="w-4 h-4 text-orange-500" />
+                              {isExpiredDate(product.expiry_date) ? (
+                                <span className="text-xs font-medium text-red-600">{product.expiry_date || '—'}</span>
+                              ) : (
+                                <>
+                                  {isExpiringSoonDate(product.expiry_date) ? (
+                                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
+                                  ) : null}
+                                  <span
+                                    className={cn(
+                                      'text-xs',
+                                      isExpiringSoonDate(product.expiry_date)
+                                        ? 'font-medium text-amber-800'
+                                        : 'text-slate-600'
+                                    )}
+                                  >
+                                    {product.expiry_date || '—'}
+                                  </span>
+                                </>
                               )}
-                              <span
-                                className={
-                                  isExpiringSoon(product.expiry_date) ? 'text-orange-600 font-medium' : 'text-slate-600'
-                                }
-                              >
-                                {product.expiry_date}
-                              </span>
                             </div>
                           </td>
-                          <td className="p-2">
-                            <div className="flex items-center justify-center gap-2">
+                          <td className="p-2.5">
+                            <div className="flex items-center justify-center gap-1">
                               <button
+                                type="button"
                                 onClick={() => setEditingProduct(product)}
-                                className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                                title="Edit"
+                                className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-primary/10 hover:text-primary-700"
+                                title={t('products.edit')}
                               >
-                                <Edit className="w-5 h-5" />
+                                <Edit className="h-4 w-4" />
                               </button>
                               <button
-                                onClick={() => handleDelete(product.id)}
-                                className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"
-                                title="Delete"
+                                type="button"
+                                onClick={() => setDeleteId(product.id)}
+                                className="rounded p-2 text-red-600 transition-colors hover:bg-red-50"
+                                title={t('common.delete')}
                               >
                                 <Trash2 className="w-5 h-5" />
                               </button>
@@ -704,17 +980,47 @@ export function Products() {
                     })}
                   </tbody>
                 </table>
-              </div>
 
               {filteredProducts.length === 0 && !loading && (
-                <div className="p-4 text-center text-slate-500">
-                  {t('products.no_products')}
+                <div className="px-4 py-12 text-center">
+                  <Package className="mx-auto mb-3 h-12 w-12 text-slate-300" aria-hidden />
+                  <p className="font-medium text-slate-700">{t('products.no_products')}</p>
                 </div>
               )}
             </>
           )}
+          </div>
         </div>
       </div>
+
+      <AlertDialog
+        open={deleteId !== null}
+        onOpenChange={(open) => {
+          if (!open && !deleteBusy) setDeleteId(null);
+        }}
+      >
+        <AlertDialogContent className="border-slate-200 sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>{t('products.delete_dialog_title')}</AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-600">
+              {t('products.delete_dialog_desc')}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-0">
+            <AlertDialogCancel disabled={deleteBusy} className="border-slate-200">
+              {t('products.cancel')}
+            </AlertDialogCancel>
+            <button
+              type="button"
+              disabled={deleteBusy}
+              className={cn(buttonVariants(), 'bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-600')}
+              onClick={executeDelete}
+            >
+              {deleteBusy ? '…' : t('common.delete')}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Add/Edit Modal would go here */}
       {
