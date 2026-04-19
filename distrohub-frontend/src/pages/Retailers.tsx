@@ -344,9 +344,9 @@ export function Retailers() {
 
         {/* Stats */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <StatCard label={t('retailers.stat_total')} value={String(retailers.length)} color="blue" icon={<User className="w-5 h-5" />} />
-          <StatCard label={t('retailers.stat_credit')} value={formatMoney(totalCredit)} color="green" icon={<CreditCard className="w-5 h-5" />} />
-          <StatCard label={t('retailers.stat_due')} value={formatMoney(totalDue)} color="red" icon={<CreditCard className="w-5 h-5" />} />
+          <StatCard label={t('retailers.stat_total')} value={String(retailers.length)} color="blue" icon={User} />
+          <StatCard label={t('retailers.stat_credit')} value={formatMoney(totalCredit)} color="green" icon={CreditCard} />
+          <StatCard label={t('retailers.stat_due')} value={formatMoney(totalDue)} color="red" icon={CreditCard} />
         </div>
 
         {/* Toolbar */}

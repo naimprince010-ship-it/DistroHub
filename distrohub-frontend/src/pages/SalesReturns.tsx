@@ -126,7 +126,7 @@ export function SalesReturns() {
       <div className="space-y-3">
         {/* Stats */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <StatCard label="Total Returns" value={String(totalReturns)} color="blue" icon={<RotateCcw className="w-5 h-5" />} />
+          <StatCard label="Total Returns" value={String(totalReturns)} color="blue" icon={RotateCcw} />
           <StatCard label="Total Return Amount" value={`৳ ${totalReturnAmount.toLocaleString()}`} color="red" />
           <StatCard label="Sales with Returns" value={String(returns.size)} color="purple" />
         </div>

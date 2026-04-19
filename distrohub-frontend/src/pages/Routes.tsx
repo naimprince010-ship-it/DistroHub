@@ -11,7 +11,6 @@ import {
   Clock,
   XCircle,
   Trash2,
-  FileCheck,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { formatDateBD } from '@/lib/utils';
@@ -108,10 +107,10 @@ export function Routes() {
       <div className="space-y-3">
         {/* Stats */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard label="Total Routes" value={String(routes.length)} color="blue" icon={<Truck className="w-5 h-5" />} />
-          <StatCard label="Pending" value={String(routes.filter((r) => r.status === 'pending').length)} color="amber" icon={<Clock className="w-5 h-5" />} />
-          <StatCard label="In Progress" value={String(routes.filter((r) => r.status === 'in_progress').length)} color="purple" icon={<Truck className="w-5 h-5" />} />
-          <StatCard label="Reconciled" value={String(routes.filter((r) => r.status === 'reconciled').length)} color="green" icon={<CheckCircle className="w-5 h-5" />} />
+          <StatCard label="Total Routes" value={String(routes.length)} color="blue" icon={Truck} />
+          <StatCard label="Pending" value={String(routes.filter((r) => r.status === 'pending').length)} color="amber" icon={Clock} />
+          <StatCard label="In Progress" value={String(routes.filter((r) => r.status === 'in_progress').length)} color="purple" icon={Truck} />
+          <StatCard label="Reconciled" value={String(routes.filter((r) => r.status === 'reconciled').length)} color="green" icon={CheckCircle} />
         </div>
 
         {/* Routes Table */}

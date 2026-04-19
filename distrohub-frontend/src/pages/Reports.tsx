@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { PageShell } from '@/components/layout/PageShell';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Download,
   Calendar,
@@ -719,7 +718,7 @@ export function Reports() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {paginatedSalesReport.map((sale, index) => {
+                {paginatedSalesReport.map((sale) => {
                   const gross = sale.gross_total || sale.total_amount;
                   const returned = sale.returned_total || 0;
                   const net = sale.net_total || gross;

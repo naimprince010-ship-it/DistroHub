@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PageShell } from '@/components/layout/PageShell';
 import { StatCard } from '@/components/ui/stat-card';
-import { Card, CardContent } from '@/components/ui/card';
 import {
   Plus,
   DollarSign,

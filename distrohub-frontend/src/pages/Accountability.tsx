@@ -161,9 +161,9 @@ export function Accountability() {
               <>
                 {/* Summary KPI Cards */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <StatCard label="Cash Holding" value={`৳${accountability.current_cash_holding.toLocaleString()}`} color="green" icon={<Wallet className="w-5 h-5" />} />
+                  <StatCard label="Cash Holding" value={`৳${accountability.current_cash_holding.toLocaleString()}`} color="green" icon={Wallet} />
                   <StatCard label="Active Routes" value={String(accountability.active_routes_count)} color="blue" />
-                  <StatCard label="Pending Reconciliation" value={String(accountability.pending_reconciliation_count)} color="amber" icon={<AlertCircle className="w-5 h-5" />} />
+                  <StatCard label="Pending Reconciliation" value={String(accountability.pending_reconciliation_count)} color="amber" icon={AlertCircle} />
                   <StatCard label="Total Expected Cash" value={`৳${accountability.total_expected_cash.toLocaleString()}`} color="purple" />
                 </div>
 
