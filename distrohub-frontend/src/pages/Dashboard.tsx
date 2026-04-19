@@ -363,8 +363,7 @@ export function Dashboard() {
           hint: fillTemplate(t('dashboard.kpi_sales_month'), { amount: formatCurrency(safeStats.sales_this_month) }),
           hintTone: (safeStats.sales_this_month > 0 ? 'positive' : 'muted') as KpiHintTone,
           icon: TrendingUp,
-          color: 'from-emerald-500 to-emerald-600',
-          bgTint: 'bg-emerald-500/10',
+          strip: '#4f7fff',
           to: '/sales',
         },
         {
@@ -384,8 +383,7 @@ export function Dashboard() {
               ? 'positive'
               : 'muted') as KpiHintTone,
           icon: TrendingDown,
-          color: 'from-rose-500 to-rose-600',
-          bgTint: 'bg-rose-500/10',
+          strip: '#ff5b5b',
           to: '/receivables',
         },
         {
@@ -394,8 +392,7 @@ export function Dashboard() {
           hint: fillTemplate(t('dashboard.kpi_categories_inline'), { n: String(safeStats.total_categories) }),
           hintTone: 'muted' as const,
           icon: Package,
-          color: 'from-blue-500 to-blue-600',
-          bgTint: 'bg-blue-500/10',
+          strip: '#4f7fff',
           to: '/products',
         },
         {
@@ -404,8 +401,7 @@ export function Dashboard() {
           hint: fillTemplate(t('dashboard.kpi_purchases_inline'), { n: String(safeStats.total_purchases) }),
           hintTone: 'muted' as const,
           icon: Users,
-          color: 'from-violet-500 to-violet-600',
-          bgTint: 'bg-violet-500/10',
+          strip: '#2ecc8a',
           to: '/retailers',
         },
         {
@@ -417,8 +413,7 @@ export function Dashboard() {
               : t('dashboard.kpi_low_stock_ok'),
           hintTone: (safeStats.low_stock_count > 0 ? 'caution' : 'muted') as KpiHintTone,
           icon: AlertTriangle,
-          color: 'from-amber-500 to-amber-600',
-          bgTint: 'bg-amber-500/10',
+          strip: '#f5a623',
           to: '/inventory?filter=low-stock',
         },
         {
@@ -430,8 +425,7 @@ export function Dashboard() {
               : t('dashboard.kpi_expiry_ok'),
           hintTone: (safeStats.expiring_soon_count > 0 ? 'caution' : 'muted') as KpiHintTone,
           icon: AlertTriangle,
-          color: 'from-orange-500 to-orange-600',
-          bgTint: 'bg-orange-500/10',
+          strip: '#f5a623',
           to: '/expiry',
         },
         {
@@ -441,8 +435,7 @@ export function Dashboard() {
             safeStats.payable_to_supplier > 0 ? t('dashboard.kpi_payable_attention') : t('dashboard.kpi_payable_ok'),
           hintTone: (safeStats.payable_to_supplier > 0 ? 'caution' : 'muted') as KpiHintTone,
           icon: ShoppingCart,
-          color: 'from-indigo-500 to-indigo-600',
-          bgTint: 'bg-indigo-500/10',
+          strip: '#ff5b5b',
           to: '/purchase',
         },
         {
@@ -451,8 +444,7 @@ export function Dashboard() {
           hint: fillTemplate(t('dashboard.kpi_products_inline'), { n: String(safeStats.total_products) }),
           hintTone: 'muted' as const,
           icon: FolderOpen,
-          color: 'from-teal-500 to-teal-600',
-          bgTint: 'bg-teal-500/10',
+          strip: '#a78bfa',
           to: '/products',
         },
       ]
@@ -513,7 +505,7 @@ export function Dashboard() {
           <>
             <section className="space-y-3" aria-labelledby="dashboard-kpis-heading">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <h2 id="dashboard-kpis-heading" className="text-sm font-semibold text-foreground">
+                <h2 id="dashboard-kpis-heading" className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                   {t('dashboard.section_kpis')}
                 </h2>
                 <DashboardQuickActions />
@@ -524,61 +516,53 @@ export function Dashboard() {
                   key={stat.title}
                   to={stat.to}
                   className={cn(
-                    'group relative rounded-xl p-5 border border-border bg-card',
-                    'transition-all duration-300 ease-out',
-                    'hover:shadow-lg hover:shadow-primary/5 hover:-translate-y-0.5',
+                    'group relative rounded-xl border border-border bg-card overflow-hidden',
+                    'transition-colors duration-200 hover:border-[hsl(var(--border))/80]',
                     'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
                   )}
                 >
-                  <div className="flex items-start justify-between mb-4">
-                    <div
-                      className={cn(
-                        'w-11 h-11 rounded-xl flex items-center justify-center',
-                        'bg-gradient-to-br shadow-lg',
-                        stat.color
-                      )}
-                    >
-                      <stat.icon className="w-5 h-5 text-white" />
+                  {/* top colour strip */}
+                  <div className="h-[3px] w-full" style={{ background: stat.strip }} />
+
+                  <div className="px-[18px] py-[14px]">
+                    {/* label row */}
+                    <div className="flex items-center gap-[6px] mb-[10px] text-muted-foreground text-[11px]">
+                      <stat.icon className="w-[14px] h-[14px] flex-shrink-0" aria-hidden />
+                      <span className="truncate">{stat.title}</span>
                     </div>
+
+                    {/* value */}
+                    <p className="text-[22px] font-semibold font-mono text-foreground tracking-tight leading-none">
+                      {stat.value}
+                    </p>
+
+                    {/* hint badge */}
                     <span
                       className={cn(
-                        'inline-flex items-center justify-end max-w-[min(100%,13rem)] px-2 py-1 rounded-full text-xs font-medium leading-snug',
-                        stat.hintTone === 'positive' &&
-                          'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
-                        stat.hintTone === 'caution' &&
-                          'bg-amber-500/10 text-amber-900 dark:text-amber-300',
-                        stat.hintTone === 'muted' && 'bg-muted/90 text-muted-foreground'
+                        'inline-flex items-center mt-[8px] px-[7px] py-[2px] rounded text-[10px] font-mono font-medium max-w-full truncate',
+                        stat.hintTone === 'positive' && 'bg-[#2ecc8a]/10 text-[#2ecc8a]',
+                        stat.hintTone === 'caution'  && 'bg-[#f5a623]/10 text-[#f5a623]',
+                        stat.hintTone === 'muted'    && 'bg-muted text-muted-foreground'
                       )}
                     >
-                      <span className="truncate text-right">{stat.hint}</span>
+                      {stat.hint}
                     </span>
                   </div>
-                  <h3 className="text-2xl lg:text-3xl font-bold text-foreground mb-1 tracking-tight">
-                    {stat.value}
-                  </h3>
-                  <p className="text-sm text-muted-foreground font-medium">{stat.title}</p>
-
-                  <div
-                    className={cn(
-                      'absolute inset-0 rounded-xl opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none',
-                      stat.bgTint
-                    )}
-                  />
                 </Link>
               ))}
               </div>
             </section>
 
             <section className="space-y-3" aria-labelledby="dashboard-charts-heading">
-              <h2 id="dashboard-charts-heading" className="text-sm font-semibold text-foreground">
+              <h2 id="dashboard-charts-heading" className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 {t('dashboard.section_charts')}
               </h2>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
               <Card className={cn(cardSurface, 'overflow-hidden')}>
-                <CardHeader className="p-5 pb-2">
-                  <CardTitle className="text-lg font-semibold">{t('dashboard.sales_collections')}</CardTitle>
+                <CardHeader className="px-4 py-3 border-b border-border">
+                  <CardTitle className="text-[12.5px] font-semibold">{t('dashboard.sales_collections')}</CardTitle>
                 </CardHeader>
-                <CardContent className="px-5 pb-5 pt-0">
+                <CardContent className="p-4">
                 {!chartHasActivity ? (
                   <div className="h-[300px] flex items-center justify-center text-sm text-muted-foreground text-center px-4">
                     {t('dashboard.no_chart_data')}
@@ -645,10 +629,10 @@ export function Dashboard() {
               </Card>
 
               <Card className={cn(cardSurface, 'overflow-hidden')}>
-                <CardHeader className="p-5 pb-2">
-                  <CardTitle className="text-lg font-semibold">{t('dashboard.top_selling_products')}</CardTitle>
+                <CardHeader className="px-4 py-3 border-b border-border">
+                  <CardTitle className="text-[12.5px] font-semibold">{t('dashboard.top_selling_products')}</CardTitle>
                 </CardHeader>
-                <CardContent className="px-5 pb-5 pt-0">
+                <CardContent className="p-4">
                 {topProducts.length === 0 ? (
                   <div className="h-[300px] flex items-center justify-center text-sm text-muted-foreground text-center px-4">
                     {t('dashboard.no_top_products')}
@@ -701,13 +685,13 @@ export function Dashboard() {
             </section>
 
             <section className="space-y-3" aria-labelledby="dashboard-activity-heading">
-              <h2 id="dashboard-activity-heading" className="text-sm font-semibold text-foreground">
+              <h2 id="dashboard-activity-heading" className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                 {t('dashboard.section_activity')}
               </h2>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
               <Card className={cn(cardSurface, 'overflow-hidden p-0')}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 px-5 py-4 border-b border-border">
-                  <CardTitle className="text-lg font-semibold">{t('dashboard.recent_orders')}</CardTitle>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 px-4 py-3 border-b border-border">
+                  <CardTitle className="text-[12.5px] font-semibold">{t('dashboard.recent_orders')}</CardTitle>
                   <Link
                     to="/sales"
                     className="text-sm font-medium text-primary hover:text-primary/80 transition-colors shrink-0"
@@ -759,8 +743,8 @@ export function Dashboard() {
               </Card>
 
               <Card className={cn(cardSurface, 'overflow-hidden p-0')}>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 px-5 py-4 border-b border-border">
-                  <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 px-4 py-3 border-b border-border">
+                  <CardTitle className="text-[12.5px] font-semibold flex items-center gap-2">
                     <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500" aria-hidden />
                     {t('dashboard.expiring_soon')}
                   </CardTitle>

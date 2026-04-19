@@ -147,8 +147,7 @@ export function SidebarTrigger({ className }: { className?: string }) {
   );
 }
 
-const shellClass =
-  'bg-gradient-to-b from-[hsl(var(--sidebar-background))] via-[hsl(195_55%_16%)] to-[hsl(195_60%_11%)]';
+const shellClass = 'bg-[hsl(var(--sidebar-background))]';
 
 export function Sidebar() {
   const location = useLocation();
@@ -222,7 +221,7 @@ export function Sidebar() {
           'relative overflow-hidden',
           isCollapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5',
           active
-            ? 'bg-white/10 text-white shadow-sm shadow-black/10'
+            ? 'bg-[hsl(var(--sidebar-ring))]/10 text-[hsl(var(--sidebar-ring))]'
             : 'text-[hsl(var(--sidebar-muted))] hover:bg-white/5 hover:text-[hsl(var(--sidebar-foreground))]'
         )}
         aria-current={active ? 'page' : undefined}
@@ -271,22 +270,21 @@ export function Sidebar() {
             <div
               className={cn(
                 'flex items-center justify-center rounded-xl',
-                'bg-gradient-to-br from-[hsl(var(--sidebar-ring))] to-emerald-600',
-                'shadow-lg shadow-cyan-500/15',
-                'w-10 h-10 ring-1 ring-white/10'
+                'bg-[hsl(var(--sidebar-ring))]',
+                'w-9 h-9'
               )}
             >
-              <Package className="w-5 h-5 text-white" aria-hidden />
+              <span className="text-sm font-bold text-white tracking-tighter leading-none">DH</span>
             </div>
           </div>
           {!isCollapsed && (
             <div className="flex flex-col min-w-0">
-              <h1 className="text-base font-bold text-[hsl(var(--sidebar-foreground))] tracking-tight leading-tight">
+              <h1 className="text-[15px] font-semibold text-[hsl(var(--sidebar-foreground))] tracking-tight leading-tight">
                 DistroHub
               </h1>
-              <p className="text-[10px] text-[hsl(var(--sidebar-muted))] font-semibold uppercase tracking-widest mt-0.5">
-                {t('sidebar.brand_tagline')}
-              </p>
+              <span className="mt-1 inline-block text-[9px] font-mono font-semibold tracking-wide px-1.5 py-0.5 rounded bg-[hsl(var(--sidebar-ring))]/10 text-[hsl(var(--sidebar-ring))]">
+                FMCG · SaaS
+              </span>
             </div>
           )}
         </div>

@@ -5,7 +5,8 @@ export default {
   theme: {
   	extend: {
   		fontFamily: {
-  			sans: ['Inter', 'Plus Jakarta Sans', 'system-ui', 'sans-serif'],
+  			sans: ['Sora', 'Hind Siliguri', 'system-ui', 'sans-serif'],
+  			mono: ['DM Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
   		},
   		spacing: {
   			'1': '8px',

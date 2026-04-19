@@ -1,105 +1,89 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Hind+Siliguri:wght@300;400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
-  :root {
-    --radius: 0.625rem;
-    --background: 0 0% 100%;
-    --foreground: 224 71% 4%;
-    --card: 0 0% 100%;
-    --card-foreground: 224 71% 4%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 224 71% 4%;
-    --primary: 171 77% 36%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 220 14% 96%;
-    --secondary-foreground: 224 71% 4%;
-    --muted: 220 14% 96%;
-    --muted-foreground: 220 9% 46%;
-    --accent: 220 14% 96%;
-    --accent-foreground: 224 71% 4%;
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 220 13% 91%;
-    --input: 220 13% 91%;
-    --ring: 171 77% 36%;
-    --chart-1: 171 77% 36%;
-    --chart-2: 262 83% 58%;
-    --chart-3: 217 91% 60%;
-    --chart-4: 43 96% 56%;
-    --chart-5: 0 84% 60%;
-    
-    /* Sidebar tokens - Teal Glassmorphism theme */
-    --sidebar-background: 193 67% 19%;
-    --sidebar-foreground: 210 20% 98%;
-    --sidebar-primary: 171 77% 36%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 195 60% 22%;
-    --sidebar-accent-foreground: 210 20% 98%;
-    --sidebar-border: 195 40% 25%;
-    --sidebar-ring: 187 100% 42%;
-    --sidebar-muted: 195 30% 65%;
-  }
-
+  /*
+   * DistroHub dark theme — matches DistroHub_1.html design language
+   * Always dark; .dark class is added to <html> by default.
+   */
+  :root,
   .dark {
-    --background: 224 71% 4%;
-    --foreground: 210 20% 98%;
-    --card: 224 71% 4%;
-    --card-foreground: 210 20% 98%;
-    --popover: 224 71% 6%;
-    --popover-foreground: 210 20% 98%;
-    --primary: 171 77% 36%;
-    --primary-foreground: 0 0% 100%;
-    --secondary: 215 28% 17%;
-    --secondary-foreground: 210 20% 98%;
-    --muted: 215 28% 17%;
-    --muted-foreground: 217 10% 64%;
-    --accent: 215 28% 17%;
-    --accent-foreground: 210 20% 98%;
-    --destructive: 0 62% 30%;
-    --destructive-foreground: 210 20% 98%;
-    --border: 215 28% 17%;
-    --input: 215 28% 17%;
-    --ring: 171 77% 36%;
-    --chart-1: 171 77% 36%;
-    --chart-2: 262 83% 58%;
-    --chart-3: 217 91% 60%;
-    --chart-4: 43 96% 56%;
-    --chart-5: 0 84% 60%;
-    
-    /* Sidebar tokens - Dark mode (same teal theme) */
-    --sidebar-background: 193 67% 19%;
-    --sidebar-foreground: 210 20% 98%;
-    --sidebar-primary: 171 77% 36%;
+    --radius: 0.75rem;
+
+    /* ── Main surfaces ── */
+    --background:        228 17%  8%;   /* #0d0f14 */
+    --foreground:        232 25% 92%;   /* #e8eaf2 */
+    --card:              228 17% 10%;   /* #13161e */
+    --card-foreground:   232 25% 92%;
+    --popover:           228 18% 13%;   /* #1a1e28 */
+    --popover-foreground:232 25% 92%;
+
+    /* ── Primary (blue accent) ── */
+    --primary:           220 100% 66%; /* #4f7fff */
+    --primary-foreground:0   0%  100%;
+
+    /* ── Secondary / muted ── */
+    --secondary:         228 19% 17%;  /* #222738 */
+    --secondary-foreground: 232 25% 92%;
+    --muted:             228 19% 17%;
+    --muted-foreground:  232 11% 61%;  /* #8b90a8 */
+    --accent:            228 19% 17%;
+    --accent-foreground: 232 25% 92%;
+
+    /* ── Destructive (red) ── */
+    --destructive:       0  100% 67%;  /* #ff5b5b */
+    --destructive-foreground: 0 0% 100%;
+
+    /* ── Borders & inputs ── */
+    --border:            228 19% 21%;  /* #2a2f3f */
+    --input:             228 19% 21%;
+    --ring:              220 100% 66%;
+
+    /* ── Status palette ── */
+    --dh-blue:           220 100% 66%; /* #4f7fff */
+    --dh-green:          155  62% 49%; /* #2ecc8a */
+    --dh-amber:           38  91% 55%; /* #f5a623 */
+    --dh-red:              0 100% 67%; /* #ff5b5b */
+    --dh-purple:         262  91% 76%; /* #a78bfa */
+
+    /* ── Charts ── */
+    --chart-1: 220 100% 66%;
+    --chart-2: 155  62% 49%;
+    --chart-3:  38  91% 55%;
+    --chart-4:   0 100% 67%;
+    --chart-5: 262  91% 76%;
+
+    /* ── Sidebar ── */
+    --sidebar-background:     228 17% 10%;
+    --sidebar-foreground:     232 25% 92%;
+    --sidebar-primary:        220 100% 66%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 195 60% 22%;
-    --sidebar-accent-foreground: 210 20% 98%;
-    --sidebar-border: 195 40% 25%;
-    --sidebar-ring: 187 100% 42%;
-    --sidebar-muted: 195 30% 65%;
+    --sidebar-accent:         228 19% 14%;
+    --sidebar-accent-foreground: 232 25% 92%;
+    --sidebar-border:         228 19% 21%;
+    --sidebar-ring:           220 100% 66%;
+    --sidebar-muted:          232 11% 50%;
   }
 
-  * {
-    @apply border-border;
-  }
+  * { @apply border-border; }
+
+  html { font-size: 13px; }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
-    font-family: 'Inter', 'Plus Jakarta Sans', 'Hind Siliguri', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Sora', 'Hind Siliguri', system-ui, -apple-system, sans-serif;
+    line-height: 1.5;
   }
 
-  :root[lang='bn'] body {
-    font-family: 'Hind Siliguri', 'Inter', 'Plus Jakarta Sans', sans-serif;
+  :root[lang='bn'] body,
+  html[lang='bn'] body {
+    font-family: 'Hind Siliguri', 'Sora', sans-serif;
   }
-  
-  /* Ensure currency symbol renders clearly */
+
   .currency-symbol {
-    font-family: 'Inter', 'Plus Jakarta Sans', system-ui, sans-serif;
-    font-weight: 600;
-    letter-spacing: 0.02em;
+    font-family: 'DM Mono', 'Sora', system-ui, sans-serif;
+    font-weight: 500;
   }
 }
 
