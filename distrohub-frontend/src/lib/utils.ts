@@ -5,6 +5,15 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+/** Replace `{{key}}` placeholders in a translation string */
+export function fillTemplate(s: string, vars: Record<string, string>): string {
+  let out = s;
+  for (const [k, v] of Object.entries(vars)) {
+    out = out.split(`{{${k}}}`).join(v);
+  }
+  return out;
+}
+
 /**
  * Format date to Bangladesh format (dd/mm/yyyy)
  * @param dateString - ISO date string or Date object

@@ -5,7 +5,7 @@ import { OnlineStatusBadge } from '@/components/OfflineIndicator';
 import { useOffline } from '@/contexts/OfflineContext';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { SidebarTrigger } from '@/components/layout/Sidebar';
-import { cn } from '@/lib/utils';
+import { cn, fillTemplate } from '@/lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   DropdownMenu,
@@ -16,6 +16,12 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
 import { Separator } from '@/components/ui/separator';
+import api from '@/lib/api';
+
+interface DashboardStatsBrief {
+  low_stock_count?: number;
+  expiring_soon_count?: number;
+}
 
 interface HeaderProps {
   title: string;
@@ -24,6 +30,8 @@ interface HeaderProps {
 export function Header({ title }: HeaderProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [localSearch, setLocalSearch] = useState(searchParams.get('q') || '');
+  const [alertStats, setAlertStats] = useState<{ low: number; exp: number } | null>(null);
+  const [alertStatsLoading, setAlertStatsLoading] = useState(true);
   const { pendingSyncCount, syncData, isSyncing, isOnline } = useOffline();
   const { t } = useLanguage();
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -40,6 +48,52 @@ export function Header({ title }: HeaderProps) {
   useEffect(() => {
     setLocalSearch(searchParams.get('q') || '');
   }, [searchParams]);
+
+  useEffect(() => {
+    const token = localStorage.getItem('token')?.trim();
+    if (!token) {
+      setAlertStats(null);
+      setAlertStatsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setAlertStatsLoading(true);
+    (async () => {
+      try {
+        const { data } = await api.get<DashboardStatsBrief>('/api/dashboard/stats');
+        if (cancelled) return;
+        setAlertStats({
+          low: data.low_stock_count ?? 0,
+          exp: data.expiring_soon_count ?? 0,
+        });
+      } catch {
+        if (!cancelled) setAlertStats(null);
+      } finally {
+        if (!cancelled) setAlertStatsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const hasUrgentAlerts =
+    alertStats !== null && (alertStats.low > 0 || alertStats.exp > 0);
+
+  const notificationsSubtitle = (() => {
+    if (alertStatsLoading) return t('notifications_panel.subtitle_loading');
+    if (alertStats === null) return t('notifications_panel.subtitle_unavailable');
+    return hasUrgentAlerts
+      ? t('notifications_panel.subtitle_has_alerts')
+      : t('notifications_panel.subtitle_clear');
+  })();
+
+  const detailsHref =
+    alertStats && alertStats.exp > 0
+      ? '/expiry'
+      : alertStats && alertStats.low > 0
+        ? '/inventory?filter=low-stock'
+        : '/inventory';
 
   // Handle Ctrl + K shortcut
   useEffect(() => {
@@ -170,44 +224,79 @@ export function Header({ title }: HeaderProps) {
                 'text-muted-foreground hover:text-foreground hover:bg-accent',
                 'transition-all duration-200 focus-ring group'
               )}
-              aria-label="Notifications"
+              aria-label={t('common.notifications')}
             >
               <Bell className="w-5 h-5 transition-transform group-hover:scale-110" />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-destructive rounded-full ring-2 ring-background" />
+              {hasUrgentAlerts && (
+                <span className="absolute top-2 right-2 w-2 h-2 bg-destructive rounded-full ring-2 ring-background" />
+              )}
             </button>
           </PopoverTrigger>
           <PopoverContent align="end" className="w-80 p-0 shadow-xl border-border rounded-xl overflow-hidden">
             <div className="bg-muted/50 border-b border-border px-4 py-3">
               <p className="text-sm font-semibold text-foreground">{t('common.notifications')}</p>
-              <p className="text-xs text-muted-foreground">You have new alerts</p>
+              <p className="text-xs text-muted-foreground">{notificationsSubtitle}</p>
             </div>
             <div className="p-1 max-h-[400px] overflow-y-auto custom-scrollbar">
-              <Link
-                to="/expiry"
-                className="flex items-start gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-accent group"
-              >
-                <div className="mt-1.5 h-2 w-2 rounded-full bg-destructive flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-foreground">Low Stock Alert</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">5 items are below reorder level</p>
-                </div>
-                <span className="text-[10px] text-muted-foreground font-medium flex-shrink-0">Recently</span>
-              </Link>
-              <Link
-                to="/inventory"
-                className="flex items-start gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-accent group"
-              >
-                <div className="mt-1.5 h-2 w-2 rounded-full bg-chart-4 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-foreground">Expiry Warning</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">3 batches expiring within 30 days</p>
-                </div>
-                <span className="text-[10px] text-muted-foreground font-medium flex-shrink-0">1h ago</span>
-              </Link>
+              {alertStatsLoading ? (
+                <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+                  {t('notifications_panel.subtitle_loading')}
+                </p>
+              ) : alertStats === null ? (
+                <p className="px-3 py-6 text-center text-xs text-muted-foreground">
+                  {t('notifications_panel.subtitle_unavailable')}
+                </p>
+              ) : (
+                <>
+                  <Link
+                    to="/inventory?filter=low-stock"
+                    className="flex items-start gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-accent group"
+                  >
+                    <div
+                      className={cn(
+                        'mt-1.5 h-2 w-2 rounded-full flex-shrink-0',
+                        alertStats.low > 0 ? 'bg-destructive' : 'bg-muted-foreground/40'
+                      )}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-foreground">{t('notifications_panel.low_stock_title')}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {fillTemplate(t('notifications_panel.low_stock_body'), { count: String(alertStats.low) })}
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground font-medium flex-shrink-0">
+                      {t('notifications_panel.just_now')}
+                    </span>
+                  </Link>
+                  <Link
+                    to="/expiry"
+                    className="flex items-start gap-3 rounded-lg px-3 py-2.5 text-sm transition-colors hover:bg-accent group"
+                  >
+                    <div
+                      className={cn(
+                        'mt-1.5 h-2 w-2 rounded-full flex-shrink-0',
+                        alertStats.exp > 0 ? 'bg-amber-500' : 'bg-muted-foreground/40'
+                      )}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-foreground">{t('notifications_panel.expiry_title')}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {fillTemplate(t('notifications_panel.expiry_body'), { count: String(alertStats.exp) })}
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground font-medium flex-shrink-0">
+                      {t('notifications_panel.just_now')}
+                    </span>
+                  </Link>
+                </>
+              )}
               <Separator className="my-1" />
               <div className="px-4 py-2 text-center">
-                <Link to="/reports" className="text-xs font-medium text-primary hover:text-primary/80 transition-colors">
-                  View all notifications
+                <Link
+                  to={detailsHref}
+                  className="text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+                >
+                  {t('notifications_panel.view_details')}
                 </Link>
               </div>
             </div>

@@ -84,7 +84,32 @@
     "section_kpis": "Key metrics",
     "section_charts": "Trends & charts",
     "section_activity": "Orders & alerts",
-    "quick_actions": "Quick actions"
+    "quick_actions": "Quick actions",
+    "kpi_sales_month": "This month: {{amount}}",
+    "kpi_collections_month": "Collected this month: {{amount}}",
+    "kpi_categories_inline": "Categories: {{n}}",
+    "kpi_purchases_inline": "Purchases: {{n}}",
+    "kpi_products_inline": "Products: {{n}}",
+    "kpi_low_stock_attention": "{{n}} SKUs need restock",
+    "kpi_low_stock_ok": "Above reorder level",
+    "kpi_expiry_attention": "{{n}} batches in 30 days",
+    "kpi_expiry_ok": "None in next 30 days",
+    "kpi_payable_attention": "Amount due to suppliers",
+    "kpi_payable_ok": "No supplier balance",
+    "kpi_receivable_attention": "Outstanding from retailers",
+    "kpi_receivable_ok": "Fully collected"
+  },
+  "notifications_panel": {
+    "subtitle_has_alerts": "Stock or expiry may need attention",
+    "subtitle_clear": "No urgent alerts right now",
+    "subtitle_loading": "Loading alerts…",
+    "subtitle_unavailable": "Alerts could not be loaded",
+    "low_stock_title": "Low stock",
+    "low_stock_body": "{{count}} items at or below reorder level",
+    "expiry_title": "Expiring soon",
+    "expiry_body": "{{count}} batches within 30 days",
+    "view_details": "View expiry & inventory",
+    "just_now": "Now"
   },
   "sidebar": {
     "main": "Main",

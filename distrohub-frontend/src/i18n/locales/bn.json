@@ -84,7 +84,32 @@
     "section_kpis": "মূল সূচক",
     "section_charts": "ট্রেন্ড ও চার্ট",
     "section_activity": "অর্ডার ও সতর্কতা",
-    "quick_actions": "দ্রুত পদক্ষেপ"
+    "quick_actions": "দ্রুত পদক্ষেপ",
+    "kpi_sales_month": "এই মাস: {{amount}}",
+    "kpi_collections_month": "এই মাসে সংগ্রহ: {{amount}}",
+    "kpi_categories_inline": "ক্যাটাগরি: {{n}}",
+    "kpi_purchases_inline": "ক্রয়: {{n}}",
+    "kpi_products_inline": "পণ্য: {{n}}",
+    "kpi_low_stock_attention": "{{n}} আইটেম রিস্টক দরকার",
+    "kpi_low_stock_ok": "রিঅর্ডার লেভেলের উপরে",
+    "kpi_expiry_attention": "৩০ দিনে {{n}} ব্যাচ",
+    "kpi_expiry_ok": "আগামী ৩০ দিনে নেই",
+    "kpi_payable_attention": "সরবরাহকারীকে দেওয়ার আছে",
+    "kpi_payable_ok": "কোনো বকেয়া নেই",
+    "kpi_receivable_attention": "খুচরা থেকে বকেয়া",
+    "kpi_receivable_ok": "পুরোটাই সংগৃহীত"
+  },
+  "notifications_panel": {
+    "subtitle_has_alerts": "স্টক বা মেয়াদ নিয়ে মনোযোগ দরকার হতে পারে",
+    "subtitle_clear": "জরুরি কোনো সতর্কতা নেই",
+    "subtitle_loading": "সতর্কতা লোড হচ্ছে…",
+    "subtitle_unavailable": "সতর্কতা লোড করা যায়নি",
+    "low_stock_title": "অল্প স্টক",
+    "low_stock_body": "{{count}}টি আইটেম রিঅর্ডার লেভেলে বা তার নিচে",
+    "expiry_title": "মেয়াদ শীঘ্র শেষ",
+    "expiry_body": "৩০ দিনের মধ্যে {{count}}টি ব্যাচ",
+    "view_details": "মেয়াদ ও স্টক দেখুন",
+    "just_now": "এখনই"
   },
   "sidebar": {
     "main": "প্রধান",

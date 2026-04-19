@@ -19,7 +19,6 @@ import {
   ChevronLeft,
   Menu,
   X,
-  Search,
   BarChart3,
   Tags,
 } from 'lucide-react';
@@ -155,7 +154,6 @@ export function Sidebar() {
   const location = useLocation();
   const isMobile = useIsMobile();
   const { isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen } = useSidebar();
-  const [searchQuery, setSearchQuery] = useState('');
   const { t } = useLanguage();
 
   const menuGroups: MenuGroup[] = useMemo(
@@ -203,17 +201,6 @@ export function Sidebar() {
     ],
     [t]
   );
-
-  const filteredGroups = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return menuGroups;
-    return menuGroups
-      .map((group) => ({
-        ...group,
-        items: group.items.filter((item) => item.label.toLowerCase().includes(q)),
-      }))
-      .filter((group) => group.items.length > 0);
-  }, [menuGroups, searchQuery]);
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -304,36 +291,8 @@ export function Sidebar() {
           )}
         </div>
 
-        {!isCollapsed && (
-          <div className="px-4 pt-4 pb-2 shrink-0">
-            <label htmlFor="sidebar-nav-search" className="sr-only">
-              {t('sidebar.search_menu')}
-            </label>
-            <div className="relative group">
-              <Search
-                className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 group-focus-within:text-[hsl(var(--sidebar-ring))] transition-colors pointer-events-none"
-                aria-hidden
-              />
-              <input
-                id="sidebar-nav-search"
-                type="search"
-                autoComplete="off"
-                placeholder={t('sidebar.search_menu')}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className={cn(
-                  'w-full pl-9 pr-3 py-2 text-xs rounded-lg transition-all duration-200',
-                  'bg-black/20 border border-white/10',
-                  'text-[hsl(var(--sidebar-foreground))] placeholder:text-slate-500',
-                  'focus:outline-none focus:ring-2 focus:ring-[hsl(var(--sidebar-ring))]/40 focus:border-[hsl(var(--sidebar-ring))]/30'
-                )}
-              />
-            </div>
-          </div>
-        )}
-
         <nav className="flex-1 min-h-0 px-3 py-4 overflow-y-auto overscroll-contain custom-scrollbar">
-          {filteredGroups.map((group, groupIndex) => (
+          {menuGroups.map((group, groupIndex) => (
             <div key={group.label} className={cn(groupIndex > 0 && 'mt-6')}>
               {!isCollapsed ? (
                 <h2 className="px-2 mb-2 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.14em]">

@@ -1,15 +1,13 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Header } from '@/components/layout/Header';
 import { Link } from 'react-router-dom';
-import { cn } from '@/lib/utils';
+import { cn, fillTemplate } from '@/lib/utils';
 import {
   TrendingUp,
   TrendingDown,
   Package,
   Users,
   AlertTriangle,
-  ArrowUpRight,
-  ArrowDownRight,
   ShoppingCart,
   FolderOpen,
   CheckCircle2,
@@ -25,6 +23,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 const cardSurface = 'border-border bg-card text-card-foreground shadow-sm';
+
+type KpiHintTone = 'muted' | 'positive' | 'caution';
 
 function DashboardQuickActions() {
   const { t } = useLanguage();
@@ -360,11 +360,8 @@ export function Dashboard() {
         {
           title: t('dashboard.total_sales'),
           value: formatCurrency(safeStats.total_sales),
-          change:
-            safeStats.sales_this_month > 0
-              ? `+${formatCurrency(safeStats.sales_this_month)}`
-              : formatCurrency(0),
-          trend: 'up' as const,
+          hint: fillTemplate(t('dashboard.kpi_sales_month'), { amount: formatCurrency(safeStats.sales_this_month) }),
+          hintTone: (safeStats.sales_this_month > 0 ? 'positive' : 'muted') as KpiHintTone,
           icon: TrendingUp,
           color: 'from-emerald-500 to-emerald-600',
           bgTint: 'bg-emerald-500/10',
@@ -373,11 +370,19 @@ export function Dashboard() {
         {
           title: t('dashboard.receivable'),
           value: formatCurrency(safeStats.receivable_from_customers),
-          change:
-            safeStats.collections_this_month > 0
-              ? `+${formatCurrency(safeStats.collections_this_month)}`
-              : formatCurrency(0),
-          trend: safeStats.receivable_from_customers > 0 ? ('down' as const) : ('up' as const),
+          hint:
+            safeStats.receivable_from_customers > 0
+              ? t('dashboard.kpi_receivable_attention')
+              : safeStats.collections_this_month > 0
+                ? fillTemplate(t('dashboard.kpi_collections_month'), {
+                    amount: formatCurrency(safeStats.collections_this_month),
+                  })
+                : t('dashboard.kpi_receivable_ok'),
+          hintTone: (safeStats.receivable_from_customers > 0
+            ? 'caution'
+            : safeStats.collections_this_month > 0
+              ? 'positive'
+              : 'muted') as KpiHintTone,
           icon: TrendingDown,
           color: 'from-rose-500 to-rose-600',
           bgTint: 'bg-rose-500/10',
@@ -386,8 +391,8 @@ export function Dashboard() {
         {
           title: t('dashboard.total_products'),
           value: safeStats.total_products.toString(),
-          change: `${t('dashboard.total_categories')}: ${safeStats.total_categories}`,
-          trend: 'up' as const,
+          hint: fillTemplate(t('dashboard.kpi_categories_inline'), { n: String(safeStats.total_categories) }),
+          hintTone: 'muted' as const,
           icon: Package,
           color: 'from-blue-500 to-blue-600',
           bgTint: 'bg-blue-500/10',
@@ -396,8 +401,8 @@ export function Dashboard() {
         {
           title: t('dashboard.active_retailers'),
           value: safeStats.active_retailers.toString(),
-          change: `${t('common.purchase')}: ${safeStats.total_purchases}`,
-          trend: 'up' as const,
+          hint: fillTemplate(t('dashboard.kpi_purchases_inline'), { n: String(safeStats.total_purchases) }),
+          hintTone: 'muted' as const,
           icon: Users,
           color: 'from-violet-500 to-violet-600',
           bgTint: 'bg-violet-500/10',
@@ -406,8 +411,11 @@ export function Dashboard() {
         {
           title: t('dashboard.low_stock'),
           value: safeStats.low_stock_count.toString(),
-          change: t('dashboard.items'),
-          trend: safeStats.low_stock_count > 0 ? ('down' as const) : ('up' as const),
+          hint:
+            safeStats.low_stock_count > 0
+              ? fillTemplate(t('dashboard.kpi_low_stock_attention'), { n: String(safeStats.low_stock_count) })
+              : t('dashboard.kpi_low_stock_ok'),
+          hintTone: (safeStats.low_stock_count > 0 ? 'caution' : 'muted') as KpiHintTone,
           icon: AlertTriangle,
           color: 'from-amber-500 to-amber-600',
           bgTint: 'bg-amber-500/10',
@@ -416,8 +424,11 @@ export function Dashboard() {
         {
           title: t('dashboard.expiring_soon'),
           value: safeStats.expiring_soon_count.toString(),
-          change: t('dashboard.within_30_days'),
-          trend: safeStats.expiring_soon_count > 0 ? ('down' as const) : ('up' as const),
+          hint:
+            safeStats.expiring_soon_count > 0
+              ? fillTemplate(t('dashboard.kpi_expiry_attention'), { n: String(safeStats.expiring_soon_count) })
+              : t('dashboard.kpi_expiry_ok'),
+          hintTone: (safeStats.expiring_soon_count > 0 ? 'caution' : 'muted') as KpiHintTone,
           icon: AlertTriangle,
           color: 'from-orange-500 to-orange-600',
           bgTint: 'bg-orange-500/10',
@@ -426,8 +437,9 @@ export function Dashboard() {
         {
           title: t('dashboard.payable_to_suppliers'),
           value: formatCurrency(safeStats.payable_to_supplier),
-          change: t('dashboard.outstanding'),
-          trend: safeStats.payable_to_supplier > 0 ? ('down' as const) : ('up' as const),
+          hint:
+            safeStats.payable_to_supplier > 0 ? t('dashboard.kpi_payable_attention') : t('dashboard.kpi_payable_ok'),
+          hintTone: (safeStats.payable_to_supplier > 0 ? 'caution' : 'muted') as KpiHintTone,
           icon: ShoppingCart,
           color: 'from-indigo-500 to-indigo-600',
           bgTint: 'bg-indigo-500/10',
@@ -436,8 +448,8 @@ export function Dashboard() {
         {
           title: t('dashboard.total_categories'),
           value: safeStats.total_categories.toString(),
-          change: `${t('common.products')}: ${safeStats.total_products}`,
-          trend: 'up' as const,
+          hint: fillTemplate(t('dashboard.kpi_products_inline'), { n: String(safeStats.total_products) }),
+          hintTone: 'muted' as const,
           icon: FolderOpen,
           color: 'from-teal-500 to-teal-600',
           bgTint: 'bg-teal-500/10',
@@ -530,18 +542,15 @@ export function Dashboard() {
                     </div>
                     <span
                       className={cn(
-                        'inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium',
-                        stat.trend === 'up'
-                          ? 'bg-emerald-500/10 text-emerald-600'
-                          : 'bg-rose-500/10 text-rose-600'
+                        'inline-flex items-center justify-end max-w-[min(100%,13rem)] px-2 py-1 rounded-full text-xs font-medium leading-snug',
+                        stat.hintTone === 'positive' &&
+                          'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+                        stat.hintTone === 'caution' &&
+                          'bg-amber-500/10 text-amber-900 dark:text-amber-300',
+                        stat.hintTone === 'muted' && 'bg-muted/90 text-muted-foreground'
                       )}
                     >
-                      {stat.trend === 'up' ? (
-                        <ArrowUpRight className="w-3 h-3" />
-                      ) : (
-                        <ArrowDownRight className="w-3 h-3" />
-                      )}
-                      <span className="truncate max-w-[100px]">{stat.change}</span>
+                      <span className="truncate text-right">{stat.hint}</span>
                     </span>
                   </div>
                   <h3 className="text-2xl lg:text-3xl font-bold text-foreground mb-1 tracking-tight">
