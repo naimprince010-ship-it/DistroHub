@@ -80,7 +80,11 @@
     "order_delivered": "Delivered",
     "order_pending": "Pending",
     "order_confirmed": "Confirmed",
-    "order_cancelled": "Cancelled"
+    "order_cancelled": "Cancelled",
+    "section_kpis": "Key metrics",
+    "section_charts": "Trends & charts",
+    "section_activity": "Orders & alerts",
+    "quick_actions": "Quick actions"
   },
   "sidebar": {
     "main": "Main",

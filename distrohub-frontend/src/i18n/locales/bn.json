@@ -80,7 +80,11 @@
     "order_delivered": "ডেলিভার্ড",
     "order_pending": "পেন্ডিং",
     "order_confirmed": "কনফার্মড",
-    "order_cancelled": "বাতিল"
+    "order_cancelled": "বাতিল",
+    "section_kpis": "মূল সূচক",
+    "section_charts": "ট্রেন্ড ও চার্ট",
+    "section_activity": "অর্ডার ও সতর্কতা",
+    "quick_actions": "দ্রুত পদক্ষেপ"
   },
   "sidebar": {
     "main": "প্রধান",

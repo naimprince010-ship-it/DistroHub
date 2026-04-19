@@ -14,11 +14,49 @@ import {
   FolderOpen,
   CheckCircle2,
   RefreshCw,
+  Wallet,
+  Warehouse,
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, LabelList } from 'recharts';
 import api from '@/lib/api';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
+const cardSurface = 'border-border bg-card text-card-foreground shadow-sm';
+
+function DashboardQuickActions() {
+  const { t } = useLanguage();
+  const actions = [
+    { to: '/sales', label: t('common.sales'), icon: ShoppingCart },
+    { to: '/products', label: t('common.products'), icon: Package },
+    { to: '/payments', label: t('common.payments'), icon: Wallet },
+    { to: '/inventory', label: t('common.inventory'), icon: Warehouse },
+  ] as const;
+
+  return (
+    <nav className="flex flex-wrap gap-2" aria-label={t('dashboard.quick_actions')}>
+      {actions.map(({ to, label, icon: Icon }) => (
+        <Button
+          key={to}
+          variant="outline"
+          size="sm"
+          asChild
+          className={cn(
+            'border-border bg-card text-foreground shadow-none',
+            'hover:bg-accent hover:text-accent-foreground'
+          )}
+        >
+          <Link to={to}>
+            <Icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
+            {label}
+          </Link>
+        </Button>
+      ))}
+    </nav>
+  );
+}
 
 interface DashboardStats {
   total_sales: number;
@@ -442,7 +480,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="p-4 lg:p-6 space-y-6">
+      <div className="p-4 lg:p-6 space-y-8">
         {loading ? (
           <div aria-busy="true" aria-label={t('dashboard.loading')}>
             <p className="sr-only">{t('dashboard.loading')}</p>
@@ -461,7 +499,14 @@ export function Dashboard() {
           </div>
         ) : (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <section className="space-y-3" aria-labelledby="dashboard-kpis-heading">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <h2 id="dashboard-kpis-heading" className="text-sm font-semibold text-foreground">
+                  {t('dashboard.section_kpis')}
+                </h2>
+                <DashboardQuickActions />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {displayStats.map((stat) => (
                 <Link
                   key={stat.title}
@@ -512,11 +557,19 @@ export function Dashboard() {
                   />
                 </Link>
               ))}
-            </div>
+              </div>
+            </section>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-              <div className="bg-card rounded-xl p-5 border border-border">
-                <h3 className="text-lg font-semibold text-foreground mb-4">{t('dashboard.sales_collections')}</h3>
+            <section className="space-y-3" aria-labelledby="dashboard-charts-heading">
+              <h2 id="dashboard-charts-heading" className="text-sm font-semibold text-foreground">
+                {t('dashboard.section_charts')}
+              </h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+              <Card className={cn(cardSurface, 'overflow-hidden')}>
+                <CardHeader className="p-5 pb-2">
+                  <CardTitle className="text-lg font-semibold">{t('dashboard.sales_collections')}</CardTitle>
+                </CardHeader>
+                <CardContent className="px-5 pb-5 pt-0">
                 {!chartHasActivity ? (
                   <div className="h-[300px] flex items-center justify-center text-sm text-muted-foreground text-center px-4">
                     {t('dashboard.no_chart_data')}
@@ -579,10 +632,14 @@ export function Dashboard() {
                     </LineChart>
                   </ResponsiveContainer>
                 )}
-              </div>
+                </CardContent>
+              </Card>
 
-              <div className="bg-card rounded-xl p-5 border border-border">
-                <h3 className="text-lg font-semibold text-foreground mb-4">{t('dashboard.top_selling_products')}</h3>
+              <Card className={cn(cardSurface, 'overflow-hidden')}>
+                <CardHeader className="p-5 pb-2">
+                  <CardTitle className="text-lg font-semibold">{t('dashboard.top_selling_products')}</CardTitle>
+                </CardHeader>
+                <CardContent className="px-5 pb-5 pt-0">
                 {topProducts.length === 0 ? (
                   <div className="h-[300px] flex items-center justify-center text-sm text-muted-foreground text-center px-4">
                     {t('dashboard.no_top_products')}
@@ -629,20 +686,27 @@ export function Dashboard() {
                     </BarChart>
                   </ResponsiveContainer>
                 )}
+                </CardContent>
+              </Card>
               </div>
-            </div>
+            </section>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
-              <div className="bg-card rounded-xl border border-border overflow-hidden">
-                <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-foreground">{t('dashboard.recent_orders')}</h3>
+            <section className="space-y-3" aria-labelledby="dashboard-activity-heading">
+              <h2 id="dashboard-activity-heading" className="text-sm font-semibold text-foreground">
+                {t('dashboard.section_activity')}
+              </h2>
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
+              <Card className={cn(cardSurface, 'overflow-hidden p-0')}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 px-5 py-4 border-b border-border">
+                  <CardTitle className="text-lg font-semibold">{t('dashboard.recent_orders')}</CardTitle>
                   <Link
                     to="/sales"
-                    className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
+                    className="text-sm font-medium text-primary hover:text-primary/80 transition-colors shrink-0"
                   >
                     {t('dashboard.view_all')}
                   </Link>
-                </div>
+                </CardHeader>
+                <CardContent className="p-0">
                 <div className="divide-y divide-border">
                   {recentOrders.length === 0 ? (
                     <div className="p-8 text-center">
@@ -682,18 +746,20 @@ export function Dashboard() {
                     ))
                   )}
                 </div>
-              </div>
+                </CardContent>
+              </Card>
 
-              <div className="bg-card rounded-xl border border-border overflow-hidden">
-                <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-foreground flex items-center gap-2">
-                    <AlertTriangle className="w-5 h-5 text-amber-500" />
+              <Card className={cn(cardSurface, 'overflow-hidden p-0')}>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 px-5 py-4 border-b border-border">
+                  <CardTitle className="text-lg font-semibold flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500" aria-hidden />
                     {t('dashboard.expiring_soon')}
-                  </h3>
-                  <Link to="/expiry" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors">
+                  </CardTitle>
+                  <Link to="/expiry" className="text-sm font-medium text-primary hover:text-primary/80 transition-colors shrink-0">
                     {t('dashboard.view_all')}
                   </Link>
-                </div>
+                </CardHeader>
+                <CardContent className="p-0">
                 <div className="divide-y divide-border">
                   {expiringRows.length === 0 ? (
                     <div className="p-8 text-center">
@@ -724,8 +790,10 @@ export function Dashboard() {
                     ))
                   )}
                 </div>
+                </CardContent>
+              </Card>
               </div>
-            </div>
+            </section>
           </>
         )}
       </div>
