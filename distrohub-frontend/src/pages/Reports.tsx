@@ -775,6 +775,7 @@ export function Reports() {
             {filteredSalesReport.length === 0 && (
               <div className="py-12 text-center text-sm text-muted-foreground">No sales found for the selected filters.</div>
             )}
+          </div>
         ) : activeReport === 'sales-returns' ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -817,7 +818,8 @@ export function Reports() {
             {filteredSalesReturns.length === 0 && (
               <div className="py-12 text-center text-sm text-muted-foreground">No returns found for the selected filters.</div>
             )}
-          ) : activeReport === 'purchases' ? (
+          </div>
+        ) : activeReport === 'purchases' ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/40 border-b border-border">
@@ -854,7 +856,8 @@ export function Reports() {
             {filteredPurchases.length === 0 && (
               <div className="py-12 text-center text-sm text-muted-foreground">No purchases found for the selected filters.</div>
             )}
-          ) : activeReport === 'stock' ? (
+          </div>
+        ) : activeReport === 'stock' ? (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/40 border-b border-border">
@@ -888,7 +891,8 @@ export function Reports() {
             {filteredInventory.length === 0 && (
               <div className="py-12 text-center text-sm text-muted-foreground">No products found for the selected filters.</div>
             )}
-          ) : activeReport === 'collection' ? (
+          </div>
+        ) : activeReport === 'collection' ? (
           <div>
             {loading ? (
               <div className="py-12 text-center text-sm text-muted-foreground">Loading collection report…</div>
@@ -1048,7 +1052,6 @@ export function Reports() {
           </div>
         </div>
       )}
-        </div>
     </PageShell>
   );
 }

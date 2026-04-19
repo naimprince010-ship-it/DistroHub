@@ -407,7 +407,6 @@ export function Payments() {
             </div>
           )}
           </div>
-        </div>
 
       {/* Payment Modal */}
       {showPaymentModal && selectedRetailer && (
