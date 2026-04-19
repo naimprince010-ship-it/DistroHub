@@ -3,58 +3,105 @@
 @tailwind utilities;
 
 @layer base {
-  /*
-   * DistroHub dark theme — matches DistroHub_1.html design language
-   * Always dark; .dark class is added to <html> by default.
-   */
-  :root,
+  /* ── DistroHub Light Theme ── */
+  :root {
+    --radius: 0.75rem;
+
+    /* Main surfaces */
+    --background:         228 20% 96%;   /* #f4f5f8 */
+    --foreground:         228 28% 12%;   /* #17192a */
+    --card:               0   0% 100%;   /* #ffffff */
+    --card-foreground:    228 28% 12%;
+    --popover:            0   0% 100%;
+    --popover-foreground: 228 28% 12%;
+
+    /* Primary — blue accent */
+    --primary:            220 100% 62%;  /* #3d72ff */
+    --primary-foreground: 0   0%  100%;
+
+    /* Secondary / muted */
+    --secondary:          228 18% 93%;
+    --secondary-foreground: 228 28% 12%;
+    --muted:              228 18% 93%;
+    --muted-foreground:   228  9% 48%;   /* #6c6f82 */
+    --accent:             228 18% 93%;
+    --accent-foreground:  228 28% 12%;
+
+    /* Destructive */
+    --destructive:        0  90% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders & inputs */
+    --border:             228 14% 88%;   /* #dde0ea */
+    --input:              228 14% 88%;
+    --ring:               220 100% 62%;
+
+    /* Status palette */
+    --dh-blue:   220 100% 62%;
+    --dh-green:  155  55% 42%;
+    --dh-amber:   38  88% 48%;
+    --dh-red:      0  90% 60%;
+    --dh-purple: 262  80% 65%;
+
+    /* Charts */
+    --chart-1: 220 100% 62%;
+    --chart-2: 155  55% 42%;
+    --chart-3:  38  88% 48%;
+    --chart-4:   0  90% 60%;
+    --chart-5: 262  80% 65%;
+
+    /* Sidebar — white with subtle bg */
+    --sidebar-background:         0   0% 100%;
+    --sidebar-foreground:         228 28% 12%;
+    --sidebar-primary:            220 100% 62%;
+    --sidebar-primary-foreground: 0   0%  100%;
+    --sidebar-accent:             228 20% 96%;
+    --sidebar-accent-foreground:  228 28% 12%;
+    --sidebar-border:             228 14% 88%;
+    --sidebar-ring:               220 100% 62%;
+    --sidebar-muted:              228  9% 50%;
+  }
+
+  /* ── DistroHub Dark Theme ── */
   .dark {
     --radius: 0.75rem;
 
-    /* ── Main surfaces ── */
-    --background:        228 17%  8%;   /* #0d0f14 */
-    --foreground:        232 25% 92%;   /* #e8eaf2 */
-    --card:              228 17% 10%;   /* #13161e */
+    --background:        228 17%  8%;
+    --foreground:        232 25% 92%;
+    --card:              228 17% 10%;
     --card-foreground:   232 25% 92%;
-    --popover:           228 18% 13%;   /* #1a1e28 */
+    --popover:           228 18% 13%;
     --popover-foreground:232 25% 92%;
 
-    /* ── Primary (blue accent) ── */
-    --primary:           220 100% 66%; /* #4f7fff */
+    --primary:           220 100% 66%;
     --primary-foreground:0   0%  100%;
 
-    /* ── Secondary / muted ── */
-    --secondary:         228 19% 17%;  /* #222738 */
+    --secondary:         228 19% 17%;
     --secondary-foreground: 232 25% 92%;
     --muted:             228 19% 17%;
-    --muted-foreground:  232 11% 61%;  /* #8b90a8 */
+    --muted-foreground:  232 11% 61%;
     --accent:            228 19% 17%;
     --accent-foreground: 232 25% 92%;
 
-    /* ── Destructive (red) ── */
-    --destructive:       0  100% 67%;  /* #ff5b5b */
+    --destructive:       0  100% 67%;
     --destructive-foreground: 0 0% 100%;
 
-    /* ── Borders & inputs ── */
-    --border:            228 19% 21%;  /* #2a2f3f */
+    --border:            228 19% 21%;
     --input:             228 19% 21%;
     --ring:              220 100% 66%;
 
-    /* ── Status palette ── */
-    --dh-blue:           220 100% 66%; /* #4f7fff */
-    --dh-green:          155  62% 49%; /* #2ecc8a */
-    --dh-amber:           38  91% 55%; /* #f5a623 */
-    --dh-red:              0 100% 67%; /* #ff5b5b */
-    --dh-purple:         262  91% 76%; /* #a78bfa */
+    --dh-blue:   220 100% 66%;
+    --dh-green:  155  62% 49%;
+    --dh-amber:   38  91% 55%;
+    --dh-red:      0 100% 67%;
+    --dh-purple: 262  91% 76%;
 
-    /* ── Charts ── */
     --chart-1: 220 100% 66%;
     --chart-2: 155  62% 49%;
     --chart-3:  38  91% 55%;
     --chart-4:   0 100% 67%;
     --chart-5: 262  91% 76%;
 
-    /* ── Sidebar ── */
     --sidebar-background:     228 17% 10%;
     --sidebar-foreground:     232 25% 92%;
     --sidebar-primary:        220 100% 66%;

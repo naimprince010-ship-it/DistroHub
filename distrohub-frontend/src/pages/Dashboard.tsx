@@ -540,8 +540,8 @@ export function Dashboard() {
                     <span
                       className={cn(
                         'inline-flex items-center mt-[8px] px-[7px] py-[2px] rounded text-[10px] font-mono font-medium max-w-full truncate',
-                        stat.hintTone === 'positive' && 'bg-[#2ecc8a]/10 text-[#2ecc8a]',
-                        stat.hintTone === 'caution'  && 'bg-[#f5a623]/10 text-[#f5a623]',
+                        stat.hintTone === 'positive' && 'bg-emerald-500/10 text-emerald-600',
+                        stat.hintTone === 'caution'  && 'bg-amber-500/10 text-amber-600',
                         stat.hintTone === 'muted'    && 'bg-muted text-muted-foreground'
                       )}
                     >

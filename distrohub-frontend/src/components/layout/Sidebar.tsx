@@ -222,7 +222,7 @@ export function Sidebar() {
           isCollapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5',
           active
             ? 'bg-[hsl(var(--sidebar-ring))]/10 text-[hsl(var(--sidebar-ring))]'
-            : 'text-[hsl(var(--sidebar-muted))] hover:bg-white/5 hover:text-[hsl(var(--sidebar-foreground))]'
+            : 'text-[hsl(var(--sidebar-muted))] hover:bg-[hsl(var(--sidebar-accent))] hover:text-[hsl(var(--sidebar-foreground))]'
         )}
         aria-current={active ? 'page' : undefined}
         title={isCollapsed ? item.label : undefined}
@@ -236,7 +236,7 @@ export function Sidebar() {
         <item.icon
           className={cn(
             'flex-shrink-0 w-[1.125rem] h-[1.125rem] transition-colors',
-            active ? 'text-[hsl(var(--sidebar-ring))]' : 'text-slate-400 group-hover:text-slate-200'
+            active ? 'text-[hsl(var(--sidebar-ring))]' : 'text-[hsl(var(--sidebar-muted))] group-hover:text-[hsl(var(--sidebar-foreground))]'
           )}
           aria-hidden
         />
@@ -262,7 +262,7 @@ export function Sidebar() {
       <div className="flex flex-col h-full min-h-0">
         <div
           className={cn(
-            'flex items-center shrink-0 transition-all duration-300 border-b border-white/5',
+            'flex items-center shrink-0 transition-all duration-300 border-b border-[hsl(var(--sidebar-border))]',
             isCollapsed ? 'px-3 py-5 justify-center' : 'px-5 py-6 gap-3'
           )}
         >
@@ -293,11 +293,11 @@ export function Sidebar() {
           {menuGroups.map((group, groupIndex) => (
             <div key={group.label} className={cn(groupIndex > 0 && 'mt-6')}>
               {!isCollapsed ? (
-                <h2 className="px-2 mb-2 text-[10px] font-semibold text-slate-500 uppercase tracking-[0.14em]">
+                <h2 className="px-2 mb-2 text-[10px] font-semibold text-[hsl(var(--sidebar-muted))] uppercase tracking-[0.14em]">
                   {group.label}
                 </h2>
               ) : (
-                <div className="h-px bg-white/5 mx-1 my-4" role="separator" />
+                <div className="h-px bg-[hsl(var(--sidebar-border))] mx-1 my-4" role="separator" />
               )}
               <ul className="space-y-1">
                 {group.items.map((item) => (
@@ -310,14 +310,14 @@ export function Sidebar() {
           ))}
         </nav>
 
-        <div className="p-3 mt-auto border-t border-white/5 space-y-1 shrink-0 bg-black/10">
+        <div className="p-3 mt-auto border-t border-[hsl(var(--sidebar-border))] space-y-1 shrink-0">
           {!isMobile && (
             <button
               type="button"
               onClick={() => setIsCollapsed(!isCollapsed)}
               className={cn(
                 'w-full flex items-center rounded-xl transition-colors duration-200',
-                'text-slate-400 hover:text-white hover:bg-white/5',
+                'text-[hsl(var(--sidebar-muted))] hover:text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))]',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--sidebar-ring))]',
                 isCollapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5'
               )}
@@ -337,7 +337,7 @@ export function Sidebar() {
             onClick={handleLogout}
             className={cn(
               'w-full flex items-center rounded-xl transition-colors duration-200',
-              'text-slate-400 hover:text-rose-300 hover:bg-rose-500/10',
+              'text-[hsl(var(--sidebar-muted))] hover:text-rose-500 hover:bg-rose-500/10',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/50',
               isCollapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5'
             )}
@@ -365,7 +365,7 @@ export function Sidebar() {
           className={cn(
             shellClass,
             'fixed left-0 top-0 h-full w-[min(288px,88vw)] z-50 transition-transform duration-300 ease-out',
-            'border-r border-white/10 shadow-2xl shadow-black/30',
+            'border-r border-[hsl(var(--sidebar-border))] shadow-xl shadow-black/10',
             isMobileOpen ? 'translate-x-0' : '-translate-x-full'
           )}
           aria-hidden={!isMobileOpen}
@@ -382,7 +382,7 @@ export function Sidebar() {
       className={cn(
         shellClass,
         'fixed left-0 top-0 h-screen z-40 transition-[width] duration-300 ease-out',
-        'border-r border-white/10 shadow-xl shadow-black/20',
+        'border-r border-[hsl(var(--sidebar-border))] shadow-sm',
         isCollapsed ? 'w-[76px]' : 'w-[260px]'
       )}
     >
