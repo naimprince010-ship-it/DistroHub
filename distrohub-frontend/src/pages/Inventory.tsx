@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Header } from '@/components/layout/Header';
+import { PageShell } from '@/components/layout/PageShell';
+import { StatCard } from '@/components/ui/stat-card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import {
   Search,
   AlertTriangle,
@@ -37,11 +40,12 @@ interface Warehouse {
   created_at: string;
 }
 
-const statusConfig = {
-  in_stock: { color: 'bg-green-100 text-green-700', label: 'In Stock' },
-  low_stock: { color: 'bg-yellow-100 text-yellow-700', label: 'Low Stock' },
-  expiring: { color: 'bg-orange-100 text-orange-700', label: 'Expiring Soon' },
-  expired: { color: 'bg-red-100 text-red-700', label: 'Expired' },
+type InvStatusVariant = 'success' | 'warning' | 'danger' | 'info';
+const statusConfig: Record<string, { variant: InvStatusVariant; label: string }> = {
+  in_stock: { variant: 'success', label: 'In Stock' },
+  low_stock: { variant: 'warning', label: 'Low Stock' },
+  expiring: { variant: 'danger', label: 'Expiring Soon' },
+  expired:  { variant: 'danger',  label: 'Expired' },
 };
 
 // Warehouse Management Component
@@ -131,189 +135,111 @@ function WarehouseManagement() {
   };
 
   if (loading) {
-    return <div className="p-8 text-center text-slate-500">Loading warehouses...</div>;
+    return <div className="py-8 text-center text-sm text-muted-foreground">Loading warehouses…</div>;
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-slate-900">Warehouse Management</h3>
-        <button
-          onClick={handleAdd}
-          className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-2 shadow-sm hover:shadow-md"
-        >
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-base font-semibold text-foreground">Warehouses</h3>
+        <button onClick={handleAdd} className="btn-primary flex items-center gap-2 h-9 px-3 text-sm">
           <Plus className="w-4 h-4" />
           Add Warehouse
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        <table className="w-full">
-          <thead className="bg-slate-50 border-b border-slate-200">
-            <tr>
-              <th className="text-left p-3 font-semibold text-slate-700">Name</th>
-              <th className="text-left p-3 font-semibold text-slate-700">Address</th>
-              <th className="text-center p-3 font-semibold text-slate-700">Status</th>
-              <th className="text-right p-3 font-semibold text-slate-700">Stock Count</th>
-              <th className="text-center p-3 font-semibold text-slate-700">Actions</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {warehouses.map((warehouse) => {
-              const stockCount = stockCounts[warehouse.id] || 0;
-              const hasStock = stockCount > 0;
-              return (
-                <tr key={warehouse.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="p-3">
-                    <div className="flex items-center gap-2">
-                      <Warehouse className="w-5 h-5 text-slate-400" />
-                      <span className="font-medium text-slate-900">{warehouse.name}</span>
-                    </div>
-                  </td>
-                  <td className="p-3 text-slate-600">
-                    {warehouse.address ? (
-                      <div className="flex items-center gap-1">
-                        <MapPin className="w-4 h-4 text-slate-400" />
-                        <span>{warehouse.address}</span>
+      <Card>
+        <CardContent className="p-0">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 border-b border-border">
+              <tr>
+                <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Name</th>
+                <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Address</th>
+                <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</th>
+                <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Stock Count</th>
+                <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border/60">
+              {warehouses.map((warehouse) => {
+                const stockCount = stockCounts[warehouse.id] || 0;
+                const hasStock = stockCount > 0;
+                return (
+                  <tr key={warehouse.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        <Warehouse className="w-4 h-4 text-muted-foreground" />
+                        <span className="font-medium text-foreground">{warehouse.name}</span>
                       </div>
-                    ) : (
-                      <span className="text-slate-400">No address</span>
-                    )}
-                  </td>
-                  <td className="p-3 text-center">
-                    <span
-                      className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
-                        warehouse.is_active
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}
-                    >
-                      {warehouse.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td className="p-3 text-right">
-                    <span className="font-medium text-slate-900">{stockCount.toLocaleString()}</span>
-                  </td>
-                  <td className="p-3">
-                    <div className="flex items-center justify-center gap-2">
-                      <button
-                        onClick={() => handleEdit(warehouse)}
-                        className="p-1.5 text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors"
-                        title="Edit warehouse"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(warehouse.id)}
-                        disabled={hasStock}
-                        className={`p-1.5 rounded transition-colors ${
-                          hasStock
-                            ? 'text-slate-300 cursor-not-allowed'
-                            : 'text-red-600 hover:text-red-700 hover:bg-red-50'
-                        }`}
-                        title={hasStock ? 'Cannot delete warehouse with stock' : 'Delete warehouse'}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    </td>
+                    <td className="px-3 py-2.5 text-muted-foreground">
+                      {warehouse.address ? (
+                        <div className="flex items-center gap-1">
+                          <MapPin className="w-3.5 h-3.5 text-muted-foreground" />
+                          <span>{warehouse.address}</span>
+                        </div>
+                      ) : <span className="text-muted-foreground/50 italic">No address</span>}
+                    </td>
+                    <td className="px-3 py-2.5 text-center">
+                      <Badge variant={warehouse.is_active ? 'success' : 'muted'}>
+                        {warehouse.is_active ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono font-medium text-foreground">
+                      {stockCount.toLocaleString()}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <div className="flex items-center justify-center gap-1">
+                        <button onClick={() => handleEdit(warehouse)}
+                          className="p-1.5 rounded text-muted-foreground hover:text-[hsl(var(--dh-blue))] hover:bg-[hsl(var(--dh-blue))]/10 transition-colors"
+                          title="Edit">
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => handleDelete(warehouse.id)} disabled={hasStock}
+                          className={`p-1.5 rounded transition-colors ${hasStock ? 'text-muted-foreground/30 cursor-not-allowed' : 'text-muted-foreground hover:text-[hsl(var(--dh-red))] hover:bg-[hsl(var(--dh-red))]/10'}`}
+                          title={hasStock ? 'Cannot delete warehouse with stock' : 'Delete'}>
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {warehouses.length === 0 && (
+            <div className="py-8 text-center text-sm text-muted-foreground">No warehouses found. Click "Add Warehouse" to create one.</div>
+          )}
+        </CardContent>
+      </Card>
 
-        {warehouses.length === 0 && (
-          <div className="p-8 text-center text-slate-500">
-            No warehouses found. Click "Add Warehouse" to create one.
-          </div>
-        )}
-      </div>
-
-      {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl w-full max-w-md m-4">
-            <div className="p-4 border-b border-slate-200 flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-slate-900">
-                {editingWarehouse ? 'Edit Warehouse' : 'Add Warehouse'}
-              </h2>
-              <button
-                onClick={() => {
-                  setShowModal(false);
-                  setEditingWarehouse(null);
-                  setFormData({ name: '', address: '', is_active: true });
-                  setError('');
-                }}
-                className="p-1 text-slate-400 hover:text-slate-600"
-              >
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-xl">
+            <div className="p-4 border-b border-border flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-foreground">{editingWarehouse ? 'Edit Warehouse' : 'Add Warehouse'}</h2>
+              <button onClick={() => { setShowModal(false); setEditingWarehouse(null); setFormData({ name: '', address: '', is_active: true }); setError(''); }}
+                className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>
-
             <form onSubmit={handleSubmit} className="p-4 space-y-4">
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded">
-                  {error}
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  Warehouse Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="input-field w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required
-                  placeholder="e.g., Main Warehouse"
-                />
+              {error && <div className="bg-destructive/10 border border-destructive/20 text-destructive px-3 py-2 rounded-lg text-sm">{error}</div>}
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-foreground">Warehouse Name <span className="text-[hsl(var(--dh-red))]">*</span></label>
+                <input type="text" value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="input-field" required placeholder="e.g., Main Warehouse" />
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Address</label>
-                <textarea
-                  value={formData.address}
-                  onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                  className="input-field w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  rows={3}
-                  placeholder="Warehouse address..."
-                />
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium text-foreground">Address</label>
+                <textarea value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} className="input-field" rows={3} placeholder="Warehouse address…" />
               </div>
-
-              <div>
-                <label className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={formData.is_active}
-                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                    className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
-                  />
-                  <span className="text-sm font-medium text-slate-700">Active</span>
-                </label>
-              </div>
-
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={formData.is_active} onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })} className="w-4 h-4 rounded" />
+                <span className="text-sm font-medium text-foreground">Active</span>
+              </label>
               <div className="flex gap-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowModal(false);
-                    setEditingWarehouse(null);
-                    setFormData({ name: '', address: '', is_active: true });
-                    setError('');
-                  }}
-                  className="btn-secondary flex-1"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 flex-1"
-                >
-                  {editingWarehouse ? 'Update' : 'Create'}
-                </button>
+                <button type="button" onClick={() => { setShowModal(false); setEditingWarehouse(null); setFormData({ name: '', address: '', is_active: true }); setError(''); }} className="btn-secondary flex-1">Cancel</button>
+                <button type="submit" className="btn-primary flex-1">{editingWarehouse ? 'Update' : 'Create'}</button>
               </div>
             </form>
           </div>
@@ -448,187 +374,112 @@ function StockOverview() {
   const expiredCount = inventory.filter((item) => item.status === 'expired').length;
 
   return (
-    <div>
+    <div className="space-y-4">
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2">
-        <div className="bg-white rounded-xl p-3 shadow-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center">
-              <Package className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-slate-900">{totalItems.toLocaleString()}</p>
-              <p className="text-slate-500 text-sm">Total Items</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl p-3 shadow-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-12 h-12 bg-yellow-500 rounded-xl flex items-center justify-center">
-              <TrendingDown className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-yellow-600">{lowStockCount}</p>
-              <p className="text-slate-500 text-sm">Low Stock</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl p-3 shadow-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-12 h-12 bg-orange-500 rounded-xl flex items-center justify-center">
-              <AlertTriangle className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-orange-600">{expiringCount}</p>
-              <p className="text-slate-500 text-sm">Expiring Soon</p>
-            </div>
-          </div>
-        </div>
-        <div className="bg-white rounded-xl p-3 shadow-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-12 h-12 bg-red-500 rounded-xl flex items-center justify-center">
-              <TrendingUp className="w-6 h-6 text-white" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-red-600">{expiredCount}</p>
-              <p className="text-slate-500 text-sm">Expired</p>
-            </div>
-          </div>
-        </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard label="Total Items"   value={totalItems.toLocaleString()} icon={Package}       color="blue" />
+        <StatCard label="Low Stock"     value={lowStockCount}               icon={TrendingDown}  color="amber" />
+        <StatCard label="Expiring Soon" value={expiringCount}               icon={AlertTriangle} color="purple" />
+        <StatCard label="Expired"       value={expiredCount}                icon={TrendingUp}    color="red" />
       </div>
 
-      {/* Actions Bar */}
-      <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2 flex-1">
-          <div className="relative min-w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search inventory..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="input-field pl-10"
-            />
+      {/* Table card */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="text-base">Stock Overview</CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <input type="text" placeholder="Search inventory…" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="input-field pl-8 h-9 w-48 text-sm" />
+              </div>
+              <div className="relative">
+                <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input-field pl-8 h-9 w-40 text-sm">
+                  <option value="all">All Status</option>
+                  <option value="in_stock">In Stock</option>
+                  <option value="low_stock">Low Stock</option>
+                  <option value="expiring">Expiring Soon</option>
+                  <option value="expired">Expired</option>
+                </select>
+              </div>
+              <div className="relative">
+                <Warehouse className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <select value={warehouseFilter} onChange={(e) => setWarehouseFilter(e.target.value)} className="input-field pl-8 h-9 w-40 text-sm">
+                  <option value="all">All Warehouses</option>
+                  {warehouses.map((wh) => <option key={wh.id} value={wh.name}>{wh.name}</option>)}
+                </select>
+              </div>
+            </div>
           </div>
-          <div className="relative">
-            <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="input-field pl-10 w-48"
-            >
-              <option value="all">All Status</option>
-              <option value="in_stock">In Stock</option>
-              <option value="low_stock">Low Stock</option>
-              <option value="expiring">Expiring Soon</option>
-              <option value="expired">Expired</option>
-            </select>
-          </div>
-          <div className="relative">
-            <Warehouse className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <select
-              value={warehouseFilter}
-              onChange={(e) => setWarehouseFilter(e.target.value)}
-              className="input-field pl-10 w-48"
-            >
-              <option value="all">All Warehouses</option>
-              {warehouses.map((wh) => (
-                <option key={wh.id} value={wh.name}>{wh.name}</option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
-
-      {/* Inventory Table */}
-      <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-        {loading ? (
-          <div className="p-8 text-center text-slate-500">Loading inventory...</div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-50 border-b border-slate-200">
-                <tr>
-                  <th className="text-left p-2 font-semibold text-slate-700">Product</th>
-                  <th className="text-left p-2 font-semibold text-slate-700">SKU</th>
-                  <th className="text-left p-2 font-semibold text-slate-700">Batch</th>
-                  <th className="text-left p-2 font-semibold text-slate-700">Expiry</th>
-                  <th className="text-right p-2 font-semibold text-slate-700">Quantity</th>
-                  <th className="text-left p-2 font-semibold text-slate-700">Warehouse</th>
-                  <th className="text-center p-2 font-semibold text-slate-700">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredInventory.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="p-2">
-                    <div className="flex items-center gap-2">
-                      <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
-                        <Package className="w-5 h-5 text-primary-600" />
-                      </div>
-                      <span className="font-medium text-slate-900">{item.product_name}</span>
-                    </div>
-                  </td>
-                  <td className="p-2 text-slate-600 font-mono text-sm">{item.sku}</td>
-                  <td className="p-2 text-slate-600 font-mono text-sm">{item.batch_number}</td>
-                  <td className="p-2">
-                    <div className="flex items-center gap-1">
-                      {(item.status === 'expiring' || item.status === 'expired') && (
-                        <AlertTriangle className="w-4 h-4 text-orange-500" />
-                      )}
-                      <span
-                        className={
-                          item.status === 'expired'
-                            ? 'text-red-600 font-medium'
-                            : item.status === 'expiring'
-                            ? 'text-orange-600 font-medium'
-                            : 'text-slate-600'
-                        }
-                      >
-                        {item.expiry_date}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="p-2 text-right">
-                    <span
-                      className={`font-medium ${
-                        item.status === 'low_stock' ? 'text-yellow-600' : 'text-slate-900'
-                      }`}
-                    >
-                      {item.quantity} {item.unit}
-                    </span>
-                  </td>
-                  <td className="p-2 text-slate-600">{item.location}</td>
-                  <td className="p-2 text-center">
-                    <span
-                      className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${statusConfig[item.status].color}`}
-                    >
-                      {statusConfig[item.status].label}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        )}
-
-        {!loading && filteredInventory.length === 0 && (
-          <div className="p-4 text-center text-slate-500">
-            No inventory items found. Try adjusting your search or filters.
-          </div>
-        )}
-      </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="py-12 text-center text-sm text-muted-foreground">Loading inventory…</div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 border-b border-border">
+                  <tr>
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Product</th>
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">SKU</th>
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Batch</th>
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Expiry</th>
+                    <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Quantity</th>
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Warehouse</th>
+                    <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {filteredInventory.map((item) => (
+                    <tr key={item.id} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 bg-[hsl(var(--primary))]/10 rounded-lg flex items-center justify-center">
+                            <Package className="w-4 h-4 text-[hsl(var(--primary))]" />
+                          </div>
+                          <span className="font-medium text-foreground">{item.product_name}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{item.sku}</td>
+                      <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{item.batch_number}</td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center gap-1">
+                          {(item.status === 'expiring' || item.status === 'expired') && <AlertTriangle className="w-3.5 h-3.5 text-[hsl(var(--dh-amber))]" />}
+                          <span className={item.status === 'expired' ? 'text-[hsl(var(--dh-red))] font-medium text-xs' : item.status === 'expiring' ? 'text-[hsl(var(--dh-amber))] font-medium text-xs' : 'text-muted-foreground text-xs'}>
+                            {item.expiry_date}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-2.5 text-right">
+                        <span className={`font-mono font-medium ${item.status === 'low_stock' ? 'text-[hsl(var(--dh-amber))]' : 'text-foreground'}`}>
+                          {item.quantity} {item.unit}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-muted-foreground text-sm">{item.location}</td>
+                      <td className="px-3 py-2.5 text-center">
+                        <Badge variant={statusConfig[item.status].variant}>{statusConfig[item.status].label}</Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {!loading && filteredInventory.length === 0 && (
+            <div className="py-12 text-center text-sm text-muted-foreground">No inventory items found. Try adjusting your search or filters.</div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* FIFO Notice */}
-      <div className="mt-2 bg-blue-50 border border-blue-200 rounded-xl p-2">
+      <div className="bg-[hsl(var(--dh-blue))]/5 border border-[hsl(var(--dh-blue))]/20 rounded-xl p-3">
         <div className="flex items-start gap-2">
-          <AlertTriangle className="w-5 h-5 text-blue-600 mt-0.5" />
+          <AlertTriangle className="w-4 h-4 text-[hsl(var(--dh-blue))] mt-0.5 shrink-0" />
           <div>
-            <h4 className="font-medium text-blue-900">FIFO Inventory Management</h4>
-            <p className="text-sm text-blue-700">
-              Products are automatically suggested for sale based on First-In-First-Out (FIFO) principle.
-              Items with earlier expiry dates are prioritized.
+            <h4 className="font-medium text-foreground text-sm">FIFO Inventory Management</h4>
+            <p className="text-sm text-muted-foreground">
+              Products are automatically suggested for sale based on First-In-First-Out (FIFO) principle. Items with earlier expiry dates are prioritized.
             </p>
           </div>
         </div>
@@ -663,34 +514,30 @@ export function Inventory() {
   };
 
   return (
-    <div className="min-h-screen">
-      <Header title="Inventory" />
-
-      <div className="p-3">
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          <div className="flex border-b border-slate-200">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => handleTabChange(tab.id)}
-                className={`flex items-center gap-2 px-3 py-2 font-medium transition-colors ${
-                  activeTab === tab.id
-                    ? 'text-primary-600 border-b-2 border-primary-600'
-                    : 'text-slate-500 hover:text-slate-700'
-                }`}
-              >
-                <tab.icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="p-3">
-            {activeTab === 'stock' && <StockOverview />}
-            {activeTab === 'warehouses' && <WarehouseManagement />}
-          </div>
+    <PageShell title="Inventory">
+      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+        {/* Tabs */}
+        <div className="flex border-b border-border px-1">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => handleTabChange(tab.id)}
+              className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                activeTab === tab.id
+                  ? 'text-[hsl(var(--primary))] border-[hsl(var(--primary))]'
+                  : 'text-muted-foreground border-transparent hover:text-foreground'
+              }`}
+            >
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div className="p-4">
+          {activeTab === 'stock' && <StockOverview />}
+          {activeTab === 'warehouses' && <WarehouseManagement />}
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }

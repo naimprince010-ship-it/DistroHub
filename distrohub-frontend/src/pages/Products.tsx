@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Header } from '@/components/layout/Header';
+import { PageShell } from '@/components/layout/PageShell';
+import { StatCard } from '@/components/ui/stat-card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import {
   Plus,
   Upload,
@@ -554,195 +557,108 @@ export function Products() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/80">
-      <Header title={t('common.products')} />
-
-      <div className="mx-auto max-w-[1680px] space-y-6 p-4 md:p-6">
-        <div className="space-y-1.5">
-          <p className="text-sm leading-relaxed text-slate-700">{t('products.subtitle')}</p>
-          <p className="hidden text-xs leading-relaxed text-slate-500 sm:block">{t('products.search_hint')}</p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div className="rounded-xl border border-slate-200/80 bg-slate-50/90 p-3 ring-1 ring-slate-200/60">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-600/90 text-white shadow-sm">
-                <Package className="h-4 w-4" aria-hidden />
-              </div>
-              <div className="min-w-0 leading-tight">
-                <p className="text-lg font-bold tabular-nums text-slate-900 sm:text-xl">{productStats.total}</p>
-                <p className="text-xs font-medium text-slate-600">{t('products.stat_total')}</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-xl border border-slate-200/80 bg-slate-50/90 p-3 ring-1 ring-slate-200/60">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-amber-600/90 text-white shadow-sm">
-                <AlertTriangle className="h-4 w-4" aria-hidden />
-              </div>
-              <div className="min-w-0 leading-tight">
-                <p className="text-lg font-bold tabular-nums text-slate-900 sm:text-xl">{productStats.low}</p>
-                <p className="text-xs font-medium text-slate-600">{t('products.stat_low')}</p>
-              </div>
-            </div>
-          </div>
-          <div
-            className={cn(
-              'rounded-xl border bg-slate-50/90 p-3 ring-1 transition-shadow',
-              productStats.total > 0 && productStats.out === productStats.total
-                ? 'border-red-300/90 ring-2 ring-red-200/80 shadow-sm'
-                : 'border-slate-200/80 ring-slate-200/60'
-            )}
+    <PageShell
+      title={t('common.products')}
+      subtitle={t('products.subtitle')}
+      actions={
+        <>
+          <button
+            type="button"
+            onClick={() => fetchProducts(true)}
+            disabled={refreshing || loading}
+            className="btn-secondary inline-flex h-9 items-center gap-2 px-3 disabled:opacity-50"
           >
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-600/90 text-white shadow-sm">
-                <PackageMinus className="h-4 w-4" aria-hidden />
-              </div>
-              <div className="min-w-0 leading-tight">
-                <p className="text-lg font-bold tabular-nums text-slate-900 sm:text-xl">{productStats.out}</p>
-                <p className="text-xs font-medium text-slate-600">{t('products.stat_out')}</p>
-              </div>
-            </div>
-          </div>
-          <div className="rounded-xl border border-slate-200/80 bg-slate-50/90 p-3 ring-1 ring-slate-200/60">
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-600/90 text-white shadow-sm">
-                <CalendarDays className="h-4 w-4" aria-hidden />
-              </div>
-              <div className="min-w-0 leading-tight">
-                <p className="text-lg font-bold tabular-nums text-slate-900 sm:text-xl">{productStats.expiring}</p>
-                <p className="text-xs font-medium text-slate-600">{t('products.stat_expiring')}</p>
-              </div>
-            </div>
-          </div>
+            <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} aria-hidden />
+            <span className="hidden sm:inline">{t('products.refresh')}</span>
+          </button>
+          <label className="btn-secondary inline-flex h-9 cursor-pointer items-center gap-2 px-3">
+            <Upload className="h-4 w-4" aria-hidden />
+            <span className="hidden sm:inline">{t('common.import')}</span>
+            <input type="file" accept=".xlsx,.xls" onChange={handleExcelImport} className="hidden" />
+          </label>
+          <button
+            type="button"
+            onClick={handleExcelExport}
+            disabled={loading || products.length === 0}
+            className="btn-secondary inline-flex h-9 items-center gap-2 px-3 disabled:opacity-50"
+          >
+            <Download className="h-4 w-4" aria-hidden />
+            <span className="hidden sm:inline">{t('common.export')}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => { fetchCategoriesAndSuppliers(); setShowAddModal(true); }}
+            className="btn-primary inline-flex h-9 items-center gap-2 px-4 font-medium"
+          >
+            <Plus className="h-4 w-4" aria-hidden />
+            {t('common.add_product')}
+          </button>
+        </>
+      }
+    >
+      <div className="mx-auto max-w-[1680px] space-y-5">
+        {/* KPI tiles */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <StatCard label={t('products.stat_total')}    value={productStats.total}    icon={Package}      color="blue" />
+          <StatCard label={t('products.stat_low')}      value={productStats.low}      icon={AlertTriangle} color="amber" />
+          <StatCard label={t('products.stat_out')}      value={productStats.out}      icon={PackageMinus}  color="red" />
+          <StatCard label={t('products.stat_expiring')} value={productStats.expiring} icon={CalendarDays}  color="purple" />
         </div>
 
-        <div className="rounded-xl border border-slate-100 bg-white shadow-sm">
-          <div className="border-b border-slate-100 bg-slate-50/50 px-4 py-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">{t('products.filter_section')}</h2>
-          </div>
-          <div className={cn('p-4', !searchTerm && 'sm:p-0')}>
-            <div className="relative mb-4 border-b border-slate-100 pb-4 sm:hidden">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
-              <input
-                type="search"
-                value={searchTerm}
-                onChange={(e) => updateSearchQuery(e.target.value)}
-                placeholder={t('products.search_mobile')}
-                className="input-field h-10 w-full pl-10"
-                autoComplete="off"
-                aria-label={t('products.search_mobile')}
-              />
+        {/* Filters card */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <CardTitle className="text-base">{t('products.filter_section')}</CardTitle>
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Mobile search */}
+                <div className="relative sm:hidden">
+                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                  <input type="search" value={searchTerm} onChange={(e) => updateSearchQuery(e.target.value)}
+                    placeholder={t('products.search_mobile')} className="input-field h-9 w-full pl-9" autoComplete="off" />
+                </div>
+              </div>
             </div>
-            {searchTerm ? (
-              <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-slate-100 pb-4">
-                <span className="text-xs font-medium text-slate-500">{t('products.search_chip_label')}:</span>
-                <div className="inline-flex max-w-full items-center gap-1 rounded-full border border-primary/25 bg-primary/10 px-2.5 py-1 text-sm text-slate-800">
-                  <span className="max-w-[min(100%,220px)] truncate font-medium">{searchTerm}</span>
-                  <button
-                    type="button"
-                    onClick={() => updateSearchQuery('')}
-                    className="rounded-full p-0.5 text-slate-600 hover:bg-primary/20 hover:text-slate-900"
-                    aria-label={t('products.search_clear')}
-                  >
+          </CardHeader>
+          <CardContent className="pt-0">
+            {searchTerm && (
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <span className="text-xs font-medium text-muted-foreground">{t('products.search_chip_label')}:</span>
+                <div className="inline-flex items-center gap-1 rounded-full border border-[hsl(var(--primary))]/25 bg-[hsl(var(--primary))]/10 px-2.5 py-1 text-sm text-foreground">
+                  <span className="max-w-[220px] truncate font-medium">{searchTerm}</span>
+                  <button type="button" onClick={() => updateSearchQuery('')}
+                    className="rounded-full p-0.5 text-muted-foreground hover:text-foreground" aria-label={t('products.search_clear')}>
                     <X className="h-3.5 w-3.5" />
                   </button>
                 </div>
               </div>
-            ) : null}
-          </div>
-
-          <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50/30 px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between">
-            <div className="order-2 sm:order-1">
-              <p className="text-sm text-slate-600" aria-live="polite">
-                {t('products.toolbar_count')
-                  .replace('{{f}}', String(filteredProducts.length))
-                  .replace('{{t}}', String(products.length))}
-              </p>
-            </div>
-            <div className="order-1 flex flex-wrap items-center justify-end gap-2 sm:order-2">
-              <span className="sr-only">{t('products.actions_section')}</span>
-              <button
-                type="button"
-                onClick={() => fetchProducts(true)}
-                disabled={refreshing || loading}
-                className="btn-secondary inline-flex h-10 shrink-0 items-center gap-2 px-3 disabled:opacity-50"
-                aria-busy={refreshing}
-              >
-                <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} aria-hidden />
-                <span className="hidden sm:inline">{t('products.refresh')}</span>
-              </button>
-              <label className="btn-secondary inline-flex h-10 cursor-pointer shrink-0 items-center gap-2 px-3">
-                <Upload className="h-4 w-4" aria-hidden />
-                <span className="hidden sm:inline">{t('common.import')}</span>
-                <input type="file" accept=".xlsx,.xls" onChange={handleExcelImport} className="hidden" />
-              </label>
-              <button
-                type="button"
-                onClick={handleExcelExport}
-                disabled={loading || products.length === 0}
-                className="btn-secondary inline-flex h-10 shrink-0 items-center gap-2 px-3 disabled:opacity-50"
-              >
-                <Download className="h-4 w-4" aria-hidden />
-                <span className="hidden sm:inline">{t('common.export')}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  fetchCategoriesAndSuppliers();
-                  setShowAddModal(true);
-                }}
-                className="btn-primary inline-flex h-10 shrink-0 items-center gap-2 px-4 font-medium shadow-sm"
-              >
-                <Plus className="h-4 w-4" aria-hidden />
-                {t('common.add_product')}
-              </button>
-            </div>
-          </div>
-
-          <div className="border-t border-slate-100 p-4 pt-5">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-12 xl:items-end">
+            )}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12 xl:items-end">
               <div className="min-w-0 xl:col-span-4">
-                <label
-                  className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-700"
-                  htmlFor="product-category"
-                >
+                <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="product-category">
                   {t('products.filter_label_category')}
                 </label>
                 <div className="relative">
-                  <Filter className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
+                  <Filter className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
                   <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger
-                      id="product-category"
-                      className="h-10 w-full border-slate-200 bg-white pl-10 pr-8 text-left text-sm text-slate-900 shadow-sm focus:ring-2 focus:ring-ring [&>span]:line-clamp-1"
-                    >
+                    <SelectTrigger id="product-category" className="h-9 w-full pl-9 text-sm [&>span]:line-clamp-1">
                       <SelectValue placeholder={t('common.all_categories')} />
                     </SelectTrigger>
                     <SelectContent position="popper" className="max-h-72">
                       <SelectItem value="all">{t('common.all_categories')}</SelectItem>
-                      {allCategories.map((cat) => (
-                        <SelectItem key={cat} value={cat}>
-                          {cat}
-                        </SelectItem>
-                      ))}
+                      {allCategories.map((cat) => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
               <div className="min-w-0 xl:col-span-4">
-                <label
-                  className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-700"
-                  htmlFor="product-stock"
-                >
+                <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="product-stock">
                   {t('products.filter_label_stock')}
                 </label>
                 <div className="relative">
-                  <Activity className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
+                  <Activity className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
                   <Select value={stockFilter} onValueChange={setStockFilter}>
-                    <SelectTrigger
-                      id="product-stock"
-                      className="h-10 w-full border-slate-200 bg-white pl-10 pr-8 text-left text-sm text-slate-900 shadow-sm focus:ring-2 focus:ring-ring [&>span]:line-clamp-1"
-                    >
+                    <SelectTrigger id="product-stock" className="h-9 w-full pl-9 text-sm [&>span]:line-clamp-1">
                       <SelectValue placeholder={t('common.all_stock')} />
                     </SelectTrigger>
                     <SelectContent position="popper">
@@ -755,19 +671,13 @@ export function Products() {
                 </div>
               </div>
               <div className="min-w-0 xl:col-span-2">
-                <label
-                  className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-700"
-                  htmlFor="product-expiry"
-                >
+                <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="product-expiry">
                   {t('products.filter_label_expiry')}
                 </label>
                 <div className="relative">
-                  <CalendarDays className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" aria-hidden />
+                  <CalendarDays className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
                   <Select value={expiryFilter} onValueChange={setExpiryFilter}>
-                    <SelectTrigger
-                      id="product-expiry"
-                      className="h-10 w-full border-slate-200 bg-white pl-10 pr-8 text-left text-sm text-slate-900 shadow-sm focus:ring-2 focus:ring-ring [&>span]:line-clamp-1"
-                    >
+                    <SelectTrigger id="product-expiry" className="h-9 w-full pl-9 text-sm [&>span]:line-clamp-1">
                       <SelectValue placeholder={t('common.all_expiry')} />
                     </SelectTrigger>
                     <SelectContent position="popper">
@@ -779,41 +689,32 @@ export function Products() {
                   </Select>
                 </div>
               </div>
-              <div className="flex min-w-0 flex-col xl:col-span-2">
-                <span
-                  className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-transparent select-none"
-                  aria-hidden
-                >
-                  {t('products.filter_label_category')}
-                </span>
-                <button
-                  type="button"
-                  onClick={clearFilters}
-                  disabled={activeFiltersCount === 0}
-                  className="inline-flex h-10 w-full shrink-0 items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2 text-sm font-medium text-slate-500 transition-colors enabled:border-red-200 enabled:bg-red-50 enabled:text-red-700 enabled:hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 xl:w-auto xl:min-w-[7rem]"
-                >
+              <div className="min-w-0 xl:col-span-2">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-transparent select-none" aria-hidden>a</span>
+                <button type="button" onClick={clearFilters} disabled={activeFiltersCount === 0}
+                  className="inline-flex h-9 w-full items-center justify-center gap-1 rounded-lg border border-border bg-card px-2 text-sm font-medium text-muted-foreground transition-colors enabled:border-[hsl(var(--dh-red))]/30 enabled:bg-[hsl(var(--dh-red))]/5 enabled:text-[hsl(var(--dh-red))] disabled:cursor-not-allowed disabled:opacity-50">
                   <X className="h-4 w-4 shrink-0" aria-hidden />
                   <span className="truncate">{t('products.clear_filters')}</span>
-                  {activeFiltersCount > 0 ? (
-                    <span className="tabular-nums">({activeFiltersCount})</span>
-                  ) : null}
+                  {activeFiltersCount > 0 && <span className="tabular-nums">({activeFiltersCount})</span>}
                 </button>
               </div>
             </div>
-          </div>
-        </div>
+          </CardContent>
+        </Card>
 
-        {/* overflow-hidden breaks position:sticky on thead — keep scroll + rounding on inner wrapper */}
-        <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 bg-slate-50/50 px-4 py-2.5">
-            <h2 className="text-sm font-semibold text-slate-800">{t('products.title')}</h2>
-            <span className="max-w-[min(100%,18rem)] truncate text-xs text-slate-500 sm:max-w-none">
-              {t('products.toolbar_count')
-                .replace('{{f}}', String(filteredProducts.length))
-                .replace('{{t}}', String(products.length))}
-            </span>
-          </div>
-          {/* Single scrollport: vertical + horizontal — nested overflow-x was breaking sticky header */}
+        {/* Products table card */}
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <CardTitle className="text-base">{t('products.title')}</CardTitle>
+              <span className="text-xs text-muted-foreground">
+                {t('products.toolbar_count')
+                  .replace('{{f}}', String(filteredProducts.length))
+                  .replace('{{t}}', String(products.length))}
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
           <div className="relative isolate max-h-[min(70vh,calc(100vh-14rem))] overflow-auto overscroll-contain">
           {loading ? (
             <div className="space-y-2 p-4">
@@ -832,123 +733,68 @@ export function Products() {
                 <table className="w-full min-w-[1100px] border-separate border-spacing-0 text-sm">
                   <thead>
                     <tr>
-                      <th className="sticky top-0 z-30 w-12 border-b border-slate-200 bg-slate-50 p-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        #
-                      </th>
-                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        {t('common.products')}
-                      </th>
-                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        {t('common.sku')}
-                      </th>
-                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        {t('common.category')}
-                      </th>
-                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        {t('common.unit')}
-                      </th>
-                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        {t('common.purchase')}
-                      </th>
-                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        {t('common.selling')}
-                      </th>
-                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        {t('common.stock')}
-                      </th>
-                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-right text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        {t('common.pcs_ctn')}
-                      </th>
-                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        {t('common.batch')}
-                      </th>
-                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-left text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        {t('common.expiry')}
-                      </th>
-                      <th className="sticky top-0 z-30 border-b border-slate-200 bg-slate-50 p-2.5 text-center text-xs font-semibold uppercase tracking-wide text-slate-600">
-                        {t('common.actions')}
-                      </th>
+                      <th className="sticky top-0 z-30 w-12 border-b border-border bg-muted/40 p-2.5 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">#</th>
+                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.products')}</th>
+                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.sku')}</th>
+                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.category')}</th>
+                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.unit')}</th>
+                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.purchase')}</th>
+                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.selling')}</th>
+                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.stock')}</th>
+                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.pcs_ctn')}</th>
+                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.batch')}</th>
+                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.expiry')}</th>
+                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.actions')}</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100/90">
+                  <tbody className="divide-y divide-border/60">
                     {filteredProducts.map((product, index) => {
-                      const stockLevel =
-                        product.stock_quantity === 0
-                          ? 'out'
-                          : product.stock_quantity < LOW_STOCK_THRESHOLD
-                            ? 'low'
-                            : 'ok';
-                      const expiryStatus = isExpiredDate(product.expiry_date)
-                        ? 'expired'
-                        : isExpiringSoonDate(product.expiry_date)
-                          ? 'soon'
-                          : 'ok';
+                      const stockLevel = product.stock_quantity === 0 ? 'out' : product.stock_quantity < LOW_STOCK_THRESHOLD ? 'low' : 'ok';
+                      const expiryStatus = isExpiredDate(product.expiry_date) ? 'expired' : isExpiringSoonDate(product.expiry_date) ? 'soon' : 'ok';
                       const isAlert = stockLevel === 'out' || stockLevel === 'low' || expiryStatus === 'expired' || expiryStatus === 'soon';
 
                       return (
-                        <tr
-                          key={product.id}
+                        <tr key={product.id}
                           className={cn(
-                            'transition-colors hover:bg-slate-50/90',
-                            isAlert && 'bg-amber-50/40',
-                            stockLevel === 'out' && 'bg-red-50/30'
-                          )}
-                        >
-                          <td className="p-2.5 text-center text-xs font-medium tabular-nums text-slate-500">{index + 1}</td>
+                            'transition-colors hover:bg-muted/30',
+                            isAlert && 'bg-[hsl(var(--dh-amber))]/5',
+                            stockLevel === 'out' && 'bg-[hsl(var(--dh-red))]/5'
+                          )}>
+                          <td className="p-2.5 text-center text-xs tabular-nums text-muted-foreground">{index + 1}</td>
                           <td className="p-2.5">
                             <div className="flex max-w-[220px] items-center gap-2.5">
-                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 ring-1 ring-primary/15">
-                                <Package className="h-4 w-4 text-primary-700" aria-hidden />
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--primary))]/10">
+                                <Package className="h-4 w-4 text-[hsl(var(--primary))]" aria-hidden />
                               </div>
-                              <span className="truncate font-medium text-slate-900" title={product.name}>
-                                {product.name}
-                              </span>
+                              <span className="truncate font-medium text-foreground" title={product.name}>{product.name}</span>
                             </div>
                           </td>
-                          <td className="p-2.5 font-mono text-xs text-slate-600">{product.sku}</td>
+                          <td className="p-2.5 font-mono text-xs text-muted-foreground">{product.sku}</td>
                           <td className="p-2.5">
-                            <span className="inline-block max-w-[140px] truncate rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-700">
-                              {product.category}
-                            </span>
+                            <Badge variant="muted" className="max-w-[140px] truncate">{product.category}</Badge>
                           </td>
-                          <td className="p-2.5 text-right text-slate-600">{product.unit}</td>
-                          <td className="p-2.5 text-right tabular-nums text-slate-700">{formatMoney(product.purchase_price)}</td>
-                          <td className="p-2.5 text-right font-semibold tabular-nums text-slate-900">{formatMoney(product.selling_price)}</td>
+                          <td className="p-2.5 text-right text-sm text-muted-foreground">{product.unit}</td>
+                          <td className="p-2.5 text-right tabular-nums text-sm text-foreground">{formatMoney(product.purchase_price)}</td>
+                          <td className="p-2.5 text-right font-semibold tabular-nums text-sm text-foreground">{formatMoney(product.selling_price)}</td>
                           <td className="p-2.5 text-right">
-                            <span
-                              className={cn(
-                                'inline-flex min-w-[2rem] justify-end tabular-nums font-medium',
-                                product.stock_quantity === 0 && 'font-semibold text-red-600',
-                                product.stock_quantity > 0 &&
-                                  product.stock_quantity < LOW_STOCK_THRESHOLD &&
-                                  'text-amber-700',
-                                product.stock_quantity >= LOW_STOCK_THRESHOLD && 'text-emerald-700'
-                              )}
-                            >
+                            <span className={cn('tabular-nums font-medium text-sm',
+                              product.stock_quantity === 0 && 'font-semibold text-[hsl(var(--dh-red))]',
+                              product.stock_quantity > 0 && product.stock_quantity < LOW_STOCK_THRESHOLD && 'text-[hsl(var(--dh-amber))]',
+                              product.stock_quantity >= LOW_STOCK_THRESHOLD && 'text-[hsl(var(--dh-green))]'
+                            )}>
                               {product.stock_quantity}
                             </span>
                           </td>
-                          <td className="p-2.5 text-right text-xs tabular-nums text-slate-600">
-                            {product.pieces_per_carton || product.pack_size || '—'}
-                          </td>
-                          <td className="p-2.5 font-mono text-xs text-slate-600">{product.batch_number || '—'}</td>
+                          <td className="p-2.5 text-right text-xs tabular-nums text-muted-foreground">{product.pieces_per_carton || product.pack_size || '—'}</td>
+                          <td className="p-2.5 font-mono text-xs text-muted-foreground">{product.batch_number || '—'}</td>
                           <td className="p-2.5">
                             <div className="flex items-center gap-1">
                               {isExpiredDate(product.expiry_date) ? (
-                                <span className="text-xs font-medium text-red-600">{product.expiry_date || '—'}</span>
+                                <span className="text-xs font-medium text-[hsl(var(--dh-red))]">{product.expiry_date || '—'}</span>
                               ) : (
                                 <>
-                                  {isExpiringSoonDate(product.expiry_date) ? (
-                                    <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
-                                  ) : null}
-                                  <span
-                                    className={cn(
-                                      'text-xs',
-                                      isExpiringSoonDate(product.expiry_date)
-                                        ? 'font-medium text-amber-800'
-                                        : 'text-slate-600'
-                                    )}
-                                  >
+                                  {isExpiringSoonDate(product.expiry_date) && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[hsl(var(--dh-amber))]" aria-hidden />}
+                                  <span className={cn('text-xs', isExpiringSoonDate(product.expiry_date) ? 'font-medium text-[hsl(var(--dh-amber))]' : 'text-muted-foreground')}>
                                     {product.expiry_date || '—'}
                                   </span>
                                 </>
@@ -957,21 +803,15 @@ export function Products() {
                           </td>
                           <td className="p-2.5">
                             <div className="flex items-center justify-center gap-1">
-                              <button
-                                type="button"
-                                onClick={() => setEditingProduct(product)}
-                                className="rounded-lg p-2 text-slate-500 transition-colors hover:bg-primary/10 hover:text-primary-700"
-                                title={t('products.edit')}
-                              >
+                              <button type="button" onClick={() => setEditingProduct(product)}
+                                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-[hsl(var(--primary))]/10 hover:text-[hsl(var(--primary))]"
+                                title={t('products.edit')}>
                                 <Edit className="h-4 w-4" />
                               </button>
-                              <button
-                                type="button"
-                                onClick={() => setDeleteId(product.id)}
-                                className="rounded p-2 text-red-600 transition-colors hover:bg-red-50"
-                                title={t('common.delete')}
-                              >
-                                <Trash2 className="w-5 h-5" />
+                              <button type="button" onClick={() => setDeleteId(product.id)}
+                                className="rounded p-2 text-muted-foreground transition-colors hover:bg-[hsl(var(--dh-red))]/10 hover:text-[hsl(var(--dh-red))]"
+                                title={t('common.delete')}>
+                                <Trash2 className="w-4 h-4" />
                               </button>
                             </div>
                           </td>
@@ -983,14 +823,15 @@ export function Products() {
 
               {filteredProducts.length === 0 && !loading && (
                 <div className="px-4 py-12 text-center">
-                  <Package className="mx-auto mb-3 h-12 w-12 text-slate-300" aria-hidden />
-                  <p className="font-medium text-slate-700">{t('products.no_products')}</p>
+                  <Package className="mx-auto mb-3 h-12 w-12 text-muted-foreground/30" aria-hidden />
+                  <p className="font-medium text-muted-foreground">{t('products.no_products')}</p>
                 </div>
               )}
             </>
           )}
           </div>
-        </div>
+          </CardContent>
+        </Card>
       </div>
 
       <AlertDialog
@@ -999,21 +840,21 @@ export function Products() {
           if (!open && !deleteBusy) setDeleteId(null);
         }}
       >
-        <AlertDialogContent className="border-slate-200 sm:max-w-md">
+        <AlertDialogContent className="sm:max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle>{t('products.delete_dialog_title')}</AlertDialogTitle>
-            <AlertDialogDescription className="text-slate-600">
+            <AlertDialogDescription className="text-muted-foreground">
               {t('products.delete_dialog_desc')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="gap-2 sm:gap-0">
-            <AlertDialogCancel disabled={deleteBusy} className="border-slate-200">
+            <AlertDialogCancel disabled={deleteBusy}>
               {t('products.cancel')}
             </AlertDialogCancel>
             <button
               type="button"
               disabled={deleteBusy}
-              className={cn(buttonVariants(), 'bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-600')}
+              className={cn(buttonVariants(), 'bg-[hsl(var(--dh-red))] text-white hover:bg-[hsl(var(--dh-red))]/90')}
               onClick={executeDelete}
             >
               {deleteBusy ? '…' : t('common.delete')}
@@ -1022,10 +863,8 @@ export function Products() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Add/Edit Modal would go here */}
-      {
-        (showAddModal || editingProduct) && (
-          <ProductModal
+      {(showAddModal || editingProduct) && (
+        <ProductModal
             product={editingProduct}
             categories={categories}
             suppliers={suppliers}
@@ -1156,8 +995,8 @@ export function Products() {
               }
             }}
           />
-        )}
-    </div>
+      )}
+    </PageShell>
   );
 }
 
@@ -1386,18 +1225,17 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
   const RequiredMark = () => <span className="text-red-500 ml-0.5">*</span>;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
-        <div className="p-4 border-b border-slate-200 flex items-center justify-between gap-2">
-          <h2 className="text-xl font-semibold text-slate-900">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-xl">
+        <div className="p-4 border-b border-border flex items-center justify-between gap-2">
+          <h2 className="text-lg font-semibold text-foreground">
             {product ? t('products.edit') : t('products.add_new')}
           </h2>
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-lg text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors"
+            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
             aria-label="Close"
-            title="Close"
           >
             <X className="w-5 h-5" />
           </button>
@@ -1542,7 +1380,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
           </div>
 
           {/* Pricing with Profit Display */}
-          <div className="bg-slate-50 rounded-xl p-3">
+          <div className="bg-muted/40 rounded-xl p-3">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
@@ -1596,7 +1434,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
             </div>
 
             {/* VAT Toggle */}
-            <div className="flex items-center gap-4 mt-3 pt-3 border-t border-slate-200">
+            <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border">
               <label className="flex items-center gap-2 cursor-pointer">
                 <input
                   type="checkbox"
@@ -1745,7 +1583,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
           </div>
 
           {/* Action Buttons */}
-          <div className="flex justify-end gap-2 pt-4 border-t border-slate-200">
+          <div className="flex justify-end gap-2 pt-4 border-t border-border">
             <button type="button" onClick={onClose} className="btn-secondary">
               {t('products.cancel')}
             </button>
@@ -1759,7 +1597,7 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
                 Add & Add Another
               </button>
             )}
-            <button type="submit" className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md">
+            <button type="submit" className="btn-primary">
               {product ? t('products.update') : t('products.save')}
             </button>
           </div>

@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Header } from '@/components/layout/Header';
+import { PageShell } from '@/components/layout/PageShell';
+import { StatCard } from '@/components/ui/stat-card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import {
   Search,
   Phone,
@@ -107,11 +110,12 @@ export function Receivables() {
     fetchReceivables();
   }, []);
 
-  const getOverdueStatus = (days: number) => {
-    if (days <= 7) return { color: 'text-green-600', bg: 'bg-green-100', label: 'Current', key: 'current' };
-    if (days <= 15) return { color: 'text-yellow-600', bg: 'bg-yellow-100', label: 'Overdue', key: 'overdue' };
-    if (days <= 30) return { color: 'text-orange-600', bg: 'bg-orange-100', label: 'Past Due', key: 'past_due' };
-    return { color: 'text-red-600', bg: 'bg-red-100', label: 'Critical', key: 'critical' };
+  type OverdueVariant = 'success' | 'warning' | 'danger' | 'info';
+  const getOverdueStatus = (days: number): { variant: OverdueVariant; label: string; key: string } => {
+    if (days <= 7) return { variant: 'success', label: 'Current', key: 'current' };
+    if (days <= 15) return { variant: 'warning', label: 'Overdue', key: 'overdue' };
+    if (days <= 30) return { variant: 'danger', label: 'Past Due', key: 'past_due' };
+    return { variant: 'danger', label: 'Critical', key: 'critical' };
   };
 
   const filteredReceivables = receivables.filter((r) => {
@@ -143,209 +147,121 @@ export function Receivables() {
   const overdueCount = receivables.filter((r) => r.days_overdue > 7).length;
 
   return (
-    <div className="min-h-screen">
-      <Header title="Receivables (বাকি হিসাব)" />
-
-      <div className="p-3">
-        {loading ? (
-          <div className="bg-white rounded-xl p-8 text-center">
-            <p className="text-slate-500">Loading receivables...</p>
+    <PageShell title="Receivables (বাকি হিসাব)">
+      {loading ? (
+        <div className="py-12 text-center text-sm text-muted-foreground">Loading receivables…</div>
+      ) : (
+        <>
+          {/* Stats */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <StatCard label="Total Receivables" value={`৳ ${totalDue.toLocaleString()}`} icon={DollarSign} color="red" />
+            <StatCard label="Overdue Accounts"  value={overdueCount}                      icon={AlertCircle} color="amber" />
+            <StatCard label="Total Accounts"    value={receivables.length}                icon={Clock}       color="blue" />
           </div>
-        ) : (
-          <>
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-12 h-12 bg-red-500 rounded-xl flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-red-600">৳ {totalDue.toLocaleString()}</p>
-                <p className="text-slate-500 text-sm">Total Receivables</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-12 h-12 bg-orange-500 rounded-xl flex items-center justify-center">
-                <AlertCircle className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-orange-600">{overdueCount}</p>
-                <p className="text-slate-500 text-sm">Overdue Accounts</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center">
-                <Clock className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-slate-900">{receivables.length}</p>
-                <p className="text-slate-500 text-sm">Total Accounts</p>
-              </div>
-            </div>
-          </div>
-        </div>
 
-                {/* Search & Filter Bar */}
-                <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex flex-wrap items-center gap-2">
-                  <div className="relative flex-1 min-w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="Search by retailer name or shop..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="input-field pl-10"
-                    />
-                  </div>
-
-                  <div className="relative">
-                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <select
-                      value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value)}
-                      className="input-field pl-10 w-40"
-                    >
-                      <option value="all">All Status</option>
-                      <option value="current">Current</option>
-                      <option value="overdue">Overdue</option>
-                      <option value="past_due">Past Due</option>
-                      <option value="critical">Critical</option>
-                    </select>
-                  </div>
-
-                  <select
-                    value={amountFilter}
-                    onChange={(e) => setAmountFilter(e.target.value)}
-                    className="input-field w-44"
-                  >
-                    <option value="all">All Amounts</option>
-                    <option value="small">&lt; ৳10,000</option>
-                    <option value="medium">৳10,000 - ৳30,000</option>
-                    <option value="large">&gt; ৳30,000</option>
+          {/* Filter bar */}
+          <Card>
+            <CardContent className="p-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="relative flex-1 min-w-52">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  <input type="text" placeholder="Search retailer or shop…" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="input-field pl-8 h-9 text-sm w-full" />
+                </div>
+                <div className="relative">
+                  <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                  <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input-field pl-8 h-9 w-36 text-sm">
+                    <option value="all">All Status</option>
+                    <option value="current">Current</option>
+                    <option value="overdue">Overdue</option>
+                    <option value="past_due">Past Due</option>
+                    <option value="critical">Critical</option>
                   </select>
-
-                  {activeFiltersCount > 0 && (
-                    <button
-                      onClick={clearFilters}
-                      className="flex items-center gap-1 px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      <X className="w-4 h-4" />
-                      Clear ({activeFiltersCount})
-                    </button>
-                  )}
                 </div>
-
-        {/* Receivables List */}
-        <div className="space-y-2">
-          {filteredReceivables.map((receivable) => {
-            const status = getOverdueStatus(receivable.days_overdue);
-            return (
-              <div
-                key={receivable.id}
-                className="bg-white rounded-xl p-3 shadow-sm card-hover cursor-pointer"
-                onClick={() => setSelectedReceivable(receivable)}
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1">
-                      <h3 className="text-lg font-semibold text-slate-900">{receivable.shop_name}</h3>
-                      <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${status.bg} ${status.color}`}>
-                        {status.label}
-                      </span>
-                    </div>
-                    <p className="text-slate-500 text-sm mb-2">{receivable.retailer_name}</p>
-                    <div className="flex items-center gap-3 text-sm text-slate-600">
-                      <span className="flex items-center gap-1">
-                        <Phone className="w-4 h-4" />
-                        {receivable.phone}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Calendar className="w-4 h-4" />
-                        Last payment: {receivable.last_payment_date}
-                      </span>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-2xl font-bold text-red-600">৳ {receivable.total_due.toLocaleString()}</p>
-                    <p className="text-sm text-slate-500">{receivable.days_overdue} days overdue</p>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedReceivable(receivable);
-                        setShowPaymentModal(true);
-                      }}
-                      className="mt-1 btn-primary text-sm py-1"
-                    >
-                      Record Payment
-                    </button>
-                  </div>
-                </div>
+                <select value={amountFilter} onChange={(e) => setAmountFilter(e.target.value)} className="input-field h-9 w-44 text-sm">
+                  <option value="all">All Amounts</option>
+                  <option value="small">&lt; ৳10,000</option>
+                  <option value="medium">৳10,000 – ৳30,000</option>
+                  <option value="large">&gt; ৳30,000</option>
+                </select>
+                {activeFiltersCount > 0 && (
+                  <button onClick={clearFilters} className="flex items-center gap-1 h-9 px-3 text-sm rounded-lg border border-[hsl(var(--dh-red))]/30 bg-[hsl(var(--dh-red))]/5 text-[hsl(var(--dh-red))] hover:bg-[hsl(var(--dh-red))]/10 transition-colors">
+                    <X className="w-3.5 h-3.5" /> Clear ({activeFiltersCount})
+                  </button>
+                )}
               </div>
-            );
-          })}
-        </div>
+            </CardContent>
+          </Card>
 
-        {filteredReceivables.length === 0 && (
-          <div className="bg-white rounded-xl p-4 text-center text-slate-500">
-            No receivables found. All accounts are clear!
+          {/* Receivables List */}
+          <div className="space-y-2">
+            {filteredReceivables.map((receivable) => {
+              const status = getOverdueStatus(receivable.days_overdue);
+              return (
+                <Card key={receivable.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => setSelectedReceivable(receivable)}>
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-semibold text-foreground truncate">{receivable.shop_name}</h3>
+                          <Badge variant={status.variant}>{status.label}</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground mb-2">{receivable.retailer_name}</p>
+                        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1"><Phone className="w-3.5 h-3.5" />{receivable.phone}</span>
+                          <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />Last payment: {receivable.last_payment_date || 'N/A'}</span>
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-xl font-bold font-mono text-[hsl(var(--dh-red))]">৳ {receivable.total_due.toLocaleString()}</p>
+                        <p className="text-xs text-muted-foreground mb-2">{receivable.days_overdue} days overdue</p>
+                        <button onClick={(e) => { e.stopPropagation(); setSelectedReceivable(receivable); setShowPaymentModal(true); }} className="btn-primary text-xs h-7 px-3">
+                          Record Payment
+                        </button>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
-        )}
-          </>
-        )}
-      </div>
+
+          {filteredReceivables.length === 0 && (
+            <div className="py-12 text-center text-sm text-muted-foreground">No receivables found. All accounts are clear!</div>
+          )}
+        </>
+      )}
 
       {/* Receivable Details Modal */}
       {selectedReceivable && !showPaymentModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
-            <div className="p-3 border-b border-slate-200">
-              <h2 className="text-xl font-semibold text-slate-900">{selectedReceivable.shop_name}</h2>
-              <p className="text-slate-500">{selectedReceivable.retailer_name}</p>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto shadow-xl">
+            <div className="p-4 border-b border-border">
+              <h2 className="text-lg font-semibold text-foreground">{selectedReceivable.shop_name}</h2>
+              <p className="text-sm text-muted-foreground">{selectedReceivable.retailer_name}</p>
             </div>
-
-            <div className="p-3">
-              <div className="bg-red-50 rounded-lg p-2 mb-3 text-center">
-                <p className="text-sm text-red-600">Total Due</p>
-                <p className="text-3xl font-bold text-red-600">
-                  ৳ {selectedReceivable.total_due.toLocaleString()}
-                </p>
+            <div className="p-4 space-y-4">
+              <div className="bg-[hsl(var(--dh-red))]/5 border border-[hsl(var(--dh-red))]/20 rounded-lg p-3 text-center">
+                <p className="text-xs text-muted-foreground mb-1">Total Due</p>
+                <p className="text-2xl font-bold font-mono text-[hsl(var(--dh-red))]">৳ {selectedReceivable.total_due.toLocaleString()}</p>
               </div>
-
-              <h3 className="font-semibold text-slate-900 mb-2">Outstanding Orders</h3>
-              <div className="space-y-1">
-                {selectedReceivable.orders.map((order, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between p-2 bg-slate-50 rounded-lg"
-                  >
-                    <div>
-                      <p className="font-medium text-primary-600">{order.invoice_number || order.order_number}</p>
-                      <p className="text-sm text-slate-500">{new Date(order.date).toLocaleDateString('en-BD')}</p>
+              <div>
+                <h3 className="font-semibold text-foreground mb-2 text-sm">Outstanding Orders</h3>
+                <div className="space-y-1.5">
+                  {selectedReceivable.orders.map((order, index) => (
+                    <div key={index} className="flex items-center justify-between p-2.5 bg-muted/40 rounded-lg">
+                      <div>
+                        <p className="font-medium text-[hsl(var(--primary))] text-sm">{order.invoice_number || order.order_number}</p>
+                        <p className="text-xs text-muted-foreground">{new Date(order.date).toLocaleDateString('en-BD')}</p>
+                      </div>
+                      <p className="font-semibold font-mono text-foreground text-sm">৳ {order.amount.toLocaleString()}</p>
                     </div>
-                    <p className="font-semibold text-slate-900">৳ {order.amount.toLocaleString()}</p>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             </div>
-
-            <div className="p-3 border-t border-slate-200 flex justify-end gap-2">
-              <button
-                onClick={() => setSelectedReceivable(null)}
-                className="btn-secondary"
-              >
-                Close
-              </button>
-              <button
-                onClick={() => setShowPaymentModal(true)}
-                className="btn-primary"
-              >
-                Record Payment
-              </button>
+            <div className="p-4 border-t border-border flex justify-end gap-2">
+              <button onClick={() => setSelectedReceivable(null)} className="btn-secondary">Close</button>
+              <button onClick={() => setShowPaymentModal(true)} className="btn-primary">Record Payment</button>
             </div>
           </div>
         </div>
@@ -361,7 +277,7 @@ export function Receivables() {
           }}
         />
       )}
-    </div>
+    </PageShell>
   );
 }
 
@@ -458,90 +374,50 @@ function PaymentModal({ receivable, onClose }: { receivable: Receivable; onClose
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
-        <div className="p-3 border-b border-slate-200">
-          <h2 className="text-xl font-semibold text-slate-900">Record Payment</h2>
-          <p className="text-slate-500">{receivable.shop_name}</p>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
+        <div className="p-4 border-b border-border">
+          <h2 className="text-lg font-semibold text-foreground">Record Payment</h2>
+          <p className="text-sm text-muted-foreground">{receivable.shop_name}</p>
         </div>
-
-        <form onSubmit={handleSubmit} className="p-3 space-y-2">
-          <div className="bg-slate-50 rounded-lg p-2 text-center">
-            <p className="text-sm text-slate-500">Outstanding Amount</p>
-            <p className="text-2xl font-bold text-red-600">৳ {receivable.total_due.toLocaleString()}</p>
+        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+          <div className="bg-[hsl(var(--dh-red))]/5 border border-[hsl(var(--dh-red))]/20 rounded-lg p-3 text-center">
+            <p className="text-xs text-muted-foreground mb-1">Outstanding Amount</p>
+            <p className="text-2xl font-bold font-mono text-[hsl(var(--dh-red))]">৳ {receivable.total_due.toLocaleString()}</p>
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Payment Amount (৳)</label>
-            <input
-              type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="input-field"
-              placeholder="Enter amount"
-              max={receivable.total_due}
-              required
-            />
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-foreground">Payment Amount (৳)</label>
+            <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="input-field" placeholder="Enter amount" max={receivable.total_due} required />
           </div>
-
           {receivable.orders.length > 1 && (
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Apply to Order (Optional)
-              </label>
-              <select
-                value={selectedSaleId || ''}
-                onChange={(e) => setSelectedSaleId(e.target.value || null)}
-                className="input-field"
-              >
+            <div className="space-y-1.5">
+              <label className="block text-sm font-medium text-foreground">Apply to Order (Optional)</label>
+              <select value={selectedSaleId || ''} onChange={(e) => setSelectedSaleId(e.target.value || null)} className="input-field">
                 <option value="">General Payment (Apply to oldest)</option>
                 {receivable.orders.map((order) => (
-                  <option key={order.sale_id} value={order.sale_id}>
-                    {order.invoice_number} - ৳{order.amount.toLocaleString()}
-                  </option>
+                  <option key={order.sale_id} value={order.sale_id}>{order.invoice_number} – ৳{order.amount.toLocaleString()}</option>
                 ))}
               </select>
-              <p className="text-xs text-slate-500 mt-1">
-                If not selected, payment will be applied to the oldest outstanding order
-              </p>
+              <p className="text-xs text-muted-foreground">If not selected, payment will be applied to the oldest outstanding order</p>
             </div>
           )}
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Payment Method</label>
-            <select
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value)}
-              className="input-field"
-            >
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-foreground">Payment Method</label>
+            <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="input-field">
               <option value="cash">Cash</option>
               <option value="bank">Bank Transfer</option>
               <option value="mobile">Mobile Banking (bKash/Nagad)</option>
             </select>
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Notes (Optional)</label>
-            <input
-              type="text"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="input-field"
-              placeholder="Transaction ID or note"
-            />
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-foreground">Notes (Optional)</label>
+            <input type="text" value={notes} onChange={(e) => setNotes(e.target.value)} className="input-field" placeholder="Transaction ID or note" />
           </div>
-
           <div className="flex justify-end gap-2 pt-2">
-            <button type="button" onClick={onClose} className="btn-secondary">
-              Cancel
-            </button>
-            <button 
-              type="submit" 
-              className="btn-primary flex items-center gap-2"
-              disabled={loading}
-            >
+            <button type="button" onClick={onClose} className="btn-secondary">Cancel</button>
+            <button type="submit" className="btn-primary flex items-center gap-2" disabled={loading}>
               <CheckCircle className="w-4 h-4" />
-              {loading ? 'Recording...' : 'Record Payment'}
+              {loading ? 'Recording…' : 'Record Payment'}
             </button>
           </div>
         </form>

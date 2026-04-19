@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Header } from '@/components/layout/Header';
+import { PageShell } from '@/components/layout/PageShell';
 import {
   User,
   UserCircle,
@@ -83,52 +83,47 @@ export function Settings() {
   );
 
   return (
-    <div className="min-h-screen">
-      <Header title={t('settings.title')} />
-
-      <div className="p-3 md:p-4 max-w-[1600px] mx-auto">
-        <p className="text-sm text-slate-600 mb-3">{t('settings.subtitle')}</p>
-        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
-          <div
-            className="border-b border-slate-200 bg-slate-50/80"
-            role="tablist"
-            aria-label={t('settings.tabs_aria')}
-          >
-            <div className="flex gap-0 overflow-x-auto scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent px-1">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={activeTab === tab.id}
-                  onClick={() => handleTabChange(tab.id)}
-                  className={`flex shrink-0 items-center gap-2 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${activeTab === tab.id
-                    ? 'text-primary-600 border-primary-600 bg-white'
-                    : 'text-slate-500 border-transparent hover:text-slate-800 hover:bg-white/60'
-                    }`}
-                >
-                  <tab.icon className="w-4 h-4 shrink-0 opacity-90" aria-hidden />
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="p-3 md:p-4">
-            {activeTab === 'suppliers' && <SupplierManagement />}
-            {activeTab === 'categories' && <CategoryManagement />}
-            {activeTab === 'units' && <UnitManagement />}
-            {activeTab === 'market-routes' && <MarketRouteManagement />}
-            {activeTab === 'sales-reps' && <SalesRepManagement />}
-            {activeTab === 'profile' && <ProfileSettings />}
-            {activeTab === 'business' && <BusinessSettings />}
-            {activeTab === 'notifications' && <NotificationSettings />}
-            {activeTab === 'security' && <SecuritySettings />}
-            {activeTab === 'appearance' && <AppearanceSettings />}
+    <PageShell title={t('settings.title')} subtitle={t('settings.subtitle')}>
+      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+        <div
+          className="border-b border-border bg-muted/30"
+          role="tablist"
+          aria-label={t('settings.tabs_aria')}
+        >
+          <div className="flex gap-0 overflow-x-auto px-1">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                onClick={() => handleTabChange(tab.id)}
+                className={`flex shrink-0 items-center gap-2 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${activeTab === tab.id
+                  ? 'text-[hsl(var(--primary))] border-[hsl(var(--primary))] bg-card'
+                  : 'text-muted-foreground border-transparent hover:text-foreground hover:bg-card/60'
+                  }`}
+              >
+                <tab.icon className="w-4 h-4 shrink-0 opacity-90" aria-hidden />
+                {tab.label}
+              </button>
+            ))}
           </div>
         </div>
+
+        <div className="p-3 md:p-4">
+          {activeTab === 'suppliers' && <SupplierManagement />}
+          {activeTab === 'categories' && <CategoryManagement />}
+          {activeTab === 'units' && <UnitManagement />}
+          {activeTab === 'market-routes' && <MarketRouteManagement />}
+          {activeTab === 'sales-reps' && <SalesRepManagement />}
+          {activeTab === 'profile' && <ProfileSettings />}
+          {activeTab === 'business' && <BusinessSettings />}
+          {activeTab === 'notifications' && <NotificationSettings />}
+          {activeTab === 'security' && <SecuritySettings />}
+          {activeTab === 'appearance' && <AppearanceSettings />}
+        </div>
       </div>
-    </div>
+    </PageShell>
   );
 }
 

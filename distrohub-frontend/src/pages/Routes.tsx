@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
-import { Header } from '@/components/layout/Header';
+import { PageShell } from '@/components/layout/PageShell';
+import { StatCard } from '@/components/ui/stat-card';
+import { Badge } from '@/components/ui/badge';
 import {
   Plus,
   Eye,
@@ -42,14 +44,21 @@ interface SalesOrder {
   total_amount: number;
   due_amount: number;
   payment_status: 'unpaid' | 'partial' | 'paid';
-  assigned_to?: string; // Include for auto-suggest in route creation
+  assigned_to?: string;
 }
 
-const statusConfig = {
-  pending: { icon: Clock, color: 'bg-yellow-100 text-yellow-700', label: 'Pending' },
-  in_progress: { icon: Truck, color: 'bg-blue-100 text-blue-700', label: 'In Progress' },
-  completed: { icon: CheckCircle, color: 'bg-green-100 text-green-700', label: 'Completed' },
-  reconciled: { icon: FileCheck, color: 'bg-purple-100 text-purple-700', label: 'Reconciled' },
+const statusVariantMap: Record<Route['status'], string> = {
+  pending: 'warning',
+  in_progress: 'info',
+  completed: 'success',
+  reconciled: 'purple',
+};
+
+const statusLabelMap: Record<Route['status'], string> = {
+  pending: 'Pending',
+  in_progress: 'In Progress',
+  completed: 'Completed',
+  reconciled: 'Reconciled',
 };
 
 export function Routes() {
@@ -74,218 +83,111 @@ export function Routes() {
     }
   };
 
-  useEffect(() => {
-    fetchRoutes();
-  }, []);
+  useEffect(() => { fetchRoutes(); }, []);
 
   const handleDelete = async (route: Route) => {
-    if (!confirm(`Are you sure you want to delete route ${route.route_number}? This action cannot be undone.`)) {
-      return;
-    }
-
+    if (!confirm(`Are you sure you want to delete route ${route.route_number}?`)) return;
     try {
       await api.delete(`/api/routes/${route.id}`);
       await fetchRoutes();
     } catch (error: any) {
-      console.error('[Routes] Error deleting route:', error);
       alert(`Failed to delete route: ${error?.response?.data?.detail || error?.message}`);
     }
   };
 
-  const filteredRoutes = routes;
-
   return (
-    <div className="min-h-screen">
-      <Header title="Routes / Batches" />
-
-      <div className="p-3">
+    <PageShell
+      title="Routes / Batches"
+      actions={
+        <button onClick={() => setShowCreateModal(true)} className="btn-primary flex items-center gap-2">
+          <Plus className="w-4 h-4" />
+          Create Route
+        </button>
+      }
+    >
+      <div className="space-y-3">
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2">
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <p className="text-slate-500 text-sm">Total Routes</p>
-            <p className="text-2xl font-bold text-slate-900">{routes.length}</p>
-          </div>
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <p className="text-slate-500 text-sm">Pending</p>
-            <p className="text-2xl font-bold text-yellow-600">
-              {routes.filter((r) => r.status === 'pending').length}
-            </p>
-          </div>
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <p className="text-slate-500 text-sm">In Progress</p>
-            <p className="text-2xl font-bold text-blue-600">
-              {routes.filter((r) => r.status === 'in_progress').length}
-            </p>
-          </div>
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <p className="text-slate-500 text-sm">Reconciled</p>
-            <p className="text-2xl font-bold text-green-600">
-              {routes.filter((r) => r.status === 'reconciled').length}
-            </p>
-          </div>
-        </div>
-
-        {/* Actions Bar */}
-        <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {/* Filters can be added here */}
-          </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            Create Route
-          </button>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <StatCard label="Total Routes" value={String(routes.length)} color="blue" icon={<Truck className="w-5 h-5" />} />
+          <StatCard label="Pending" value={String(routes.filter((r) => r.status === 'pending').length)} color="amber" icon={<Clock className="w-5 h-5" />} />
+          <StatCard label="In Progress" value={String(routes.filter((r) => r.status === 'in_progress').length)} color="purple" icon={<Truck className="w-5 h-5" />} />
+          <StatCard label="Reconciled" value={String(routes.filter((r) => r.status === 'reconciled').length)} color="green" icon={<CheckCircle className="w-5 h-5" />} />
         </div>
 
         {/* Routes Table */}
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
           {loading ? (
-            <div className="p-8 text-center text-slate-500">Loading routes...</div>
+            <div className="px-3 py-8 text-center text-sm text-muted-foreground">Loading routes…</div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-50 border-b border-slate-200">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 border-b border-border">
                   <tr>
-                    <th className="text-left p-2 font-semibold text-slate-700">Route #</th>
-                    <th className="text-left p-2 font-semibold text-slate-700">SR Name</th>
-                    <th className="text-left p-2 font-semibold text-slate-700">Date</th>
-                    <th className="text-center p-2 font-semibold text-slate-700">Orders</th>
-                    <th className="text-right p-2 font-semibold text-slate-700">Amount</th>
-                    <th className="text-center p-2 font-semibold text-slate-700">Status</th>
-                    <th className="text-center p-2 font-semibold text-slate-700">Actions</th>
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Route #</th>
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">SR Name</th>
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Date</th>
+                    <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Orders</th>
+                    <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Amount</th>
+                    <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</th>
+                    <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredRoutes.map((route) => {
-                    const StatusIcon = statusConfig[route.status].icon;
-                    return (
-                      <tr key={route.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-2 font-medium text-primary-600">{route.route_number}</td>
-                        <td className="p-2 text-slate-900">{route.assigned_to_name}</td>
-                        <td className="p-2 text-slate-600">{formatDateBD(route.route_date)}</td>
-                        <td className="p-2 text-center">{route.total_orders}</td>
-                        <td className="p-2 text-right font-medium text-slate-900">
-                          ৳ {route.total_amount.toLocaleString()}
-                        </td>
-                        <td className="p-2 text-center">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${statusConfig[route.status].color}`}
-                          >
-                            <StatusIcon className="w-3 h-3" />
-                            {statusConfig[route.status].label}
-                          </span>
-                        </td>
-                        <td className="p-2">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => setLoadSheetRoute(route)}
-                              className="px-2 py-1 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors"
-                              title="Load Sheet"
-                            >
-                              Load Sheet
+                <tbody className="divide-y divide-border/60">
+                  {routes.map((route) => (
+                    <tr key={route.id} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-3 py-2.5 font-medium text-[hsl(var(--primary))]">{route.route_number}</td>
+                      <td className="px-3 py-2.5 text-foreground">{route.assigned_to_name}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground">{formatDateBD(route.route_date)}</td>
+                      <td className="px-3 py-2.5 text-center text-muted-foreground">{route.total_orders}</td>
+                      <td className="px-3 py-2.5 text-right font-mono font-semibold text-foreground">৳ {route.total_amount.toLocaleString()}</td>
+                      <td className="px-3 py-2.5 text-center">
+                        <Badge variant={statusVariantMap[route.status] as any}>{statusLabelMap[route.status]}</Badge>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <div className="flex items-center justify-center gap-1">
+                          <button onClick={() => setLoadSheetRoute(route)} className="px-2 py-1 text-xs font-medium bg-[hsl(var(--dh-blue))]/10 text-[hsl(var(--dh-blue))] hover:bg-[hsl(var(--dh-blue))]/20 rounded transition-colors" title="Load Sheet">
+                            Load Sheet
+                          </button>
+                          <button onClick={() => setSelectedRoute(route)} className="p-1 rounded text-muted-foreground hover:text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/10 transition-colors" title="View Details">
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => setBulkPrintRoute(route)} className="p-1 rounded text-muted-foreground hover:text-[hsl(var(--dh-green))] hover:bg-[hsl(var(--dh-green))]/10 transition-colors" title="Print All Challans">
+                            <Printer className="w-4 h-4" />
+                          </button>
+                          {route.status === 'completed' && (
+                            <button onClick={() => setReconcileRoute(route)} className="px-2 py-1 text-xs font-medium bg-[hsl(var(--dh-purple))]/10 text-[hsl(var(--dh-purple))] hover:bg-[hsl(var(--dh-purple))]/20 rounded transition-colors" title="Reconcile">
+                              Reconcile
                             </button>
-                            <button
-                              onClick={() => setSelectedRoute(route)}
-                              className="p-1 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
-                              title="View Details"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => setBulkPrintRoute(route)}
-                              className="p-1 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
-                              title="Print All Challans"
-                            >
-                              <Printer className="w-4 h-4" />
-                            </button>
-                            {route.status === 'completed' && (
-                              <button
-                                onClick={() => setReconcileRoute(route)}
-                                className="px-2 py-1 text-xs font-medium bg-purple-600 hover:bg-purple-700 text-white rounded transition-colors"
-                                title="Reconcile"
-                              >
-                                Reconcile
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleDelete(route)}
-                              className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                              title="Delete Route"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          )}
+                          <button onClick={() => handleDelete(route)} className="p-1 rounded text-muted-foreground hover:text-[hsl(var(--dh-red))] hover:bg-[hsl(var(--dh-red))]/10 transition-colors" title="Delete Route">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
           )}
-
-          {!loading && filteredRoutes.length === 0 && (
-            <div className="p-4 text-center text-slate-500">
-              No routes found. Create a new route to get started.
-            </div>
+          {!loading && routes.length === 0 && (
+            <div className="px-3 py-8 text-center text-sm text-muted-foreground">No routes found. Create a new route to get started.</div>
           )}
         </div>
       </div>
 
-      {/* Create Route Modal */}
       {showCreateModal && (
-        <CreateRouteModal
-          onClose={() => setShowCreateModal(false)}
-          onSave={async () => {
-            await fetchRoutes();
-            setShowCreateModal(false);
-          }}
-        />
+        <CreateRouteModal onClose={() => setShowCreateModal(false)} onSave={async () => { await fetchRoutes(); setShowCreateModal(false); }} />
       )}
-
-      {/* Route Details Modal */}
       {selectedRoute && (
-        <RouteDetailsModal
-          route={selectedRoute}
-          onClose={() => setSelectedRoute(null)}
-          onRefresh={fetchRoutes}
-          onBulkPrint={() => {
-            setSelectedRoute(null);
-            setBulkPrintRoute(selectedRoute);
-          }}
-        />
+        <RouteDetailsModal route={selectedRoute} onClose={() => setSelectedRoute(null)} onRefresh={fetchRoutes} onBulkPrint={() => { setSelectedRoute(null); setBulkPrintRoute(selectedRoute); }} />
       )}
-
-      {/* Reconciliation Modal */}
       {reconcileRoute && (
-        <ReconciliationModal
-          route={reconcileRoute}
-          onClose={() => setReconcileRoute(null)}
-          onSuccess={async () => {
-            await fetchRoutes();
-            setReconcileRoute(null);
-          }}
-        />
+        <ReconciliationModal route={reconcileRoute} onClose={() => setReconcileRoute(null)} onSuccess={async () => { await fetchRoutes(); setReconcileRoute(null); }} />
       )}
-
-      {/* Bulk Print Modal */}
-      {bulkPrintRoute && (
-        <BulkChallanPrint
-          route={bulkPrintRoute}
-          onClose={() => setBulkPrintRoute(null)}
-        />
-      )}
-
-      {/* Load Sheet Modal */}
-      {loadSheetRoute && (
-        <LoadSheet
-          route={loadSheetRoute}
-          onClose={() => setLoadSheetRoute(null)}
-        />
-      )}
-    </div>
+      {bulkPrintRoute && <BulkChallanPrint route={bulkPrintRoute} onClose={() => setBulkPrintRoute(null)} />}
+      {loadSheetRoute && <LoadSheet route={loadSheetRoute} onClose={() => setLoadSheetRoute(null)} />}
+    </PageShell>
   );
 }
 
@@ -308,34 +210,15 @@ function CreateRouteModal({ onClose, onSave }: { onClose: () => void; onSave: ()
       try {
         setLoadingReps(true);
         setLoadingSales(true);
-        
-        const [usersRes, salesRes] = await Promise.all([
-          api.get('/api/users'),
-          api.get('/api/sales')
-        ]);
-        
+        const [usersRes, salesRes] = await Promise.all([api.get('/api/users'), api.get('/api/sales')]);
         if (usersRes.data) {
-          const reps = usersRes.data
-            .filter((u: any) => u.role === 'sales_rep')
-            .map((u: any) => ({ id: u.id, name: u.name }));
-          setSalesReps(reps);
+          setSalesReps(usersRes.data.filter((u: any) => u.role === 'sales_rep').map((u: any) => ({ id: u.id, name: u.name })));
         }
-        
         if (salesRes.data) {
-          // Filter sales that are not already in a route
-          const available = salesRes.data
-            .filter((s: any) => !s.route_id && s.payment_status !== 'paid')
-            .map((s: any) => ({
-              id: s.id,
-              order_number: s.invoice_number,
-              retailer_name: s.retailer_name,
-              retailer_id: s.retailer_id,
-              total_amount: s.total_amount,
-              due_amount: s.due_amount,
-              payment_status: s.payment_status,
-              assigned_to: s.assigned_to || undefined, // Include assigned_to for auto-suggest
-            }));
-          setAvailableSales(available);
+          setAvailableSales(salesRes.data.filter((s: any) => !s.route_id && s.payment_status !== 'paid').map((s: any) => ({
+            id: s.id, order_number: s.invoice_number, retailer_name: s.retailer_name, retailer_id: s.retailer_id,
+            total_amount: s.total_amount, due_amount: s.due_amount, payment_status: s.payment_status, assigned_to: s.assigned_to || undefined,
+          })));
         }
       } catch (error) {
         console.error('[CreateRouteModal] Error fetching data:', error);
@@ -347,85 +230,45 @@ function CreateRouteModal({ onClose, onSave }: { onClose: () => void; onSave: ()
     fetchData();
   }, []);
 
-  // Fetch previous due when retailer is selected AND auto-suggest SR from selected sales
   useEffect(() => {
     const fetchPreviousDue = async () => {
-      const retailerIds = new Set(
-        formData.sale_ids
-          .map(saleId => availableSales.find(s => s.id === saleId)?.retailer_id)
-          .filter(Boolean) as string[]
-      );
-
+      const retailerIds = new Set(formData.sale_ids.map(saleId => availableSales.find(s => s.id === saleId)?.retailer_id).filter(Boolean) as string[]);
       const dueMap: Record<string, number> = {};
       for (const retailerId of retailerIds) {
         try {
           const response = await api.get(`/api/retailers/${retailerId}/previous-due`);
           dueMap[retailerId] = response.data.previous_due || 0;
-        } catch (error) {
-          console.error(`[CreateRouteModal] Error fetching previous due for retailer ${retailerId}:`, error);
+        } catch {
           dueMap[retailerId] = 0;
         }
       }
       setPreviousDueMap(dueMap);
     };
 
-    // Auto-suggest SR from selected sales (if all selected sales have the same assigned_to)
-    // Also check for multiple assigned_to values to show warning
     if (formData.sale_ids.length > 0) {
-      const selectedSales = formData.sale_ids
-        .map(saleId => availableSales.find(s => s.id === saleId))
-        .filter(Boolean) as typeof availableSales;
-      
-      if (selectedSales.length > 0) {
-        const assignedToSet = new Set(
-          selectedSales.map(s => s.assigned_to).filter(Boolean) as string[]
-        );
-        
-        // If all selected sales have the same assigned_to, auto-fill it
+      const selectedSalesList = formData.sale_ids.map(saleId => availableSales.find(s => s.id === saleId)).filter(Boolean) as SalesOrder[];
+      if (selectedSalesList.length > 0) {
+        const assignedToSet = new Set(selectedSalesList.map(s => s.assigned_to).filter(Boolean) as string[]);
         if (assignedToSet.size === 1 && !formData.assigned_to) {
           const suggestedSrId = Array.from(assignedToSet)[0];
           setFormData(prev => ({ ...prev, assigned_to: suggestedSrId }));
         }
-        
-        // Show warning if multiple assigned_to values exist (Route SR will override)
-        if (assignedToSet.size > 1) {
-          // Warning will be shown in UI below
-        }
       }
-    }
-
-    if (formData.sale_ids.length > 0) {
       fetchPreviousDue();
     }
   }, [formData.sale_ids, availableSales]);
 
-  // Check if selected sales have multiple assigned_to values
-  const selectedSales = formData.sale_ids
-    .map(saleId => availableSales.find(s => s.id === saleId))
-    .filter(Boolean) as typeof availableSales;
-  const assignedToSet = new Set(
-    selectedSales.map(s => s.assigned_to).filter(Boolean) as string[]
-  );
-  const hasMultipleAssignedTo = assignedToSet.size > 1;
+  const selectedSalesList = formData.sale_ids.map(saleId => availableSales.find(s => s.id === saleId)).filter(Boolean) as SalesOrder[];
+  const hasMultipleAssignedTo = new Set(selectedSalesList.map(s => s.assigned_to).filter(Boolean) as string[]).size > 1;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.assigned_to || formData.sale_ids.length === 0) {
-      alert('Please select an SR and at least one sale order');
-      return;
-    }
-
+    if (!formData.assigned_to || formData.sale_ids.length === 0) { alert('Please select an SR and at least one sale order'); return; }
     setLoading(true);
     try {
-      await api.post('/api/routes', {
-        assigned_to: formData.assigned_to,
-        route_date: formData.route_date,
-        sale_ids: formData.sale_ids,
-        notes: formData.notes || undefined,
-      });
+      await api.post('/api/routes', { assigned_to: formData.assigned_to, route_date: formData.route_date, sale_ids: formData.sale_ids, notes: formData.notes || undefined });
       onSave();
     } catch (error: any) {
-      console.error('[CreateRouteModal] Error creating route:', error);
       alert(`Failed to create route: ${error?.response?.data?.detail || error?.message}`);
     } finally {
       setLoading(false);
@@ -433,126 +276,76 @@ function CreateRouteModal({ onClose, onSave }: { onClose: () => void; onSave: ()
   };
 
   const toggleSaleSelection = (saleId: string) => {
-    setFormData(prev => ({
-      ...prev,
-      sale_ids: prev.sale_ids.includes(saleId)
-        ? prev.sale_ids.filter(id => id !== saleId)
-        : [...prev.sale_ids, saleId]
-    }));
+    setFormData(prev => ({ ...prev, sale_ids: prev.sale_ids.includes(saleId) ? prev.sale_ids.filter(id => id !== saleId) : [...prev.sale_ids, saleId] }));
   };
 
-  // Group sales by retailer
   const salesByRetailer = availableSales.reduce((acc, sale) => {
-    if (!acc[sale.retailer_id]) {
-      acc[sale.retailer_id] = [];
-    }
+    if (!acc[sale.retailer_id]) acc[sale.retailer_id] = [];
     acc[sale.retailer_id].push(sale);
     return acc;
   }, {} as Record<string, SalesOrder[]>);
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
-        <div className="p-3 border-b border-slate-200 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-slate-900">Create New Route</h2>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
-            <XCircle className="w-6 h-6" />
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-xl">
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+          <h2 className="text-base font-semibold text-foreground">Create New Route</h2>
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+            <XCircle className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-3 space-y-3">
+        <form onSubmit={handleSubmit} className="p-4 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  SR/Delivery Man <span className="text-red-500">*</span>
-                </label>
-                {hasMultipleAssignedTo && (
-                  <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
-                    ⚠️ <strong>Warning:</strong> Selected sales have different SR assignments. Route SR will override Sales SR for all included orders.
-                  </div>
-                )}
-                <select
-                  value={formData.assigned_to}
-                  onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
-                  className="input-field"
-                  required
-                  disabled={loadingReps}
-                >
-                  <option value="">{loadingReps ? 'Loading SRs...' : 'Select SR'}</option>
-                  {salesReps.map((rep) => (
-                    <option key={rep.id} value={rep.id}>
-                      {rep.name}
-                    </option>
-                  ))}
-                </select>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">SR/Delivery Man <span className="text-[hsl(var(--dh-red))]">*</span></label>
+              {hasMultipleAssignedTo && (
+                <div className="mb-2 p-2 bg-[hsl(var(--dh-amber))]/5 border border-[hsl(var(--dh-amber))]/30 rounded text-xs text-[hsl(var(--dh-amber))]">
+                  ⚠️ Selected sales have different SR assignments. Route SR will override for all included orders.
+                </div>
+              )}
+              <select value={formData.assigned_to} onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })} className="input-field" required disabled={loadingReps}>
+                <option value="">{loadingReps ? 'Loading SRs…' : 'Select SR'}</option>
+                {salesReps.map((rep) => <option key={rep.id} value={rep.id}>{rep.name}</option>)}
+              </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                Route Date <span className="text-red-500">*</span>
-              </label>
-              <input
-                type="date"
-                value={formData.route_date}
-                onChange={(e) => setFormData({ ...formData, route_date: e.target.value })}
-                className="input-field"
-                required
-              />
+              <label className="block text-xs font-medium text-muted-foreground mb-1">Route Date <span className="text-[hsl(var(--dh-red))]">*</span></label>
+              <input type="date" value={formData.route_date} onChange={(e) => setFormData({ ...formData, route_date: e.target.value })} className="input-field" required />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Select Sales Orders <span className="text-red-500">*</span>
-            </label>
-            <div className="border border-slate-200 rounded-lg p-2 max-h-96 overflow-y-auto">
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Select Sales Orders <span className="text-[hsl(var(--dh-red))]">*</span></label>
+            <div className="border border-border rounded-lg p-2 max-h-96 overflow-y-auto bg-muted/10">
               {loadingSales ? (
-                <div className="p-4 text-center text-slate-500">Loading sales...</div>
+                <div className="p-4 text-center text-sm text-muted-foreground">Loading sales…</div>
               ) : (
                 <div className="space-y-3">
                   {Object.entries(salesByRetailer).map(([retailerId, sales]) => {
                     const retailer = sales[0];
                     const previousDue = previousDueMap[retailerId] || 0;
-                    const selectedSales = sales.filter(s => formData.sale_ids.includes(s.id));
-                    const totalSelected = selectedSales.reduce((sum, s) => sum + s.total_amount, 0);
-                    
+                    const selSales = sales.filter(s => formData.sale_ids.includes(s.id));
+                    const totalSelected = selSales.reduce((sum, s) => sum + s.total_amount, 0);
                     return (
-                      <div key={retailerId} className="border border-slate-200 rounded-lg p-2">
+                      <div key={retailerId} className="border border-border rounded-lg p-3 bg-card">
                         <div className="flex items-center justify-between mb-2">
                           <div>
-                            <p className="font-medium text-slate-900">{retailer.retailer_name}</p>
-                            <p className="text-xs text-slate-500">
-                              Previous Due: ৳{previousDue.toLocaleString()}
-                            </p>
+                            <p className="text-sm font-medium text-foreground">{retailer.retailer_name}</p>
+                            <p className="text-xs text-muted-foreground">Previous Due: ৳{previousDue.toLocaleString()}</p>
                           </div>
                           <div className="text-right">
-                            <p className="text-xs text-slate-500">
-                              {selectedSales.length} of {sales.length} selected
-                            </p>
-                            {selectedSales.length > 0 && (
-                              <p className="text-sm font-medium">
-                                Total: ৳{totalSelected.toLocaleString()}
-                              </p>
-                            )}
+                            <p className="text-xs text-muted-foreground">{selSales.length} of {sales.length} selected</p>
+                            {selSales.length > 0 && <p className="text-xs font-medium text-foreground">Total: ৳{totalSelected.toLocaleString()}</p>}
                           </div>
                         </div>
                         <div className="space-y-1">
                           {sales.map((sale) => (
-                            <label
-                              key={sale.id}
-                              className="flex items-center gap-2 p-2 hover:bg-slate-50 rounded cursor-pointer"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={formData.sale_ids.includes(sale.id)}
-                                onChange={() => toggleSaleSelection(sale.id)}
-                                className="w-4 h-4"
-                              />
+                            <label key={sale.id} className="flex items-center gap-2 p-2 hover:bg-muted/40 rounded cursor-pointer">
+                              <input type="checkbox" checked={formData.sale_ids.includes(sale.id)} onChange={() => toggleSaleSelection(sale.id)} className="w-4 h-4" />
                               <div className="flex-1">
-                                <p className="text-sm font-medium">{sale.order_number}</p>
-                                <p className="text-xs text-slate-500">
-                                  Amount: ৳{sale.total_amount.toLocaleString()} | 
-                                  Due: ৳{sale.due_amount.toLocaleString()}
-                                </p>
+                                <p className="text-sm font-medium text-foreground">{sale.order_number}</p>
+                                <p className="text-xs text-muted-foreground">Amount: ৳{sale.total_amount.toLocaleString()} | Due: ৳{sale.due_amount.toLocaleString()}</p>
                               </div>
                             </label>
                           ))}
@@ -563,39 +356,18 @@ function CreateRouteModal({ onClose, onSave }: { onClose: () => void; onSave: ()
                 </div>
               )}
             </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Selected: {formData.sale_ids.length} order(s)
-            </p>
+            <p className="text-xs text-muted-foreground mt-1">Selected: {formData.sale_ids.length} order(s)</p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Notes (Optional)
-            </label>
-            <textarea
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              className="input-field"
-              rows={2}
-              placeholder="Add any notes about this route..."
-            />
+            <label className="block text-xs font-medium text-muted-foreground mb-1">Notes (Optional)</label>
+            <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} className="input-field" rows={2} placeholder="Add any notes about this route…" />
           </div>
 
           <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="btn-secondary"
-              disabled={loading}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="btn-primary"
-              disabled={loading || formData.sale_ids.length === 0}
-            >
-              {loading ? 'Creating...' : 'Create Route'}
+            <button type="button" onClick={onClose} className="btn-secondary" disabled={loading}>Cancel</button>
+            <button type="submit" className="btn-primary" disabled={loading || formData.sale_ids.length === 0}>
+              {loading ? 'Creating…' : 'Create Route'}
             </button>
           </div>
         </form>
@@ -604,13 +376,13 @@ function CreateRouteModal({ onClose, onSave }: { onClose: () => void; onSave: ()
   );
 }
 
-function RouteDetailsModal({ 
-  route, 
-  onClose, 
+function RouteDetailsModal({
+  route,
+  onClose,
   onRefresh,
-  onBulkPrint
-}: { 
-  route: Route; 
+  onBulkPrint,
+}: {
+  route: Route;
   onClose: () => void;
   onRefresh: () => void;
   onBulkPrint: () => void;
@@ -636,112 +408,81 @@ function RouteDetailsModal({
   if (loading) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-2xl p-8">Loading...</div>
+        <div className="bg-card border border-border rounded-2xl p-8 text-sm text-muted-foreground">Loading…</div>
       </div>
     );
   }
-
-  if (!routeDetails) {
-    return null;
-  }
+  if (!routeDetails) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
-        <div className="p-3 border-b border-slate-200 flex items-center justify-between">
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-xl">
+        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
           <div>
-            <h2 className="text-xl font-semibold text-slate-900">{routeDetails.route_number}</h2>
-            <p className="text-slate-500">{routeDetails.assigned_to_name}</p>
+            <h2 className="text-base font-semibold text-foreground">{routeDetails.route_number}</h2>
+            <p className="text-xs text-muted-foreground">{routeDetails.assigned_to_name}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
-            <XCircle className="w-6 h-6" />
+          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
+            <XCircle className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-3">
-          <div className="grid grid-cols-2 gap-2 mb-3">
+        <div className="p-4 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <p className="text-sm text-slate-500">Route Date</p>
-              <p className="font-medium">{formatDateBD(routeDetails.route_date)}</p>
+              <p className="text-xs text-muted-foreground mb-0.5">Route Date</p>
+              <p className="text-sm font-medium text-foreground">{formatDateBD(routeDetails.route_date)}</p>
             </div>
             <div>
-              <p className="text-sm text-slate-500">Status</p>
-              <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${statusConfig[routeDetails.status].color}`}>
-                {statusConfig[routeDetails.status].label}
-              </span>
+              <p className="text-xs text-muted-foreground mb-0.5">Status</p>
+              <Badge variant={statusVariantMap[routeDetails.status] as any}>{statusLabelMap[routeDetails.status]}</Badge>
             </div>
           </div>
 
-          <h3 className="font-semibold text-slate-900 mb-2">Orders in Route</h3>
-          <div className="space-y-2">
-            {routeDetails.sales?.map((sale: any) => {
-              const routeSale = routeDetails.route_sales?.find((rs: any) => rs.sale_id === sale.id);
-              const previousDue = routeSale?.previous_due || 0;
-              const currentBill = sale.total_amount || 0;
-              const totalOutstanding = previousDue + currentBill;
-              
-              return (
-                <div key={sale.id} className="border border-slate-200 rounded-lg p-2">
-                  <div className="flex justify-between items-start mb-1">
-                    <div>
-                      <p className="font-medium">{sale.invoice_number}</p>
-                      <p className="text-sm text-slate-600">{sale.retailer_name}</p>
+          <div>
+            <h3 className="text-sm font-semibold text-foreground mb-2">Orders in Route</h3>
+            <div className="space-y-2">
+              {routeDetails.sales?.map((sale: any) => {
+                const routeSale = routeDetails.route_sales?.find((rs: any) => rs.sale_id === sale.id);
+                const previousDue = routeSale?.previous_due || 0;
+                const currentBill = sale.total_amount || 0;
+                const totalOutstanding = previousDue + currentBill;
+                return (
+                  <div key={sale.id} className="border border-border rounded-lg p-3 bg-muted/10">
+                    <div className="flex justify-between items-start mb-2">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{sale.invoice_number}</p>
+                        <p className="text-xs text-muted-foreground">{sale.retailer_name}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">Previous Due</p>
+                        <p className="text-sm font-mono font-medium text-foreground">৳{previousDue.toLocaleString()}</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm text-slate-500">Previous Due</p>
-                      <p className="font-medium">৳{previousDue.toLocaleString()}</p>
+                    <div className="flex justify-between text-xs mt-2 pt-2 border-t border-border/50">
+                      <span className="text-muted-foreground">Current Bill:</span>
+                      <span className="font-mono font-medium text-foreground">৳{currentBill.toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-sm font-bold mt-1 pt-1 border-t border-border">
+                      <span className="text-foreground">Total Outstanding:</span>
+                      <span className="font-mono text-[hsl(var(--dh-red))]">৳{totalOutstanding.toLocaleString()}</span>
                     </div>
                   </div>
-                  <div className="flex justify-between text-sm mt-2 pt-2 border-t border-slate-100">
-                    <span className="text-slate-600">Current Bill:</span>
-                    <span className="font-medium">৳{currentBill.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between text-sm font-bold mt-1 pt-1 border-t border-slate-200">
-                    <span>Total Outstanding:</span>
-                    <span className="text-red-600">৳{totalOutstanding.toLocaleString()}</span>
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
           </div>
         </div>
 
-        <div className="p-3 border-t border-slate-200 flex justify-end gap-2">
+        <div className="px-4 py-3 border-t border-border flex justify-end gap-2">
           <button
             onClick={async () => {
-              console.log('[RouteDetailsModal] Mark as Completed clicked', {
-                routeId: routeDetails.id,
-                currentStatus: routeDetails.status,
-                routeNumber: routeDetails.route_number
-              });
-              
               try {
-                console.log('[RouteDetailsModal] Sending PUT request to:', `/api/routes/${routeDetails.id}`);
-                console.log('[RouteDetailsModal] Request payload:', { status: 'completed' });
-                
-                const response = await api.put(`/api/routes/${routeDetails.id}`, { status: 'completed' });
-                
-                console.log('[RouteDetailsModal] Route update successful:', response.data);
-
-                console.log('[RouteDetailsModal] Refreshing routes list and closing modal');
+                await api.put(`/api/routes/${routeDetails.id}`, { status: 'completed' });
                 onRefresh();
-                onClose(); // Close modal after update
+                onClose();
               } catch (error: any) {
-                console.error('[RouteDetailsModal] Error updating route status:', error);
-                console.error('[RouteDetailsModal] Error details:', {
-                  message: error?.message,
-                  status: error?.response?.status,
-                  statusText: error?.response?.statusText,
-                  data: error?.response?.data,
-                  config: {
-                    url: error?.config?.url,
-                    method: error?.config?.method,
-                    baseURL: error?.config?.baseURL
-                  }
-                });
-
-                const errorMessage = error?.response?.data?.detail || error?.message || 'Unknown error';
-                alert(`Failed to update route status: ${errorMessage}`);
+                alert(`Failed to update route status: ${error?.response?.data?.detail || error?.message}`);
               }
             }}
             className="btn-secondary"
@@ -749,19 +490,13 @@ function RouteDetailsModal({
           >
             Mark as Completed
           </button>
-          <button
-            onClick={onBulkPrint}
-            className="btn-primary flex items-center gap-2"
-          >
+          <button onClick={onBulkPrint} className="btn-primary flex items-center gap-2">
             <Printer className="w-4 h-4" />
             Print All Challans
           </button>
-          <button onClick={onClose} className="btn-secondary">
-            Close
-          </button>
+          <button onClick={onClose} className="btn-secondary">Close</button>
         </div>
       </div>
     </div>
   );
 }
-

@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Header } from '@/components/layout/Header';
 import {
   Plus,
   Eye,
@@ -13,6 +12,7 @@ import {
   Trash2,
   Search,
   ChevronDown,
+  Receipt,
 } from 'lucide-react';
 import { ChallanPrint } from '@/components/print/ChallanPrint';
 import { BarcodeScanButton } from '@/components/BarcodeScanner';
@@ -28,6 +28,19 @@ import {
   saveSale,
   type SaleRecord,
 } from '@/lib/offlineDb';
+import { PageShell } from '@/components/layout/PageShell';
+import { StatCard } from '@/components/ui/stat-card';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 
 interface Payment {
   id: string;
@@ -53,7 +66,7 @@ interface SalesOrder {
   delivery_status?: 'pending' | 'delivered' | 'partially_delivered' | 'returned';
   assigned_to?: string;
   assigned_to_name?: string;
-  route_id?: string;  // Route ID if sale is in a route
+  route_id?: string;
   payments?: Payment[];
 }
 
@@ -94,17 +107,19 @@ const mapRecordToOrder = (sale: SaleRecord): SalesOrder => ({
   })),
 });
 
-const statusConfig = {
-  pending: { icon: Clock, color: 'bg-yellow-100 text-yellow-700', label: 'Pending' },
-  confirmed: { icon: CheckCircle, color: 'bg-blue-100 text-blue-700', label: 'Confirmed' },
-  delivered: { icon: Truck, color: 'bg-green-100 text-green-700', label: 'Delivered' },
-  cancelled: { icon: XCircle, color: 'bg-red-100 text-red-700', label: 'Cancelled' },
+type StatusVariant = 'warning' | 'info' | 'success' | 'danger' | 'muted';
+
+const statusConfig: Record<string, { icon: typeof Clock; variant: StatusVariant; label: string }> = {
+  pending:   { icon: Clock,        variant: 'warning', label: 'Pending' },
+  confirmed: { icon: CheckCircle,  variant: 'info',    label: 'Confirmed' },
+  delivered: { icon: Truck,        variant: 'success', label: 'Delivered' },
+  cancelled: { icon: XCircle,      variant: 'danger',  label: 'Cancelled' },
 };
 
-const paymentConfig = {
-  unpaid: { color: 'bg-red-100 text-red-700', label: 'Unpaid' },
-  partial: { color: 'bg-yellow-100 text-yellow-700', label: 'Partial' },
-  paid: { color: 'bg-green-100 text-green-700', label: 'Paid' },
+const paymentConfig: Record<string, { variant: StatusVariant; label: string }> = {
+  unpaid:  { variant: 'danger',  label: 'Unpaid' },
+  partial: { variant: 'warning', label: 'Partial' },
+  paid:    { variant: 'success', label: 'Paid' },
 };
 
 export function Sales() {
@@ -119,11 +134,9 @@ export function Sales() {
   const [printChallanOrder, setPrintChallanOrder] = useState<SalesOrder | null>(null);
   const [collectionOrder, setCollectionOrder] = useState<SalesOrder | null>(null);
 
-  // Fetch sales from API
   const fetchSales = async () => {
     const token = localStorage.getItem('token');
     if (!token) {
-      console.warn('[Sales] No token found, skipping sales fetch');
       setOrders([]);
       setLoading(false);
       return;
@@ -131,47 +144,27 @@ export function Sales() {
 
     try {
       setLoading(true);
-      console.log('[Sales] Fetching sales from API...');
       const response = await api.get('/api/sales');
-      console.log('[Sales] Sales fetched successfully:', response.data?.length || 0);
-      
       if (response.data) {
-        // Map backend Sale to frontend SalesOrder interface
         const mappedOrders: SalesOrder[] = response.data.map((sale: any) => {
-          // Map payment_status enum to frontend format
           let paymentStatus: 'unpaid' | 'partial' | 'paid' = 'unpaid';
-          if (sale.payment_status === 'paid') {
-            paymentStatus = 'paid';
-          } else if (sale.payment_status === 'partial') {
-            paymentStatus = 'partial';
-          } else {
-            paymentStatus = 'unpaid';
-          }
-          
-          // Map status enum to frontend format
+          if (sale.payment_status === 'paid') paymentStatus = 'paid';
+          else if (sale.payment_status === 'partial') paymentStatus = 'partial';
+
           let status: 'pending' | 'confirmed' | 'delivered' | 'cancelled' = 'pending';
-          if (sale.status === 'confirmed') {
-            status = 'confirmed';
-          } else if (sale.status === 'delivered') {
-            status = 'delivered';
-          } else if (sale.status === 'cancelled') {
-            status = 'cancelled';
-          } else {
-            status = 'pending';
-          }
-          
-          // Format dates
+          if (sale.status === 'confirmed') status = 'confirmed';
+          else if (sale.status === 'delivered') status = 'delivered';
+          else if (sale.status === 'cancelled') status = 'cancelled';
+
           const orderDate = sale.created_at ? sale.created_at.split('T')[0] : new Date().toISOString().split('T')[0];
-          const deliveryDate = sale.delivery_date || orderDate; // Backend may not have delivery_date
-          
           return {
             id: sale.id || '',
             order_number: sale.invoice_number || '',
             retailer_id: sale.retailer_id || '',
             retailer_name: sale.retailer_name || '',
             order_date: orderDate,
-            delivery_date: deliveryDate,
-            status: status,
+            delivery_date: sale.delivery_date || orderDate,
+            status,
             payment_status: paymentStatus,
             total_amount: sale.total_amount || 0,
             paid_amount: sale.paid_amount || 0,
@@ -188,29 +181,15 @@ export function Sales() {
         });
         setOrders(mappedOrders);
         await bulkSaveSales(response.data.map((sale: any) => mapApiSaleToRecord(sale, true)));
-        console.log('[Sales] Sales mapped and set:', mappedOrders.length);
       }
     } catch (error: any) {
-      console.error('[Sales] Error fetching sales:', error);
-      console.error('[Sales] Error details:', {
-        message: error?.message,
-        status: error?.response?.status,
-        data: error?.response?.data,
-      });
-      
-      if (error?.response?.status === 401) {
-        console.warn('[Sales] 401 Unauthorized - token may be expired');
-        // Interceptor will handle redirect to login
-        return;
-      }
-      
+      if (error?.response?.status === 401) return;
       const isOfflineError =
         !navigator.onLine || error?.isNetworkError || error?.code === 'ERR_NETWORK' || error?.message?.includes('Network');
       if (isOfflineError) {
         const offlineSales = await getOfflineSales();
         setOrders(offlineSales.map(mapRecordToOrder));
       } else {
-        // On error, use empty array
         setOrders([]);
       }
     } finally {
@@ -224,22 +203,15 @@ export function Sales() {
     setSearchTerm(globalSearch);
   }, [searchParams]);
 
-  // Delete sale order
   const handleDelete = async (order: SalesOrder) => {
-    if (!confirm(`Are you sure you want to delete order ${order.order_number}? This action cannot be undone.`)) {
-      return;
-    }
-
+    if (!confirm(`Are you sure you want to delete order ${order.order_number}? This action cannot be undone.`)) return;
     try {
-      console.log('[Sales] Deleting sale:', order.id);
       await deleteWithOfflineQueue('sales', `/api/sales/${order.id}`, { id: order.id }, {
         onOfflineDelete: async () => deleteRecord('sales', order.id),
         onOnlineDelete: async () => deleteRecord('sales', order.id),
       });
-      console.log('[Sales] Sale deleted successfully');
-      await fetchSales(); // Refresh the list
+      await fetchSales();
     } catch (error: any) {
-      console.error('[Sales] Error deleting sale:', error);
       const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to delete order';
       alert(`Failed to delete order: ${errorMessage}`);
     }
@@ -255,170 +227,162 @@ export function Sales() {
 
   const totalSales = orders.reduce((sum, o) => sum + o.total_amount, 0);
   const totalDue = orders.reduce((sum, o) => sum + (o.total_amount - o.paid_amount), 0);
+  const pendingCount = orders.filter((o) => o.status === 'pending' || o.status === 'confirmed').length;
 
   return (
-    <div className="min-h-screen">
-      <Header title="Sales Orders" />
-
-      <div className="p-3">
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2">
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <p className="text-slate-500 text-sm">Total Orders</p>
-            <p className="text-2xl font-bold text-slate-900">{orders.length}</p>
-          </div>
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <p className="text-slate-500 text-sm">Total Sales</p>
-            <p className="text-2xl font-bold text-green-600">৳ {totalSales.toLocaleString()}</p>
-          </div>
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <p className="text-slate-500 text-sm">Total Due</p>
-            <p className="text-2xl font-bold text-red-600">৳ {totalDue.toLocaleString()}</p>
-          </div>
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <p className="text-slate-500 text-sm">Pending Delivery</p>
-            <p className="text-2xl font-bold text-yellow-600">
-              {orders.filter((o) => o.status === 'pending' || o.status === 'confirmed').length}
-            </p>
-          </div>
-        </div>
-
-        {/* Actions Bar */}
-        <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 flex-1">
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="input-field w-40"
-            >
-              <option value="all">All Status</option>
-              <option value="pending">Pending</option>
-              <option value="confirmed">Confirmed</option>
-              <option value="delivered">Delivered</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-          </div>
-
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="btn-primary flex items-center gap-2"
-          >
-            <Plus className="w-4 h-4" />
-            New Order
-          </button>
-        </div>
-
-        {/* Orders Table */}
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-          {loading ? (
-            <div className="p-8 text-center text-slate-500">Loading sales orders...</div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="text-left p-2 font-semibold text-slate-700">Order #</th>
-                    <th className="text-left p-2 font-semibold text-slate-700">Retailer</th>
-                    <th className="text-left p-2 font-semibold text-slate-700">Order Date</th>
-                    <th className="text-left p-2 font-semibold text-slate-700">Delivery</th>
-                    <th className="text-center p-2 font-semibold text-slate-700">Status</th>
-                    <th className="text-center p-2 font-semibold text-slate-700">Payment</th>
-                    <th className="text-right p-2 font-semibold text-slate-700">Amount</th>
-                    <th className="text-right p-2 font-semibold text-slate-700">Due</th>
-                    <th className="text-center p-2 font-semibold text-slate-700">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredOrders.map((order) => {
-                    const StatusIcon = statusConfig[order.status].icon;
-                    return (
-                      <tr key={order.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-2 font-medium text-primary-600">{order.order_number}</td>
-                        <td className="p-2 text-slate-900">{order.retailer_name}</td>
-                        <td className="p-2 text-slate-600">{order.order_date}</td>
-                        <td className="p-2 text-slate-600">{order.delivery_date}</td>
-                        <td className="p-2 text-center">
-                          <span
-                            className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${statusConfig[order.status].color}`}
-                          >
-                            <StatusIcon className="w-3 h-3" />
-                            {statusConfig[order.status].label}
-                          </span>
-                        </td>
-                        <td className="p-2 text-center">
-                          <span
-                            className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${paymentConfig[order.payment_status].color}`}
-                          >
-                            {paymentConfig[order.payment_status].label}
-                          </span>
-                        </td>
-                        <td className="p-2 text-right font-medium text-slate-900">
-                          ৳ {order.total_amount.toLocaleString()}
-                        </td>
-                        <td className="p-2 text-right font-medium text-red-600">
-                          ৳ {(order.total_amount - order.paid_amount).toLocaleString()}
-                        </td>
-                        <td className="p-2">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => setSelectedOrder(order)}
-                              className="p-1 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
-                              title="View Details"
-                            >
-                              <Eye className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => setEditOrder(order)}
-                              className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                              title="Edit Order"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(order)}
-                              className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
-                              title="Delete Order"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                            {(order.total_amount - order.paid_amount) > 0 && (
-                              <button
-                                onClick={() => setCollectionOrder(order)}
-                                className="px-2 py-1 text-xs font-medium bg-green-600 hover:bg-green-700 text-white rounded transition-colors"
-                                title="টাকা জমা নিন (Collect Money)"
-                              >
-                                টাকা জমা
-                              </button>
-                            )}
-                            <button
-                              onClick={() => setPrintChallanOrder(order)}
-                              className="p-1 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
-                              title="প্রিন্ট করুন / PDF সেভ করুন (Print / Save PDF)"
-                            >
-                              <Printer className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {!loading && filteredOrders.length === 0 && (
-            <div className="p-4 text-center text-slate-500">
-              No orders found. Try adjusting your search or create a new order.
-            </div>
-          )}
-        </div>
+    <PageShell
+      title="Sales Orders"
+      subtitle="Manage outgoing invoices and collections"
+      actions={
+        <Button onClick={() => setShowAddModal(true)} className="gap-2">
+          <Plus className="w-4 h-4" />
+          New Order
+        </Button>
+      }
+    >
+      {/* KPI tiles */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard label="Total Orders"    value={orders.length}                         icon={Receipt} color="blue" />
+        <StatCard label="Total Sales"     value={`৳ ${totalSales.toLocaleString()}`}    icon={Receipt} color="green" />
+        <StatCard label="Total Due"       value={`৳ ${totalDue.toLocaleString()}`}      icon={Receipt} color="red" />
+        <StatCard label="Pending Delivery" value={pendingCount}                         icon={Truck}   color="amber" />
       </div>
 
-      {/* Order Details Modal */}
+      {/* Table card */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="text-base">Orders</CardTitle>
+            <div className="flex items-center gap-2">
+              {/* Search */}
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search orders..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="input-field pl-8 h-9 w-48 text-sm"
+                />
+              </div>
+              {/* Status filter */}
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="input-field h-9 w-36 text-sm"
+              >
+                <option value="all">All Status</option>
+                <option value="pending">Pending</option>
+                <option value="confirmed">Confirmed</option>
+                <option value="delivered">Delivered</option>
+                <option value="cancelled">Cancelled</option>
+              </select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="py-12 text-center text-muted-foreground text-sm">Loading sales orders…</div>
+          ) : filteredOrders.length === 0 ? (
+            <div className="py-12 text-center text-muted-foreground text-sm">
+              No orders found. Adjust your search or create a new order.
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Order #</TableHead>
+                  <TableHead>Retailer</TableHead>
+                  <TableHead>Order Date</TableHead>
+                  <TableHead>Delivery</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Payment</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="text-right">Due</TableHead>
+                  <TableHead className="text-center">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredOrders.map((order) => {
+                  const StatusIcon = statusConfig[order.status].icon;
+                  return (
+                    <TableRow key={order.id}>
+                      <TableCell className="font-medium text-[hsl(var(--primary))]">
+                        {order.order_number}
+                      </TableCell>
+                      <TableCell className="text-foreground">{order.retailer_name}</TableCell>
+                      <TableCell className="text-muted-foreground">{order.order_date}</TableCell>
+                      <TableCell className="text-muted-foreground">{order.delivery_date}</TableCell>
+                      <TableCell>
+                        <Badge variant={statusConfig[order.status].variant} className="gap-1">
+                          <StatusIcon className="w-3 h-3" />
+                          {statusConfig[order.status].label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={paymentConfig[order.payment_status].variant}>
+                          {paymentConfig[order.payment_status].label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-medium">
+                        ৳ {order.total_amount.toLocaleString()}
+                      </TableCell>
+                      <TableCell className="text-right font-mono font-medium text-[hsl(var(--dh-red))]">
+                        ৳ {(order.total_amount - order.paid_amount).toLocaleString()}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-center gap-1">
+                          <button
+                            onClick={() => setSelectedOrder(order)}
+                            className="p-1.5 rounded text-muted-foreground hover:text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/10 transition-colors"
+                            title="View Details"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setEditOrder(order)}
+                            className="p-1.5 rounded text-muted-foreground hover:text-[hsl(var(--dh-blue))] hover:bg-[hsl(var(--dh-blue))]/10 transition-colors"
+                            title="Edit Order"
+                          >
+                            <Edit className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(order)}
+                            className="p-1.5 rounded text-muted-foreground hover:text-[hsl(var(--dh-red))] hover:bg-[hsl(var(--dh-red))]/10 transition-colors"
+                            title="Delete Order"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                          {(order.total_amount - order.paid_amount) > 0 && (
+                            <button
+                              onClick={() => setCollectionOrder(order)}
+                              className="px-2 py-1 text-xs font-medium bg-[hsl(var(--dh-green))] hover:bg-[hsl(var(--dh-green))]/90 text-white rounded transition-colors"
+                              title="Collect Money"
+                            >
+                              টাকা জমা
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setPrintChallanOrder(order)}
+                            className="p-1.5 rounded text-muted-foreground hover:text-[hsl(var(--dh-green))] hover:bg-[hsl(var(--dh-green))]/10 transition-colors"
+                            title="Print Challan"
+                          >
+                            <Printer className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
       {selectedOrder && (
-        <OrderDetailsModal 
-          order={selectedOrder} 
+        <OrderDetailsModal
+          order={selectedOrder}
           onClose={() => setSelectedOrder(null)}
           onEdit={() => {
             setEditOrder(selectedOrder);
@@ -427,7 +391,6 @@ export function Sales() {
         />
       )}
 
-      {/* Edit Order Modal */}
       {editOrder && (
         <EditSaleModal
           order={editOrder}
@@ -439,20 +402,16 @@ export function Sales() {
         />
       )}
 
-      {/* Add Order Modal */}
       {showAddModal && (
         <AddOrderModal
           onClose={() => setShowAddModal(false)}
           onSave={async (order) => {
             try {
-              console.log('[Sales] Creating sale order:', order);
-
               if (!navigator.onLine) {
                 if (!order.retailer_id) {
                   alert('Retailer ID not found. Please select a retailer from the list.');
                   return;
                 }
-
                 const tempId = `offline-sale-${Date.now()}`;
                 const localRecord: SaleRecord = {
                   id: tempId,
@@ -472,7 +431,6 @@ export function Sales() {
                   synced: false,
                   lastModified: Date.now(),
                 };
-
                 await postWithOfflineQueue('sales', '/api/sales', {
                   retailer_id: order.retailer_id,
                   items: order.items.map((item) => ({
@@ -490,112 +448,84 @@ export function Sales() {
                   localRecord,
                   onOfflineSave: async (record) => saveSale(record as SaleRecord),
                 });
-
                 await fetchSales();
                 setShowAddModal(false);
                 return;
               }
-              
-              // Fetch retailers to get retailer_id from retailer_name
+
               const retailersResponse = await api.get('/api/retailers');
-              const retailer = retailersResponse.data.find((r: any) => r.shop_name === order.retailer_name || r.name === order.retailer_name);
-              
+              const retailer = retailersResponse.data.find(
+                (r: any) => r.shop_name === order.retailer_name || r.name === order.retailer_name
+              );
               if (!retailer) {
                 alert(`Retailer "${order.retailer_name}" not found. Please select a valid retailer.`);
                 return;
               }
-              
-              // Fetch products to get product_id and batches
+
               const productsResponse = await api.get('/api/products');
               const products = productsResponse.data;
-              
-              // Map frontend items to backend SaleItemCreate format
-              // Note: This is simplified - in production, you'd need to select batches
               const saleItems = [];
               const productsWithoutBatches: string[] = [];
-              
+
               for (const item of order.items) {
                 const product = products.find((p: any) => p.name === item.product);
-                if (!product) {
-                  console.warn(`[Sales] Product "${item.product}" not found, skipping`);
-                  continue;
-                }
-                
-                // Get batches for this product
+                if (!product) continue;
                 const batchesResponse = await api.get(`/api/products/${product.id}/batches`);
                 const batches = batchesResponse.data || [];
-                
                 if (batches.length === 0) {
                   productsWithoutBatches.push(item.product);
-                  console.warn(`[Sales] No batches found for product "${item.product}", skipping`);
                   continue;
                 }
-                
-                // Use first available batch (in production, user should select)
                 const batch = batches[0];
-                
                 saleItems.push({
                   product_id: product.id,
                   batch_id: batch.id,
                   quantity: item.qty,
                   unit_price: item.price,
-                  discount: 0, // Default discount
+                  discount: 0,
                 });
               }
-              
-              // Show warning if some products don't have batches
+
               if (productsWithoutBatches.length > 0) {
-                const message = productsWithoutBatches.length === order.items.length
-                  ? `No batches found for the following products. Please add stock first:\n\n${productsWithoutBatches.join('\n')}\n\nYou need to create a purchase order to add stock before creating a sales order.`
-                  : `Warning: The following products don't have stock and were skipped:\n\n${productsWithoutBatches.join('\n')}\n\nThe sale will be created only for products with available stock.`;
-                
+                const message =
+                  productsWithoutBatches.length === order.items.length
+                    ? `No batches found for the following products. Please add stock first:\n\n${productsWithoutBatches.join('\n')}`
+                    : `Warning: The following products don't have stock and were skipped:\n\n${productsWithoutBatches.join('\n')}\n\nDo you want to continue?`;
                 if (productsWithoutBatches.length === order.items.length) {
                   alert(message);
                   return;
                 } else {
-                  const proceed = confirm(message + '\n\nDo you want to continue with the remaining products?');
-                  if (!proceed) {
-                    return;
-                  }
+                  if (!confirm(message)) return;
                 }
               }
-              
+
               if (saleItems.length === 0) {
-                alert('No valid items to create sale. All selected products need stock. Please add stock first via a purchase order.');
+                alert('No valid items to create sale. Please add stock first via a purchase order.');
                 return;
               }
-              
-              // Map frontend SalesOrder to backend SaleCreate format
+
               const salePayload: any = {
                 retailer_id: retailer.id,
                 items: saleItems,
-                payment_type: 'cash', // Default payment type
+                payment_type: 'cash',
                 paid_amount: order.paid_amount || 0,
                 notes: `Delivery date: ${order.delivery_date}`,
               };
-              
-              // Add assigned_to if provided (only if it exists on the order)
               if ('assigned_to' in order && order.assigned_to) {
-                (salePayload as any).assigned_to = order.assigned_to;
+                salePayload.assigned_to = order.assigned_to;
               }
-              
-              console.log('[Sales] Sending sale payload:', salePayload);
+
               const response = await api.post('/api/sales', salePayload);
-              console.log('[Sales] Sale created successfully:', response.data);
               await saveSale(mapApiSaleToRecord(response.data, true));
-              
-              // Refetch sales to get the latest data
               await fetchSales();
               setShowAddModal(false);
             } catch (error: any) {
-              console.error('[Sales] Failed to create sale:', error);
               alert(`Failed to create sale: ${error.response?.data?.detail || error.message}`);
             }
           }}
         />
       )}
 
-      {/* Collection Modal */}
       {collectionOrder && (
         <CollectionModal
           order={collectionOrder}
@@ -607,102 +537,107 @@ export function Sales() {
         />
       )}
 
-      {/* Print Challan Modal */}
       {printChallanOrder && (
-        <ChallanPrintWrapper 
+        <ChallanPrintWrapper
           order={printChallanOrder}
           onClose={() => setPrintChallanOrder(null)}
         />
       )}
+    </PageShell>
+  );
+}
+
+/* ─── Modal helper ─── */
+function ModalShell({ title, subtitle, onClose, children, footer }: {
+  title: string;
+  subtitle?: string;
+  onClose: () => void;
+  children: React.ReactNode;
+  footer?: React.ReactNode;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-xl">
+        <div className="p-4 border-b border-border flex items-center justify-between">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">{title}</h2>
+            {subtitle && <p className="text-sm text-muted-foreground">{subtitle}</p>}
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <XCircle className="w-5 h-5" />
+          </button>
+        </div>
+        <div className="p-4">{children}</div>
+        {footer && <div className="p-4 border-t border-border flex justify-end gap-2">{footer}</div>}
+      </div>
     </div>
   );
 }
 
-function ChallanPrintWrapper({ 
-  order, 
-  onClose 
-}: { 
-  order: SalesOrder; 
-  onClose: () => void;
-}) {
+function ChallanPrintWrapper({ order, onClose }: { order: SalesOrder; onClose: () => void }) {
   const [srPhone, setSrPhone] = useState<string | null>(null);
   const [srName, setSrName] = useState<string | null>(null);
   const [srId, setSrId] = useState<string | null>(null);
-  const [returnItems, setReturnItems] = useState<Array<{sale_item_id: string; quantity_returned: number; product_name: string}>>([]);
+  const [returnItems, setReturnItems] = useState<Array<{ sale_item_id: string; quantity_returned: number; product_name: string }>>([]);
 
   useEffect(() => {
     const fetchData = async () => {
-      // Priority: If sale is in a route, use route's SR. Otherwise use sale's SR.
       let targetSrId: string | null = null;
       let targetSrName: string | null = null;
-      
+
       if (order.route_id) {
-        // Sale is in a route - fetch route to get route's SR
         try {
           const routeRes = await api.get(`/api/routes/${order.route_id}`);
           if (routeRes.data) {
             targetSrId = routeRes.data.assigned_to || null;
             targetSrName = routeRes.data.assigned_to_name || null;
           }
-        } catch (error) {
-          console.error('[ChallanPrintWrapper] Error fetching route:', error);
-          // Fallback to sale's SR if route fetch fails
+        } catch {
           targetSrId = order.assigned_to || null;
           targetSrName = order.assigned_to_name || null;
         }
       } else {
-        // Sale not in route - use sale's SR
         targetSrId = order.assigned_to || null;
         targetSrName = order.assigned_to_name || null;
       }
-      
+
       setSrId(targetSrId);
       setSrName(targetSrName);
-      
-      // Fetch SR phone
+
       if (targetSrId) {
         try {
           const usersRes = await api.get('/api/users');
           const sr = usersRes.data?.find((u: any) => u.id === targetSrId);
-          if (sr?.phone) {
-            setSrPhone(sr.phone);
-          }
-        } catch (error) {
-          console.error('[ChallanPrintWrapper] Error fetching SR phone:', error);
-        }
+          if (sr?.phone) setSrPhone(sr.phone);
+        } catch { /* ignore */ }
       }
 
-      // Fetch returns data
       try {
         const returnsRes = await api.get(`/api/sales/${order.id}/returns`);
         if (returnsRes.data && Array.isArray(returnsRes.data)) {
-          const allReturnItems: Array<{sale_item_id: string; quantity_returned: number; product_name: string}> = [];
+          const all: Array<{ sale_item_id: string; quantity_returned: number; product_name: string }> = [];
           returnsRes.data.forEach((ret: any) => {
-            if (ret.items && Array.isArray(ret.items)) {
-              ret.items.forEach((item: any) => {
-                allReturnItems.push({
-                  sale_item_id: item.sale_item_id,
-                  quantity_returned: item.quantity_returned,
-                  product_name: item.product_name || ''
-                });
+            (ret.items || []).forEach((item: any) => {
+              all.push({
+                sale_item_id: item.sale_item_id,
+                quantity_returned: item.quantity_returned,
+                product_name: item.product_name || '',
               });
-            }
+            });
           });
-          setReturnItems(allReturnItems);
+          setReturnItems(all);
         }
-      } catch (error) {
-        console.error('[ChallanPrintWrapper] Error fetching returns:', error);
-        // If returns endpoint doesn't exist or fails, continue without returns data
-      }
+      } catch { /* ignore */ }
     };
     fetchData();
   }, [order.assigned_to, order.route_id, order.id]);
 
-  // Create a map of product name to returned quantity
   const returnsByProduct = new Map<string, number>();
-  returnItems.forEach(item => {
-    const currentQty = returnsByProduct.get(item.product_name) || 0;
-    returnsByProduct.set(item.product_name, currentQty + item.quantity_returned);
+  returnItems.forEach((item) => {
+    returnsByProduct.set(item.product_name, (returnsByProduct.get(item.product_name) || 0) + item.quantity_returned);
   });
 
   return (
@@ -714,7 +649,7 @@ function ChallanPrintWrapper({
         delivery_date: order.delivery_date,
         retailer_name: order.retailer_name,
         retailer_id: order.id,
-        items: order.items.map(item => ({
+        items: order.items.map((item) => ({
           product: item.product,
           qty: item.qty,
           unit: 'Pcs',
@@ -723,7 +658,7 @@ function ChallanPrintWrapper({
           bonus_qty: 0,
           discount: 0,
           discount_amount: 0,
-          returned_qty: returnsByProduct.get(item.product) || 0
+          returned_qty: returnsByProduct.get(item.product) || 0,
         })),
         total_items: order.items.length,
         total_amount: order.total_amount,
@@ -743,158 +678,122 @@ function ChallanPrintWrapper({
   );
 }
 
-function OrderDetailsModal({ 
-  order, 
-  onClose, 
-  onEdit
-}: { 
-  order: SalesOrder; 
+function OrderDetailsModal({ order, onClose, onEdit }: {
+  order: SalesOrder;
   onClose: () => void;
   onEdit: () => void;
 }) {
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
-        <div className="p-3 border-b border-slate-200 flex items-center justify-between">
+    <ModalShell
+      title={order.order_number}
+      subtitle={order.retailer_name}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="outline" onClick={onEdit} className="gap-2">
+            <Edit className="w-4 h-4" /> Edit Payment
+          </Button>
+          <Button variant="outline" className="gap-2">
+            <Printer className="w-4 h-4" /> Print Challan
+          </Button>
+          <Button onClick={onClose}>Close</Button>
+        </>
+      }
+    >
+      <div className="grid grid-cols-2 gap-3 mb-4">
+        <div>
+          <p className="text-xs text-muted-foreground">Order Date</p>
+          <p className="font-medium text-foreground">{order.order_date ? formatDateBD(order.order_date) : ''}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Delivery Date</p>
+          <p className="font-medium text-foreground">{order.delivery_date ? formatDateBD(order.delivery_date) : ''}</p>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground mb-1">Status</p>
+          <Badge variant={statusConfig[order.status].variant}>{statusConfig[order.status].label}</Badge>
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground mb-1">Payment Status</p>
+          <Badge variant={paymentConfig[order.payment_status].variant}>{paymentConfig[order.payment_status].label}</Badge>
+        </div>
+        {order.assigned_to_name && (
           <div>
-            <h2 className="text-xl font-semibold text-slate-900">{order.order_number}</h2>
-            <p className="text-slate-500">{order.retailer_name}</p>
+            <p className="text-xs text-muted-foreground">Assigned To</p>
+            <p className="font-medium text-foreground">{order.assigned_to_name}</p>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
-            <XCircle className="w-6 h-6" />
-          </button>
+        )}
+      </div>
+
+      <h3 className="font-semibold text-foreground mb-2">Order Items</h3>
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Product</TableHead>
+            <TableHead className="text-right">Qty</TableHead>
+            <TableHead className="text-right">Price</TableHead>
+            <TableHead className="text-right">Total</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {order.items.map((item, index) => (
+            <TableRow key={index}>
+              <TableCell>{item.product}</TableCell>
+              <TableCell className="text-right font-mono">{item.qty}</TableCell>
+              <TableCell className="text-right font-mono">৳ {item.price}</TableCell>
+              <TableCell className="text-right font-mono font-medium">৳ {(item.qty * item.price).toLocaleString()}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+
+      <div className="mt-3 bg-muted/50 rounded-lg p-3 space-y-1.5">
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Total Amount</span>
+          <span className="font-semibold font-mono">৳ {order.total_amount.toLocaleString()}</span>
         </div>
-
-        <div className="p-3">
-          <div className="grid grid-cols-2 gap-2 mb-3">
-            <div>
-              <p className="text-sm text-slate-500">Order Date</p>
-              <p className="font-medium">{order.order_date ? formatDateBD(order.order_date) : ''}</p>
-            </div>
-            <div>
-              <p className="text-sm text-slate-500">Delivery Date</p>
-              <p className="font-medium">{order.delivery_date ? formatDateBD(order.delivery_date) : ''}</p>
-            </div>
-            <div>
-              <p className="text-sm text-slate-500">Status</p>
-              <span
-                className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${statusConfig[order.status].color}`}
-              >
-                {statusConfig[order.status].label}
-              </span>
-            </div>
-            <div>
-              <p className="text-sm text-slate-500">Payment Status</p>
-              <span
-                className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${paymentConfig[order.payment_status].color}`}
-              >
-                {paymentConfig[order.payment_status].label}
-              </span>
-            </div>
-            {order.assigned_to_name && (
-              <div>
-                <p className="text-sm text-slate-500">কালেক্টর (Assigned To)</p>
-                <p className="font-medium">{order.assigned_to_name}</p>
-              </div>
-            )}
-          </div>
-
-          <h3 className="font-semibold text-slate-900 mb-2">Order Items</h3>
-          <table className="w-full mb-3">
-            <thead className="bg-slate-50">
-              <tr>
-                <th className="text-left p-2 text-sm font-medium text-slate-600">Product</th>
-                <th className="text-right p-2 text-sm font-medium text-slate-600">Qty</th>
-                <th className="text-right p-2 text-sm font-medium text-slate-600">Price</th>
-                <th className="text-right p-2 text-sm font-medium text-slate-600">Total</th>
-              </tr>
-            </thead>
-            <tbody>
-              {order.items.map((item, index) => (
-                <tr key={index} className="border-b border-slate-100">
-                  <td className="p-2">{item.product}</td>
-                  <td className="p-2 text-right">{item.qty}</td>
-                  <td className="p-2 text-right">৳ {item.price}</td>
-                  <td className="p-2 text-right font-medium">৳ {(item.qty * item.price).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="bg-slate-50 rounded-lg p-2">
-            <div className="flex justify-between mb-1">
-              <span className="text-slate-600">Total Amount</span>
-              <span className="font-semibold">৳ {order.total_amount.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between mb-1">
-              <span className="text-slate-600">Paid Amount</span>
-              <span className="font-semibold text-green-600">৳ {order.paid_amount.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between pt-1 border-t border-slate-200">
-              <span className="text-slate-900 font-medium">Due Amount</span>
-              <span className="font-bold text-red-600">
-                ৳ {(order.total_amount - order.paid_amount).toLocaleString()}
-              </span>
-            </div>
-          </div>
-
-          {order.payments && order.payments.length > 0 && (
-            <div className="mt-3">
-              <h3 className="font-semibold text-slate-900 mb-2">Payment History</h3>
-              <div className="space-y-2">
-                {order.payments.map((payment: Payment) => (
-                  <div key={payment.id} className="bg-slate-50 rounded-lg p-2">
-                    <div className="flex justify-between items-start mb-1">
-                      <div>
-                        <p className="font-medium text-slate-900">৳ {payment.amount.toLocaleString()}</p>
-                        <p className="text-xs text-slate-500">
-                          {formatDateBD(payment.created_at)}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-slate-600 capitalize">{payment.payment_method}</p>
-                        {payment.collected_by_name && (
-                          <p className="text-xs text-slate-500">by {payment.collected_by_name}</p>
-                        )}
-                      </div>
-                    </div>
-                    {payment.notes && (
-                      <p className="text-xs text-slate-500 mt-1">{payment.notes}</p>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+        <div className="flex justify-between text-sm">
+          <span className="text-muted-foreground">Paid Amount</span>
+          <span className="font-semibold font-mono text-[hsl(var(--dh-green))]">৳ {order.paid_amount.toLocaleString()}</span>
         </div>
-
-        <div className="p-3 border-t border-slate-200 flex justify-end gap-2">
-          <button 
-            onClick={onEdit}
-            className="btn-secondary flex items-center gap-2"
-          >
-            <Edit className="w-4 h-4" />
-            Edit Payment
-          </button>
-          <button className="btn-secondary flex items-center gap-2">
-            <Printer className="w-4 h-4" />
-            Print Challan
-          </button>
-          <button onClick={onClose} className="btn-primary">
-            Close
-          </button>
+        <div className="flex justify-between text-sm border-t border-border pt-1.5">
+          <span className="font-medium text-foreground">Due Amount</span>
+          <span className="font-bold font-mono text-[hsl(var(--dh-red))]">
+            ৳ {(order.total_amount - order.paid_amount).toLocaleString()}
+          </span>
         </div>
       </div>
-    </div>
+
+      {order.payments && order.payments.length > 0 && (
+        <div className="mt-4">
+          <h3 className="font-semibold text-foreground mb-2">Payment History</h3>
+          <div className="space-y-2">
+            {order.payments.map((payment) => (
+              <div key={payment.id} className="bg-muted/40 rounded-lg p-3">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="font-medium font-mono text-foreground">৳ {payment.amount.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground">{formatDateBD(payment.created_at)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground capitalize">{payment.payment_method}</p>
+                    {payment.collected_by_name && (
+                      <p className="text-xs text-muted-foreground">by {payment.collected_by_name}</p>
+                    )}
+                  </div>
+                </div>
+                {payment.notes && <p className="text-xs text-muted-foreground mt-1">{payment.notes}</p>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </ModalShell>
   );
 }
 
-function EditSaleModal({ 
-  order, 
-  onClose, 
-  onSave 
-}: { 
-  order: SalesOrder; 
+function EditSaleModal({ order, onClose, onSave }: {
+  order: SalesOrder;
   onClose: () => void;
   onSave: () => void;
 }) {
@@ -908,86 +807,36 @@ function EditSaleModal({
   const [loadingSalesReps, setLoadingSalesReps] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  // Fetch sales reps on mount
   useEffect(() => {
-    const fetchSalesReps = async () => {
-      try {
-        setLoadingSalesReps(true);
-        const usersRes = await api.get('/api/users');
-        if (usersRes.data) {
-          const reps = usersRes.data
-            .filter((u: any) => u.role === 'sales_rep')
-            .map((u: any) => ({
-              id: u.id,
-              name: u.name
-            }));
-          setSalesReps(reps);
-        }
-      } catch (error: any) {
-        console.error('[EditSaleModal] Error fetching sales reps:', error);
-      } finally {
-        setLoadingSalesReps(false);
-      }
-    };
-    fetchSalesReps();
+    api.get('/api/users').then((res) => {
+      if (res.data) setSalesReps(res.data.filter((u: any) => u.role === 'sales_rep').map((u: any) => ({ id: u.id, name: u.name })));
+    }).catch(() => { /* ignore */ }).finally(() => setLoadingSalesReps(false));
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
     try {
       const updatePayload: any = {
         paid_amount: formData.paid_amount,
+        delivery_status: formData.delivery_status !== 'pending' ? formData.delivery_status : undefined,
+        assigned_to: formData.assigned_to || null,
+        notes: formData.notes || undefined,
       };
-
-      // Update delivery status if needed
-      if (formData.delivery_status !== 'pending') {
-        updatePayload.delivery_status = formData.delivery_status;
-      }
-
-      // Update assigned_to (can be set or cleared)
-      if (formData.assigned_to) {
-        updatePayload.assigned_to = formData.assigned_to;
-      } else {
-        // If empty string, set to null to clear the assignment
-        updatePayload.assigned_to = null;
-      }
-
-      if (formData.notes) {
-        updatePayload.notes = formData.notes;
-      }
-
-      console.log('[EditSaleModal] Updating sale:', order.id, updatePayload);
       const localRecord: SaleRecord = {
-        id: order.id,
-        retailer_id: order.retailer_id || '',
-        retailer_name: order.retailer_name,
-        items: order.items.map((item) => ({
-          product_id: '',
-          product_name: item.product,
-          quantity: item.qty,
-          unit_price: item.price,
-          total: item.qty * item.price,
-        })),
-        total_amount: order.total_amount,
-        paid_amount: formData.paid_amount,
-        payment_method: 'cash',
-        sale_date: order.order_date,
-        synced: false,
-        lastModified: Date.now(),
+        id: order.id, retailer_id: order.retailer_id || '', retailer_name: order.retailer_name,
+        items: order.items.map((item) => ({ product_id: '', product_name: item.product, quantity: item.qty, unit_price: item.price, total: item.qty * item.price })),
+        total_amount: order.total_amount, paid_amount: formData.paid_amount, payment_method: 'cash',
+        sale_date: order.order_date, synced: false, lastModified: Date.now(),
       };
       await putWithOfflineQueue('sales', `/api/sales/${order.id}`, updatePayload, {
         localRecord,
         onOfflineSave: async (record) => saveSale(record as SaleRecord),
         onOnlineSave: async (data) => saveSale(mapApiSaleToRecord(data, true)),
       });
-      console.log('[EditSaleModal] Sale updated successfully');
-
       alert('Order updated successfully!');
       onSave();
     } catch (error: any) {
-      console.error('[EditSaleModal] Error updating sale:', error);
       alert(`Failed to update order: ${error.response?.data?.detail || error.message}`);
     } finally {
       setLoading(false);
@@ -995,159 +844,98 @@ function EditSaleModal({
   };
 
   const calculatedDue = Math.max(0, order.total_amount - formData.paid_amount);
-  const calculatedPaymentStatus = 
-    calculatedDue === 0 ? 'paid' : 
-    formData.paid_amount > 0 ? 'partial' : 
-    'unpaid';
+  const calculatedPaymentStatus = calculatedDue === 0 ? 'paid' : formData.paid_amount > 0 ? 'partial' : 'unpaid';
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
-        <div className="p-3 border-b border-slate-200">
-          <h2 className="text-xl font-semibold text-slate-900">Edit Order</h2>
-          <p className="text-slate-500">{order.order_number} - {order.retailer_name}</p>
+    <ModalShell
+      title="Edit Order"
+      subtitle={`${order.order_number} — ${order.retailer_name}`}
+      onClose={onClose}
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="bg-muted/40 rounded-lg p-3 space-y-1.5 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Total Amount</span>
+            <span className="font-semibold font-mono">৳ {order.total_amount.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">Current Paid</span>
+            <span className="font-semibold font-mono text-[hsl(var(--dh-green))]">৳ {order.paid_amount.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between border-t border-border pt-1.5">
+            <span className="font-medium text-foreground">Current Due</span>
+            <span className="font-bold font-mono text-[hsl(var(--dh-red))]">
+              ৳ {(order.total_amount - order.paid_amount).toLocaleString()}
+            </span>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-3 space-y-3">
-          <div className="bg-slate-50 rounded-lg p-3">
-            <div className="flex justify-between mb-2">
-              <span className="text-slate-600">Total Amount</span>
-              <span className="font-semibold text-slate-900">৳ {order.total_amount.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between mb-2">
-              <span className="text-slate-600">Current Paid</span>
-              <span className="font-semibold text-green-600">৳ {order.paid_amount.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between pt-2 border-t border-slate-200">
-              <span className="text-slate-900 font-medium">Current Due</span>
-              <span className="font-bold text-red-600">
-                ৳ {(order.total_amount - order.paid_amount).toLocaleString()}
-              </span>
-            </div>
-          </div>
+        <div className="border-t border-border pt-3">
+          <PaymentHistory saleId={order.id} />
+        </div>
 
-          {/* Payment History */}
-          <div className="border-t border-slate-200 pt-3 mt-3">
-            <PaymentHistory saleId={order.id} />
-          </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">Paid Amount (৳)</label>
+          <input type="number" value={formData.paid_amount}
+            onChange={(e) => setFormData({ ...formData, paid_amount: Number(e.target.value) })}
+            className="input-field" min={0} max={order.total_amount} step="0.01" required />
+          <p className="text-xs text-muted-foreground">Enter the total amount paid (including previous payments)</p>
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Paid Amount (৳)
-            </label>
-            <input
-              type="number"
-              value={formData.paid_amount}
-              onChange={(e) => setFormData({ ...formData, paid_amount: Number(e.target.value) })}
-              className="input-field"
-              min={0}
-              max={order.total_amount}
-              step="0.01"
-              required
-            />
-            <p className="text-xs text-slate-500 mt-1">
-              Enter the total amount paid (including previous payments)
-            </p>
+        <div className="bg-[hsl(var(--dh-blue))]/5 rounded-lg p-3 space-y-1.5 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">New Due Amount</span>
+            <span className="font-semibold font-mono text-[hsl(var(--dh-red))]">৳ {calculatedDue.toLocaleString()}</span>
           </div>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground">Payment Status</span>
+            <Badge variant={paymentConfig[calculatedPaymentStatus].variant}>
+              {paymentConfig[calculatedPaymentStatus].label}
+            </Badge>
+          </div>
+        </div>
 
-          <div className="bg-blue-50 rounded-lg p-2">
-            <div className="flex justify-between mb-1">
-              <span className="text-sm text-slate-600">New Due Amount</span>
-              <span className="font-semibold text-red-600">৳ {calculatedDue.toLocaleString()}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-sm text-slate-600">Payment Status</span>
-              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                calculatedPaymentStatus === 'paid' ? 'bg-green-100 text-green-700' :
-                calculatedPaymentStatus === 'partial' ? 'bg-yellow-100 text-yellow-700' :
-                'bg-red-100 text-red-700'
-              }`}>
-                {calculatedPaymentStatus === 'paid' ? 'Paid' :
-                 calculatedPaymentStatus === 'partial' ? 'Partial' : 'Unpaid'}
-              </span>
-            </div>
-          </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">Delivery Status</label>
+          <select value={formData.delivery_status}
+            onChange={(e) => setFormData({ ...formData, delivery_status: e.target.value as any })}
+            className="input-field">
+            <option value="pending">Pending</option>
+            <option value="delivered">Delivered</option>
+            <option value="partially_delivered">Partially Delivered</option>
+            <option value="returned">Returned</option>
+          </select>
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Delivery Status
-            </label>
-            <select
-              value={formData.delivery_status}
-              onChange={(e) => setFormData({ ...formData, delivery_status: e.target.value as 'pending' | 'delivered' | 'partially_delivered' | 'returned' })}
-              className="input-field"
-            >
-              <option value="pending">Pending</option>
-              <option value="delivered">Delivered</option>
-              <option value="partially_delivered">Partially Delivered</option>
-              <option value="returned">Returned</option>
-            </select>
-          </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">Assigned To</label>
+          <select value={formData.assigned_to}
+            onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
+            className="input-field" disabled={loadingSalesReps}>
+            <option value="">{loadingSalesReps ? 'Loading SRs…' : 'None (Clear Assignment)'}</option>
+            {salesReps.map((rep) => <option key={rep.id} value={rep.id}>{rep.name}</option>)}
+          </select>
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              কালেক্টর (Assigned To)
-            </label>
-            <select
-              value={formData.assigned_to}
-              onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
-              className="input-field"
-              disabled={loadingSalesReps}
-            >
-              <option value="">{loadingSalesReps ? 'Loading SRs...' : 'None (Clear Assignment)'}</option>
-              {salesReps.map((rep) => (
-                <option key={rep.id} value={rep.id}>
-                  {rep.name}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-slate-500 mt-1">
-              Select SR/delivery man responsible for collecting payment. Select "None" to clear assignment.
-            </p>
-          </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">Notes (Optional)</label>
+          <textarea value={formData.notes}
+            onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+            className="input-field" rows={2} placeholder="Add any notes about this update…" />
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Notes (Optional)
-            </label>
-            <textarea
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              className="input-field"
-              rows={2}
-              placeholder="Add any notes about this update..."
-            />
-          </div>
-
-          <div className="flex justify-end gap-2 pt-2">
-            <button 
-              type="button" 
-              onClick={onClose} 
-              className="btn-secondary"
-              disabled={loading}
-            >
-              Cancel
-            </button>
-            <button 
-              type="submit" 
-              className="btn-primary flex items-center gap-2"
-              disabled={loading}
-            >
-              {loading ? 'Updating...' : 'Update Order'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
+          <Button type="submit" disabled={loading}>{loading ? 'Updating…' : 'Update Order'}</Button>
+        </div>
+      </form>
+    </ModalShell>
   );
 }
 
 function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (order: SalesOrder) => void | Promise<void> }) {
   const [formData, setFormData] = useState({
-    retailer_name: '',
-    retailer_id: '',
-    delivery_date: '',
-    assigned_to: '',
+    retailer_name: '', retailer_id: '', delivery_date: '', assigned_to: '',
     items: [{ product: '', qty: 0, price: 0 }],
   });
   const [retailers, setRetailers] = useState<Array<{ id: string; name: string; shop_name: string }>>([]);
@@ -1162,90 +950,26 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
   const [openProductDropdownIndex, setOpenProductDropdownIndex] = useState<number | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Fetch retailers and products on mount
   useEffect(() => {
     const fetchData = async () => {
       const token = localStorage.getItem('token');
-      if (!token) {
-        console.warn('[AddOrderModal] No token found, skipping data fetch');
-        setLoadingRetailers(false);
-        setLoadingProducts(false);
-        return;
-      }
-
+      if (!token) { setLoadingRetailers(false); setLoadingProducts(false); return; }
       try {
-        setLoadingRetailers(true);
-        setLoadingProducts(true);
-        setLoadingSalesReps(true);
-        
         const [retailersRes, productsRes, usersRes] = await Promise.all([
-          api.get('/api/retailers'),
-          api.get('/api/products'),
-          api.get('/api/users')
+          api.get('/api/retailers'), api.get('/api/products'), api.get('/api/users'),
         ]);
-        
-        if (retailersRes.data) {
-          setRetailers(retailersRes.data.map((r: any) => ({
-            id: r.id,
-            name: r.name,
-            shop_name: r.shop_name
-          })));
-        }
-        
-        if (productsRes.data) {
-          setProducts(productsRes.data.map((p: any) => ({
-            id: p.id,
-            name: p.name,
-            selling_price: p.selling_price || 0,
-            barcode: p.barcode
-          })));
-        }
-        
-        if (usersRes.data) {
-          // Filter users with role 'sales_rep'
-          const reps = usersRes.data
-            .filter((u: any) => u.role === 'sales_rep')
-            .map((u: any) => ({
-              id: u.id,
-              name: u.name
-            }));
-          setSalesReps(reps);
-        }
+        if (retailersRes.data) setRetailers(retailersRes.data.map((r: any) => ({ id: r.id, name: r.name, shop_name: r.shop_name })));
+        if (productsRes.data) setProducts(productsRes.data.map((p: any) => ({ id: p.id, name: p.name, selling_price: p.selling_price || 0, barcode: p.barcode })));
+        if (usersRes.data) setSalesReps(usersRes.data.filter((u: any) => u.role === 'sales_rep').map((u: any) => ({ id: u.id, name: u.name })));
       } catch (error: any) {
-        console.error('[AddOrderModal] Error fetching data:', error);
-        console.error('[AddOrderModal] Error details:', {
-          message: error?.message,
-          status: error?.response?.status,
-          data: error?.response?.data,
-          url: error?.config?.url
-        });
-        
-        const isOfflineError =
-          !navigator.onLine || error?.isNetworkError || error?.code === 'ERR_NETWORK' || error?.message?.includes('Network');
+        const isOfflineError = !navigator.onLine || error?.isNetworkError || error?.code === 'ERR_NETWORK';
         if (isOfflineError) {
-          const [offlineRetailers, offlineProducts] = await Promise.all([
-            getOfflineRetailers(),
-            getOfflineProducts(),
-          ]);
-          setRetailers(
-            offlineRetailers.map((r) => ({
-              id: r.id,
-              name: r.name,
-              shop_name: r.shop_name,
-            }))
-          );
-          setProducts(
-            offlineProducts.map((p) => ({
-              id: p.id,
-              name: p.name,
-              selling_price: p.unit_price,
-            }))
-          );
+          const [offlineRetailers, offlineProducts] = await Promise.all([getOfflineRetailers(), getOfflineProducts()]);
+          setRetailers(offlineRetailers.map((r) => ({ id: r.id, name: r.name, shop_name: r.shop_name })));
+          setProducts(offlineProducts.map((p) => ({ id: p.id, name: p.name, selling_price: p.unit_price })));
           setSalesReps([]);
         } else {
-          // Show user-friendly error message
-          const errorMsg = error?.response?.data?.detail || error?.message || 'Failed to load data';
-          alert(`Error loading dropdown data: ${errorMsg}\n\nPlease check:\n1. Backend is running\n2. API URL is correct\n3. You are logged in`);
+          alert(`Error loading data: ${error?.response?.data?.detail || error?.message}`);
         }
       } finally {
         setLoadingRetailers(false);
@@ -1253,11 +977,9 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
         setLoadingSalesReps(false);
       }
     };
-
     fetchData();
   }, []);
 
-  // Close retailer dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       const target = event.target as HTMLElement;
@@ -1275,62 +997,41 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Prevent double submission
-    if (isSubmitting) {
-      console.warn('[AddOrderModal] Form submission already in progress, ignoring duplicate click');
-      return;
-    }
-    
+    if (isSubmitting) return;
     setIsSubmitting(true);
-    
     try {
       const total = formData.items.reduce((sum, item) => sum + item.qty * item.price, 0);
       const orderData = {
-        id: '',
-        order_number: `ORD-${Date.now()}`,
-        retailer_name: formData.retailer_name,
-        retailer_id: formData.retailer_id,
-        order_date: new Date().toISOString().split('T')[0],
-        delivery_date: formData.delivery_date,
-        status: 'pending' as const,
-        payment_status: 'unpaid' as const,
-        total_amount: total,
-        paid_amount: 0,
-        items: formData.items,
+        id: '', order_number: `ORD-${Date.now()}`,
+        retailer_name: formData.retailer_name, retailer_id: formData.retailer_id,
+        order_date: new Date().toISOString().split('T')[0], delivery_date: formData.delivery_date,
+        status: 'pending' as const, payment_status: 'unpaid' as const,
+        total_amount: total, paid_amount: 0, items: formData.items,
         assigned_to: formData.assigned_to || undefined,
       };
-      
-      // Wait for onSave to complete (it's async)
       await onSave(orderData);
     } catch (error) {
-      console.error('[AddOrderModal] Error in handleSubmit:', error);
-      // Don't close modal on error, let user retry
+      console.error('[AddOrderModal] Error:', error);
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const addItem = () => {
-    setFormData({
-      ...formData,
-      items: [...formData.items, { product: '', qty: 0, price: 0 }],
-    });
+    setFormData({ ...formData, items: [...formData.items, { product: '', qty: 0, price: 0 }] });
     setProductSearchTerms((prev) => [...prev, '']);
   };
 
   const handleBarcodeScan = (barcode: string) => {
-    // Find product by barcode from fetched products
     const product = products.find((p: any) => p.barcode === barcode);
-    
     if (product) {
-      const existingIndex = formData.items.findIndex(item => item.product === product.name);
+      const existingIndex = formData.items.findIndex((item) => item.product === product.name);
       if (existingIndex >= 0) {
         const newItems = [...formData.items];
         newItems[existingIndex].qty += 1;
         setFormData({ ...formData, items: newItems });
       } else {
-        const emptyIndex = formData.items.findIndex(item => !item.product);
+        const emptyIndex = formData.items.findIndex((item) => !item.product);
         if (emptyIndex >= 0) {
           const newItems = [...formData.items];
           newItems[emptyIndex] = { product: product.name, qty: 1, price: product.selling_price };
@@ -1339,10 +1040,7 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
           nextTerms[emptyIndex] = '';
           setProductSearchTerms(nextTerms);
         } else {
-          setFormData({
-            ...formData,
-            items: [...formData.items, { product: product.name, qty: 1, price: product.selling_price }],
-          });
+          setFormData({ ...formData, items: [...formData.items, { product: product.name, qty: 1, price: product.selling_price }] });
           setProductSearchTerms((prev) => [...prev, '']);
         }
       }
@@ -1351,296 +1049,174 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
-        <div className="p-3 border-b border-slate-200">
-          <h2 className="text-xl font-semibold text-slate-900">New Sales Order</h2>
-        </div>
+  const dropdownBase = 'absolute z-50 w-full mt-1 bg-card border border-border rounded-lg shadow-lg max-h-60 overflow-hidden';
+  const dropdownItem = 'px-3 py-2 cursor-pointer hover:bg-accent transition-colors text-sm text-foreground';
 
-        <form onSubmit={handleSubmit} className="p-3 space-y-2">
-          <div className="grid grid-cols-2 gap-2">
-            <div className="relative retailer-dropdown-container">
-              <label className="block text-sm font-medium text-slate-700 mb-1">Retailer</label>
-              <div className="relative">
-                <div
-                  onClick={() => !loadingRetailers && setShowRetailerDropdown(!showRetailerDropdown)}
-                  className="input-field flex items-center justify-between cursor-pointer"
-                >
-                  <span className={formData.retailer_name ? 'text-slate-900' : 'text-slate-400'}>
-                    {formData.retailer_name || (loadingRetailers ? 'Loading retailers...' : retailers.length === 0 ? 'No retailers found - Add retailers first' : 'Select Retailer')}
-                  </span>
-                  <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${showRetailerDropdown ? 'rotate-180' : ''}`} />
-                </div>
-                {showRetailerDropdown && !loadingRetailers && (
-                  <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-hidden">
-                    <div className="p-2 border-b border-slate-200">
-                      <div className="relative">
-                        <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                        <input
-                          type="text"
-                          placeholder="খুঁজুন... (Search)"
-                          value={retailerSearchTerm}
-                          onChange={(e) => setRetailerSearchTerm(e.target.value)}
-                          className="w-full pl-8 pr-2 py-1.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                          autoFocus
-                        />
-                      </div>
-                    </div>
-                    <div className="max-h-48 overflow-y-auto">
-                      {retailers
-                        .filter((retailer) => {
-                          const searchLower = retailerSearchTerm.toLowerCase();
-                          return (
-                            retailer.name.toLowerCase().includes(searchLower) ||
-                            retailer.shop_name.toLowerCase().includes(searchLower)
-                          );
-                        })
-                        .map((retailer) => (
-                          <div
-                            key={retailer.id}
-                            onClick={() => {
-                              setFormData({ 
-                                ...formData, 
-                                retailer_name: retailer.shop_name || retailer.name,
-                                retailer_id: retailer.id,
-                              });
-                              setShowRetailerDropdown(false);
-                              setRetailerSearchTerm('');
-                            }}
-                            className={`px-3 py-2 cursor-pointer hover:bg-primary-50 transition-colors ${
-                              formData.retailer_name === (retailer.shop_name || retailer.name)
-                                ? 'bg-primary-50 text-primary-700'
-                                : 'text-slate-900'
-                            }`}
-                          >
-                            {retailer.shop_name} ({retailer.name})
-                          </div>
-                        ))}
-                      {retailers.filter((retailer) => {
-                        const searchLower = retailerSearchTerm.toLowerCase();
-                        return (
-                          retailer.name.toLowerCase().includes(searchLower) ||
-                          retailer.shop_name.toLowerCase().includes(searchLower)
-                        );
-                      }).length === 0 && (
-                        <div className="px-3 py-2 text-sm text-slate-500 text-center">
-                          No retailers found
-                        </div>
-                      )}
-                    </div>
+  return (
+    <ModalShell title="New Sales Order" onClose={onClose}>
+      <form onSubmit={handleSubmit} className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="relative retailer-dropdown-container">
+            <label className="block text-sm font-medium text-foreground mb-1.5">Retailer</label>
+            <div
+              onClick={() => !loadingRetailers && setShowRetailerDropdown(!showRetailerDropdown)}
+              className="input-field flex items-center justify-between cursor-pointer"
+            >
+              <span className={formData.retailer_name ? 'text-foreground' : 'text-muted-foreground'}>
+                {formData.retailer_name || (loadingRetailers ? 'Loading…' : retailers.length === 0 ? 'No retailers found' : 'Select Retailer')}
+              </span>
+              <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showRetailerDropdown ? 'rotate-180' : ''}`} />
+            </div>
+            {showRetailerDropdown && !loadingRetailers && (
+              <div className={dropdownBase}>
+                <div className="p-2 border-b border-border">
+                  <div className="relative">
+                    <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <input type="text" placeholder="Search…" value={retailerSearchTerm}
+                      onChange={(e) => setRetailerSearchTerm(e.target.value)}
+                      className="input-field pl-7 text-sm h-8" autoFocus />
                   </div>
-                )}
+                </div>
+                <div className="max-h-48 overflow-y-auto">
+                  {retailers.filter((r) => {
+                    const q = retailerSearchTerm.toLowerCase();
+                    return r.name.toLowerCase().includes(q) || r.shop_name.toLowerCase().includes(q);
+                  }).map((retailer) => (
+                    <div key={retailer.id} className={dropdownItem}
+                      onClick={() => {
+                        setFormData({ ...formData, retailer_name: retailer.shop_name || retailer.name, retailer_id: retailer.id });
+                        setShowRetailerDropdown(false);
+                        setRetailerSearchTerm('');
+                      }}>
+                      {retailer.shop_name} ({retailer.name})
+                    </div>
+                  ))}
+                </div>
               </div>
-              {formData.retailer_name && (
-                <input
-                  type="hidden"
-                  value={formData.retailer_name}
-                  required
-                />
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">Delivery Date</label>
-              <input
-                type="date"
-                value={formData.delivery_date}
-                onChange={(e) => setFormData({ ...formData, delivery_date: e.target.value })}
-                className="input-field"
-                required
-              />
-            </div>
+            )}
+            {formData.retailer_name && <input type="hidden" value={formData.retailer_name} required />}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              কালেক্টর (Assigned To)
-            </label>
-            <select
-              value={formData.assigned_to}
-              onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
-              className="input-field"
-              disabled={loadingSalesReps}
-            >
-              <option value="">
-                {loadingSalesReps 
-                  ? 'Loading SRs...' 
-                  : salesReps.length === 0 
-                    ? 'No SR found - Add SR users first' 
-                    : 'Select SR/Delivery Man (Optional)'}
-              </option>
-              {salesReps.map((rep) => (
-                <option key={rep.id} value={rep.id}>
-                  {rep.name}
-                </option>
-              ))}
-            </select>
-            <p className="text-xs text-slate-500 mt-1">
-              Select the SR/delivery man responsible for collecting payment for this invoice
-            </p>
+            <label className="block text-sm font-medium text-foreground mb-1.5">Delivery Date</label>
+            <input type="date" value={formData.delivery_date}
+              onChange={(e) => setFormData({ ...formData, delivery_date: e.target.value })}
+              className="input-field" required />
           </div>
+        </div>
 
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-sm font-medium text-slate-700">Order Items</label>
-                        <div className="flex items-center gap-2">
-                          <BarcodeScanButton onScan={handleBarcodeScan} />
-                          <button type="button" onClick={addItem} className="text-primary-600 text-sm font-medium">
-                            + Add Item
-                          </button>
-                        </div>
-                      </div>
-            {formData.items.map((item, index) => (
-              <div key={index} className="grid grid-cols-5 gap-2 mb-1 items-center">
-                <div className="col-span-2 relative product-dropdown-container">
-                  <div
-                    onClick={() => !loadingProducts && setOpenProductDropdownIndex(openProductDropdownIndex === index ? null : index)}
-                    className="input-field flex items-center justify-between cursor-pointer"
-                  >
-                    <span className={item.product ? 'text-slate-900' : 'text-slate-400'}>
-                      {item.product || (loadingProducts ? 'Loading products...' : products.length === 0 ? 'No products found' : 'Select Product')}
-                    </span>
-                    <ChevronDown
-                      className={`w-4 h-4 text-slate-400 transition-transform ${openProductDropdownIndex === index ? 'rotate-180' : ''}`}
-                    />
-                  </div>
-                  {openProductDropdownIndex === index && !loadingProducts && (
-                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-60 overflow-hidden">
-                      <div className="p-2 border-b border-slate-200">
-                        <div className="relative">
-                          <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-                          <input
-                            type="text"
-                            placeholder="পণ্য খুঁজুন... (Search)"
-                            value={productSearchTerms[index] || ''}
-                            onChange={(e) => {
-                              const next = [...productSearchTerms];
-                              next[index] = e.target.value;
-                              setProductSearchTerms(next);
-                            }}
-                            className="w-full pl-8 pr-2 py-1.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                            autoFocus
-                          />
-                        </div>
-                      </div>
-                      <div className="max-h-48 overflow-y-auto">
-                        {products
-                          .filter((product) =>
-                            product.name.toLowerCase().includes((productSearchTerms[index] || '').toLowerCase())
-                          )
-                          .map((product: any) => (
-                            <div
-                              key={product.id}
-                              onClick={() => {
-                                const newItems = [...formData.items];
-                                newItems[index].product = product.name;
-                                newItems[index].price = product.selling_price;
-                                setFormData({ ...formData, items: newItems });
-                                setOpenProductDropdownIndex(null);
-                                const next = [...productSearchTerms];
-                                next[index] = '';
-                                setProductSearchTerms(next);
-                              }}
-                              className={`px-3 py-2 cursor-pointer hover:bg-primary-50 transition-colors ${
-                                item.product === product.name ? 'bg-primary-50 text-primary-700' : 'text-slate-900'
-                              }`}
-                            >
-                              {product.name} - ৳{product.selling_price}
-                            </div>
-                          ))}
-                        {products.filter((product) =>
-                          product.name.toLowerCase().includes((productSearchTerms[index] || '').toLowerCase())
-                        ).length === 0 && (
-                          <div className="px-3 py-2 text-sm text-slate-500 text-center">
-                            No products found
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  {item.product && (
-                    <input type="hidden" value={item.product} required />
-                  )}
-                </div>
-                <input
-                  type="number"
-                  placeholder="Qty"
-                  value={item.qty || ''}
-                  onChange={(e) => {
-                    const newItems = [...formData.items];
-                    newItems[index].qty = Number(e.target.value);
-                    setFormData({ ...formData, items: newItems });
-                  }}
-                  className="input-field"
-                  required
-                />
-                <input
-                  type="number"
-                  placeholder="Price"
-                  value={item.price || ''}
-                  onChange={(e) => {
-                    const newItems = [...formData.items];
-                    newItems[index].price = Number(e.target.value);
-                    setFormData({ ...formData, items: newItems });
-                  }}
-                  className="input-field"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const newItems = formData.items.filter((_, i) => i !== index);
-                    const newTerms = productSearchTerms.filter((_, i) => i !== index);
-                    setFormData({ ...formData, items: newItems });
-                    setProductSearchTerms(newTerms.length > 0 ? newTerms : ['']);
-                    setOpenProductDropdownIndex(null);
-                  }}
-                  className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors flex items-center justify-center"
-                  title="Delete item"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ))}
-          </div>
+        <div className="space-y-1.5">
+          <label className="block text-sm font-medium text-foreground">Assigned To (SR)</label>
+          <select value={formData.assigned_to}
+            onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value })}
+            className="input-field" disabled={loadingSalesReps}>
+            <option value="">{loadingSalesReps ? 'Loading SRs…' : salesReps.length === 0 ? 'No SR found' : 'Select SR/Delivery Man (Optional)'}</option>
+            {salesReps.map((rep) => <option key={rep.id} value={rep.id}>{rep.name}</option>)}
+          </select>
+        </div>
 
-          <div className="bg-slate-50 rounded-lg p-2">
-            <div className="flex justify-between">
-              <span className="font-medium">Total Amount</span>
-              <span className="font-bold text-lg">
-                ৳ {formData.items.reduce((sum, item) => sum + item.qty * item.price, 0).toLocaleString()}
-              </span>
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium text-foreground">Order Items</label>
+            <div className="flex items-center gap-2">
+              <BarcodeScanButton onScan={handleBarcodeScan} />
+              <button type="button" onClick={addItem} className="text-sm text-[hsl(var(--primary))] font-medium hover:underline">
+                + Add Item
+              </button>
             </div>
           </div>
+          {formData.items.map((item, index) => (
+            <div key={index} className="grid grid-cols-5 gap-2 mb-2 items-center">
+              <div className="col-span-2 relative product-dropdown-container">
+                <div
+                  onClick={() => !loadingProducts && setOpenProductDropdownIndex(openProductDropdownIndex === index ? null : index)}
+                  className="input-field flex items-center justify-between cursor-pointer"
+                >
+                  <span className={item.product ? 'text-foreground' : 'text-muted-foreground'}>
+                    {item.product || (loadingProducts ? 'Loading…' : 'Select Product')}
+                  </span>
+                  <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${openProductDropdownIndex === index ? 'rotate-180' : ''}`} />
+                </div>
+                {openProductDropdownIndex === index && !loadingProducts && (
+                  <div className={dropdownBase}>
+                    <div className="p-2 border-b border-border">
+                      <div className="relative">
+                        <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <input type="text" placeholder="Search product…"
+                          value={productSearchTerms[index] || ''}
+                          onChange={(e) => {
+                            const next = [...productSearchTerms];
+                            next[index] = e.target.value;
+                            setProductSearchTerms(next);
+                          }}
+                          className="input-field pl-7 text-sm h-8" autoFocus />
+                      </div>
+                    </div>
+                    <div className="max-h-48 overflow-y-auto">
+                      {products.filter((p) => p.name.toLowerCase().includes((productSearchTerms[index] || '').toLowerCase())).map((product) => (
+                        <div key={product.id} className={dropdownItem}
+                          onClick={() => {
+                            const newItems = [...formData.items];
+                            newItems[index].product = product.name;
+                            newItems[index].price = product.selling_price;
+                            setFormData({ ...formData, items: newItems });
+                            setOpenProductDropdownIndex(null);
+                            const next = [...productSearchTerms];
+                            next[index] = '';
+                            setProductSearchTerms(next);
+                          }}>
+                          {product.name} — ৳{product.selling_price}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {item.product && <input type="hidden" value={item.product} required />}
+              </div>
+              <input type="number" placeholder="Qty" value={item.qty || ''}
+                onChange={(e) => {
+                  const newItems = [...formData.items];
+                  newItems[index].qty = Number(e.target.value);
+                  setFormData({ ...formData, items: newItems });
+                }}
+                className="input-field" required />
+              <input type="number" placeholder="Price" value={item.price || ''}
+                onChange={(e) => {
+                  const newItems = [...formData.items];
+                  newItems[index].price = Number(e.target.value);
+                  setFormData({ ...formData, items: newItems });
+                }}
+                className="input-field" required />
+              <button type="button"
+                onClick={() => {
+                  setFormData({ ...formData, items: formData.items.filter((_, i) => i !== index) });
+                  setProductSearchTerms(productSearchTerms.filter((_, i) => i !== index));
+                  setOpenProductDropdownIndex(null);
+                }}
+                className="p-2 rounded text-[hsl(var(--dh-red))] hover:bg-[hsl(var(--dh-red))]/10 transition-colors flex items-center justify-center">
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <button 
-              type="button" 
-              onClick={onClose} 
-              className="btn-secondary"
-              disabled={isSubmitting}
-            >
-              Cancel
-            </button>
-            <button 
-              type="submit" 
-              className="btn-primary"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? 'Creating...' : 'Create Order'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="bg-muted/40 rounded-lg p-3 flex justify-between text-sm">
+          <span className="font-medium text-foreground">Total Amount</span>
+          <span className="font-bold font-mono text-lg">
+            ৳ {formData.items.reduce((sum, item) => sum + item.qty * item.price, 0).toLocaleString()}
+          </span>
+        </div>
+
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>Cancel</Button>
+          <Button type="submit" disabled={isSubmitting}>{isSubmitting ? 'Creating…' : 'Create Order'}</Button>
+        </div>
+      </form>
+    </ModalShell>
   );
 }
 
-function CollectionModal({
-  order,
-  onClose,
-  onSuccess
-}: {
+function CollectionModal({ order, onClose, onSuccess }: {
   order: SalesOrder;
   onClose: () => void;
   onSuccess: () => void;
@@ -1656,287 +1232,129 @@ function CollectionModal({
   const dueAmount = order.total_amount - order.paid_amount;
 
   useEffect(() => {
-    const fetchSalesReps = async () => {
-      try {
-        const response = await api.get('/api/users');
-        if (response.data) {
-          const reps = response.data
-            .filter((u: any) => u.role === 'sales_rep')
-            .map((u: any) => ({
-              id: u.id,
-              name: u.name
-            }));
-          setSalesReps(reps);
-        }
-      } catch (error) {
-        console.error('[CollectionModal] Error fetching sales reps:', error);
-      } finally {
-        setLoadingReps(false);
-      }
-    };
-    fetchSalesReps();
+    api.get('/api/users').then((res) => {
+      if (res.data) setSalesReps(res.data.filter((u: any) => u.role === 'sales_rep').map((u: any) => ({ id: u.id, name: u.name })));
+    }).catch(() => { /* ignore */ }).finally(() => setLoadingReps(false));
   }, []);
 
-  // Set default collected_by: Route SR > Sale SR
   useEffect(() => {
     const determineDefaultSR = async () => {
       let defaultSrId = '';
-      
-      // Priority 1: If sale is in a route, use route's SR
       if (order.route_id) {
         try {
           const routeRes = await api.get(`/api/routes/${order.route_id}`);
-          if (routeRes.data?.assigned_to) {
-            defaultSrId = routeRes.data.assigned_to;
-          }
-        } catch (error) {
-          console.error('[CollectionModal] Error fetching route:', error);
-        }
+          if (routeRes.data?.assigned_to) defaultSrId = routeRes.data.assigned_to;
+        } catch { /* ignore */ }
       }
-      
-      // Priority 2: Fallback to sale's assigned_to
-      if (!defaultSrId && order.assigned_to) {
-        defaultSrId = order.assigned_to;
-      }
-      
-      if (defaultSrId) {
-        setCollectedBy(defaultSrId);
-      }
+      if (!defaultSrId && order.assigned_to) defaultSrId = order.assigned_to;
+      if (defaultSrId) setCollectedBy(defaultSrId);
     };
-    
     determineDefaultSR();
   }, [order.route_id, order.assigned_to]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const paymentAmount = parseFloat(amount);
-    
-    if (isNaN(paymentAmount) || paymentAmount <= 0) {
-      alert('Please enter a valid payment amount');
-      return;
-    }
-    
-    if (paymentAmount > dueAmount) {
-      alert(`Payment amount cannot exceed due amount of ৳${dueAmount.toLocaleString()}`);
-      return;
-    }
-    
-    // Auto-determine collected_by if not selected (fallback logic)
+    if (isNaN(paymentAmount) || paymentAmount <= 0) { alert('Please enter a valid payment amount'); return; }
+    if (paymentAmount > dueAmount) { alert(`Payment cannot exceed due amount of ৳${dueAmount.toLocaleString()}`); return; }
+
     let finalCollectedBy = collectedBy;
     if (!finalCollectedBy) {
-      // Priority: Route SR > Sale SR
       if (order.route_id) {
         try {
           const routeRes = await api.get(`/api/routes/${order.route_id}`);
-          if (routeRes.data?.assigned_to) {
-            finalCollectedBy = routeRes.data.assigned_to;
-          }
-        } catch (error) {
-          console.error('[CollectionModal] Error fetching route for fallback:', error);
-        }
+          if (routeRes.data?.assigned_to) finalCollectedBy = routeRes.data.assigned_to;
+        } catch { /* ignore */ }
       }
-      if (!finalCollectedBy && order.assigned_to) {
-        finalCollectedBy = order.assigned_to;
-      }
+      if (!finalCollectedBy && order.assigned_to) finalCollectedBy = order.assigned_to;
     }
-    
-    if (!finalCollectedBy) {
-      alert('Please select who collected this payment, or ensure the order is assigned to an SR');
-      return;
-    }
+    if (!finalCollectedBy) { alert('Please select who collected this payment'); return; }
+    if (!order.retailer_id) { alert('Order retailer information is missing. Please refresh and try again.'); return; }
 
     setLoading(true);
     try {
-      // Ensure retailer_id is available (it should be on the order object)
-      if (!order.retailer_id) {
-        console.error('[CollectionModal] Order missing retailer_id:', order);
-        alert('Error: Order retailer information is missing. Please refresh the page and try again.');
-        setLoading(false);
-        return;
-      }
-      
-      // Create payment record
-      const paymentPayload = {
-        retailer_id: order.retailer_id,
-        sale_id: order.id,
-        amount: paymentAmount,
-        payment_method: paymentMethod,
-        collected_by: finalCollectedBy,  // Use determined SR (from dropdown or fallback)
-        notes: notes || undefined
-      };
-      
-      console.log('[CollectionModal] Payment payload:', paymentPayload);
-      
-      await api.post('/api/payments', paymentPayload);
-      
-      // Update sale paid_amount
-      const newPaidAmount = order.paid_amount + paymentAmount;
-      await api.put(`/api/sales/${order.id}`, {
-        paid_amount: newPaidAmount
+      await api.post('/api/payments', {
+        retailer_id: order.retailer_id, sale_id: order.id, amount: paymentAmount,
+        payment_method: paymentMethod, collected_by: finalCollectedBy, notes: notes || undefined,
       });
-      
-      const remainingDue = dueAmount - paymentAmount;
-      const collectorName = salesReps.find(r => r.id === collectedBy)?.name || 'SR';
-      if (remainingDue > 0) {
-        alert(`Payment of ৳${paymentAmount.toLocaleString()} recorded. বাকি ৳${remainingDue.toLocaleString()} এখনও ${collectorName} এর কাছে পেন্ডিং।`);
-      } else {
-        alert(`Payment of ৳${paymentAmount.toLocaleString()} recorded. Invoice is now fully paid.`);
-      }
-      
-      // onSuccess will trigger parent component to refresh
+      await api.put(`/api/sales/${order.id}`, { paid_amount: order.paid_amount + paymentAmount });
+      const remaining = dueAmount - paymentAmount;
+      const collectorName = salesReps.find((r) => r.id === collectedBy)?.name || 'SR';
+      alert(remaining > 0
+        ? `Payment of ৳${paymentAmount.toLocaleString()} recorded. বাকি ৳${remaining.toLocaleString()} ${collectorName} এর কাছে পেন্ডিং।`
+        : `Payment of ৳${paymentAmount.toLocaleString()} recorded. Invoice is fully paid.`
+      );
       onSuccess();
     } catch (error: any) {
-      console.error('[CollectionModal] Error recording payment:', error);
-      console.error('[CollectionModal] Error details:', {
-        message: error?.message,
-        status: error?.response?.status,
-        data: error?.response?.data,
-        code: error?.code
-      });
-      
-      // Extract error message properly
-      let errorMessage = 'Failed to record payment';
-      
-      if (error?.code === 'ERR_NETWORK' || error?.message?.includes('Cannot connect')) {
-        errorMessage = 'Backend server is not responding. Please check:\n1. Backend is deployed on Render\n2. Backend service is running\n3. Try refreshing the page';
-      } else if (error?.response?.data) {
-        // Handle different error response formats
-        const errorData = error.response.data;
-        if (typeof errorData === 'string') {
-          errorMessage = errorData;
-        } else if (errorData.detail) {
-          errorMessage = typeof errorData.detail === 'string' ? errorData.detail : JSON.stringify(errorData.detail);
-        } else if (errorData.message) {
-          errorMessage = typeof errorData.message === 'string' ? errorData.message : JSON.stringify(errorData.message);
-        } else {
-          errorMessage = JSON.stringify(errorData);
-        }
-      } else if (error?.message) {
-        errorMessage = error.message;
-      }
-      
-      alert(`Failed to record payment: ${errorMessage}`);
+      const errorData = error?.response?.data;
+      const msg = typeof errorData === 'string' ? errorData
+        : errorData?.detail ? String(errorData.detail)
+        : error?.message || 'Failed to record payment';
+      alert(`Failed to record payment: ${msg}`);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
-        <div className="p-3 border-b border-slate-200">
-          <h2 className="text-xl font-semibold text-slate-900">টাকা জমা নিন (Collect Money)</h2>
-          <p className="text-slate-500">{order.order_number} - {order.retailer_name}</p>
+    <ModalShell
+      title="টাকা জমা নিন (Collect Money)"
+      subtitle={`${order.order_number} — ${order.retailer_name}`}
+      onClose={onClose}
+    >
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="bg-[hsl(var(--dh-red))]/8 border border-[hsl(var(--dh-red))]/20 rounded-lg p-4 text-center">
+          <p className="text-sm text-[hsl(var(--dh-red))] mb-1">Current Due Amount</p>
+          <p className="text-3xl font-bold font-mono text-[hsl(var(--dh-red))]">৳ {dueAmount.toLocaleString()}</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-3 space-y-3">
-          <div className="bg-red-50 rounded-lg p-3 text-center">
-            <p className="text-sm text-red-600 mb-1">Current Due Amount</p>
-            <p className="text-3xl font-bold text-red-600">৳ {dueAmount.toLocaleString()}</p>
-          </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">Payment Amount (৳) <span className="text-[hsl(var(--dh-red))]">*</span></label>
+          <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)}
+            className="input-field" placeholder="Enter amount" min={0} max={dueAmount} step="0.01" required />
+          <p className="text-xs text-muted-foreground">Maximum: ৳{dueAmount.toLocaleString()} (partial payments allowed)</p>
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Payment Amount (৳) <span className="text-red-500">*</span>
-            </label>
-            <input
-              type="number"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              className="input-field"
-              placeholder="Enter amount"
-              min={0}
-              max={dueAmount}
-              step="0.01"
-              required
-            />
-            <p className="text-xs text-slate-500 mt-1">
-              Maximum: ৳{dueAmount.toLocaleString()} (partial payments allowed)
-            </p>
-          </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">Collected By <span className="text-[hsl(var(--dh-red))]">*</span></label>
+          <select value={collectedBy} onChange={(e) => setCollectedBy(e.target.value)} className="input-field" required disabled={loadingReps}>
+            <option value="">{loadingReps ? 'Loading SRs…' : 'Select SR/Delivery Man'}</option>
+            {salesReps.map((rep) => <option key={rep.id} value={rep.id}>{rep.name}</option>)}
+          </select>
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              কালেক্টর (Collected By) <span className="text-red-500">*</span>
-            </label>
-            <select
-              value={collectedBy}
-              onChange={(e) => setCollectedBy(e.target.value)}
-              className="input-field"
-              required
-              disabled={loadingReps}
-            >
-              <option value="">{loadingReps ? 'Loading SRs...' : 'Select SR/Delivery Man'}</option>
-              {salesReps.map((rep) => (
-                <option key={rep.id} value={rep.id}>
-                  {rep.name}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">Payment Method</label>
+          <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="input-field">
+            <option value="cash">Cash</option>
+            <option value="bank">Bank Transfer</option>
+            <option value="mobile">Mobile Banking (bKash/Nagad)</option>
+          </select>
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Payment Method
-            </label>
-            <select
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value)}
-              className="input-field"
-            >
-              <option value="cash">Cash</option>
-              <option value="bank">Bank Transfer</option>
-              <option value="mobile">Mobile Banking (bKash/Nagad)</option>
-            </select>
-          </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-medium text-foreground">Notes (Optional)</label>
+          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} className="input-field" rows={2} placeholder="Add notes…" />
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">
-              Notes (Optional)
-            </label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="input-field"
-              rows={2}
-              placeholder="Add any notes about this payment..."
-            />
-          </div>
-
-          {amount && parseFloat(amount) > 0 && (
-            <div className="bg-blue-50 rounded-lg p-2">
-              <div className="flex justify-between mb-1">
-                <span className="text-sm text-slate-600">Payment Amount</span>
-                <span className="font-semibold text-green-600">৳ {parseFloat(amount || '0').toLocaleString()}</span>
-              </div>
-              <div className="flex justify-between pt-1 border-t border-blue-200">
-                <span className="text-sm text-slate-600">Remaining Due</span>
-                <span className="font-bold text-red-600">
-                  ৳ {Math.max(0, dueAmount - parseFloat(amount || '0')).toLocaleString()}
-                </span>
-              </div>
+        {amount && parseFloat(amount) > 0 && (
+          <div className="bg-[hsl(var(--dh-blue))]/5 rounded-lg p-3 space-y-1.5 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Payment Amount</span>
+              <span className="font-semibold font-mono text-[hsl(var(--dh-green))]">৳ {parseFloat(amount).toLocaleString()}</span>
             </div>
-          )}
-
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="btn-secondary"
-              disabled={loading}
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="btn-primary flex items-center gap-2"
-              disabled={loading}
-            >
-              {loading ? 'Recording...' : 'Record Payment'}
-            </button>
+            <div className="flex justify-between border-t border-border pt-1.5">
+              <span className="text-muted-foreground">Remaining Due</span>
+              <span className="font-bold font-mono text-[hsl(var(--dh-red))]">৳ {Math.max(0, dueAmount - parseFloat(amount)).toLocaleString()}</span>
+            </div>
           </div>
-        </form>
-      </div>
-    </div>
+        )}
+
+        <div className="flex justify-end gap-2 pt-2">
+          <Button type="button" variant="outline" onClick={onClose} disabled={loading}>Cancel</Button>
+          <Button type="submit" disabled={loading}>{loading ? 'Recording…' : 'Record Payment'}</Button>
+        </div>
+      </form>
+    </ModalShell>
   );
 }

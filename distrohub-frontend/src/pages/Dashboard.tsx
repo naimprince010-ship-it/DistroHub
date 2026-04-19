@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { Header } from '@/components/layout/Header';
 import { Link } from 'react-router-dom';
 import { cn, fillTemplate } from '@/lib/utils';
 import {
@@ -457,8 +456,6 @@ export function Dashboard() {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header title={t('dashboard.title')} />
-
       <div className="px-4 lg:px-6 pt-3 pb-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-border/60">
         <p className="text-sm text-muted-foreground max-w-2xl">{t('dashboard.subtitle')}</p>
         <div className="flex flex-wrap items-center gap-3">

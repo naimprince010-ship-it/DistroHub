@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Header } from '@/components/layout/Header';
+import { PageShell } from '@/components/layout/PageShell';
+import { StatCard } from '@/components/ui/stat-card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import {
   Plus,
   Eye,
@@ -312,49 +315,32 @@ export function Purchase() {
   };
 
   return (
-    <div className="min-h-screen">
-      <Header title="Purchase / Stock-In" />
-
-      <div className="p-3">
+    <PageShell
+      title="Purchase / Stock-In"
+      subtitle="Manage stock-in orders from suppliers"
+      actions={
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="btn-primary flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          New Purchase
+        </button>
+      }
+    >
         {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-2">
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center">
-                <Package className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-slate-900">{purchases.length}</p>
-                <p className="text-slate-500 text-sm">Total Purchases</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-12 h-12 bg-green-500 rounded-xl flex items-center justify-center">
-                <Truck className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-green-600">৳ {totalPurchases.toLocaleString()}</p>
-                <p className="text-slate-500 text-sm">Total Value</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <div className="flex items-center gap-2">
-              <div className="w-12 h-12 bg-red-500 rounded-xl flex items-center justify-center">
-                <Calendar className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-red-600">৳ {totalDue.toLocaleString()}</p>
-                <p className="text-slate-500 text-sm">Payable to Supplier</p>
-              </div>
-            </div>
-          </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <StatCard label="Total Purchases"     value={purchases.length}                      icon={Package} color="blue" />
+          <StatCard label="Total Value"          value={`৳ ${totalPurchases.toLocaleString()}`} icon={Truck}   color="green" />
+          <StatCard label="Payable to Supplier"  value={`৳ ${totalDue.toLocaleString()}`}      icon={Calendar} color="red" />
         </div>
 
-                {/* Actions Bar */}
-                <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex flex-wrap items-center justify-between gap-2">
+        {/* Table Card */}
+        <Card>
+          <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <CardTitle className="text-base">Purchases</CardTitle>
+                <div className="flex flex-wrap items-center gap-2">
                   <div className="flex items-center gap-2 flex-1 flex-wrap">
                     <div className="relative">
                       <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -392,57 +378,48 @@ export function Purchase() {
                     )}
                   </div>
 
-                  <button
-                    onClick={() => setShowAddModal(true)}
-                    className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2 rounded-lg transition-all duration-200 flex items-center gap-2 shadow-sm hover:shadow-md"
-                  >
-                    <Plus className="w-4 h-4" />
-                    New Purchase
-                  </button>
                 </div>
-
-        {/* Purchases Table */}
-        <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+          </div>
+          </CardHeader>
+          <CardContent className="p-0">
           {loading ? (
-            <div className="p-8 text-center text-slate-500">Loading purchases...</div>
+            <div className="py-12 text-center text-sm text-muted-foreground">Loading purchases…</div>
           ) : (
             <>
               <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-slate-50 border-b border-slate-200">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/40 border-b border-border">
                     <tr>
-                      <th className="text-left p-2 font-semibold text-slate-700">Invoice #</th>
-                      <th className="text-left p-2 font-semibold text-slate-700">Supplier</th>
-                      <th className="text-left p-2 font-semibold text-slate-700">Date</th>
-                      <th className="text-left p-2 font-semibold text-slate-700">Products</th>
-                      <th className="text-right p-2 font-semibold text-slate-700">Total</th>
-                      <th className="text-right p-2 font-semibold text-slate-700">Paid</th>
-                      <th className="text-right p-2 font-semibold text-slate-700">Due</th>
-                      <th className="text-center p-2 font-semibold text-slate-700">Actions</th>
+                      <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Invoice #</th>
+                      <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Supplier</th>
+                      <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Date</th>
+                      <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Products</th>
+                      <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Total</th>
+                      <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Paid</th>
+                      <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Due</th>
+                      <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100">
+                  <tbody className="divide-y divide-border/60">
                     {filteredPurchases.map((purchase) => (
-                      <tr key={purchase.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-2 font-medium text-primary-600">{purchase.invoice_number}</td>
-                        <td className="p-2 text-slate-900">{purchase.supplier_name}</td>
-                        <td className="p-2 text-slate-600">{purchase.purchase_date}</td>
-                        <td className="p-2 text-slate-600">
-                          {formatPurchaseProducts(purchase.items)}
-                        </td>
-                        <td className="p-2 text-right font-medium text-slate-900">
+                      <tr key={purchase.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-3 py-2.5 font-medium text-[hsl(var(--primary))]">{purchase.invoice_number}</td>
+                        <td className="px-3 py-2.5 text-foreground">{purchase.supplier_name}</td>
+                        <td className="px-3 py-2.5 text-muted-foreground">{purchase.purchase_date}</td>
+                        <td className="px-3 py-2.5 text-muted-foreground">{formatPurchaseProducts(purchase.items)}</td>
+                        <td className="px-3 py-2.5 text-right font-mono font-medium text-foreground">
                           ৳ {purchase.total_amount.toLocaleString()}
                         </td>
-                        <td className="p-2 text-right text-green-600">
+                        <td className="px-3 py-2.5 text-right font-mono text-[hsl(var(--dh-green))]">
                           ৳ {purchase.paid_amount.toLocaleString()}
                         </td>
-                        <td className="p-2 text-right font-bold text-red-600">
+                        <td className="px-3 py-2.5 text-right font-mono font-bold text-[hsl(var(--dh-red))]">
                           ৳ {(purchase.total_amount - purchase.paid_amount).toLocaleString()}
                         </td>
-                        <td className="p-2 text-center">
+                        <td className="px-3 py-2.5 text-center">
                           <button
                             onClick={() => setSelectedPurchase(purchase)}
-                            className="p-1 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                            className="p-1.5 rounded text-muted-foreground hover:text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/10 transition-colors"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
@@ -454,64 +431,64 @@ export function Purchase() {
               </div>
 
               {filteredPurchases.length === 0 && (
-                <div className="p-4 text-center text-slate-500">
+                <div className="py-12 text-center text-sm text-muted-foreground">
                   No purchases found. Create a new purchase to add stock.
                 </div>
               )}
             </>
           )}
-        </div>
-      </div>
+          </CardContent>
+        </Card>
 
       {/* Purchase Details Modal */}
       {selectedPurchase && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
-            <div className="p-3 border-b border-slate-200">
-              <h2 className="text-xl font-semibold text-slate-900">{selectedPurchase.invoice_number}</h2>
-              <p className="text-slate-500">{selectedPurchase.supplier_name}</p>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-card border border-border rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-xl">
+            <div className="p-4 border-b border-border">
+              <h2 className="text-lg font-semibold text-foreground">{selectedPurchase.invoice_number}</h2>
+              <p className="text-sm text-muted-foreground">{selectedPurchase.supplier_name}</p>
             </div>
 
-            <div className="p-3">
-              <div className="grid grid-cols-2 gap-2 mb-3">
+            <div className="p-4">
+              <div className="grid grid-cols-2 gap-3 mb-4">
                 <div>
-                  <p className="text-sm text-slate-500">Purchase Date</p>
-                  <p className="font-medium">{selectedPurchase.purchase_date}</p>
+                  <p className="text-xs text-muted-foreground">Purchase Date</p>
+                  <p className="font-medium text-foreground">{selectedPurchase.purchase_date}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-slate-500">Total Amount</p>
-                  <p className="font-medium">৳ {selectedPurchase.total_amount.toLocaleString()}</p>
+                  <p className="text-xs text-muted-foreground">Total Amount</p>
+                  <p className="font-medium font-mono text-foreground">৳ {selectedPurchase.total_amount.toLocaleString()}</p>
                 </div>
               </div>
 
-              <h3 className="font-semibold text-slate-900 mb-2">Items</h3>
-              <table className="w-full mb-3">
-                <thead className="bg-slate-50">
+              <h3 className="font-semibold text-foreground mb-2">Items</h3>
+              <table className="w-full mb-3 text-sm">
+                <thead className="bg-muted/40 border-b border-border">
                   <tr>
-                    <th className="text-left p-2 text-sm font-medium text-slate-600">Product</th>
-                    <th className="text-left p-2 text-sm font-medium text-slate-600">Batch</th>
-                    <th className="text-left p-2 text-sm font-medium text-slate-600">Expiry</th>
-                    <th className="text-right p-2 text-sm font-medium text-slate-600">Qty</th>
-                    <th className="text-right p-2 text-sm font-medium text-slate-600">Price</th>
-                    <th className="text-right p-2 text-sm font-medium text-slate-600">Total</th>
+                    <th className="text-left px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Product</th>
+                    <th className="text-left px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Batch</th>
+                    <th className="text-left px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Expiry</th>
+                    <th className="text-right px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Qty</th>
+                    <th className="text-right px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Price</th>
+                    <th className="text-right px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Total</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-border/60">
                     {selectedPurchase.items.map((item, index) => (
-                      <tr key={index} className="border-b border-slate-100">
-                        <td className="p-2">{item.product_name}</td>
-                        <td className="p-2 font-mono text-sm">{item.batch_number}</td>
-                        <td className="p-2">{formatDate(item.expiry_date)}</td>
-                        <td className="p-2 text-right">{item.quantity}</td>
-                        <td className="p-2 text-right">৳ {item.unit_price}</td>
-                        <td className="p-2 text-right font-medium">৳ {item.sub_total.toLocaleString()}</td>
+                      <tr key={index} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-3 py-2.5 text-foreground">{item.product_name}</td>
+                        <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{item.batch_number}</td>
+                        <td className="px-3 py-2.5 text-muted-foreground">{formatDate(item.expiry_date)}</td>
+                        <td className="px-3 py-2.5 text-right font-mono text-foreground">{item.quantity}</td>
+                        <td className="px-3 py-2.5 text-right font-mono text-foreground">৳ {item.unit_price}</td>
+                        <td className="px-3 py-2.5 text-right font-mono font-medium text-foreground">৳ {item.sub_total.toLocaleString()}</td>
                       </tr>
                     ))}
                 </tbody>
               </table>
             </div>
 
-            <div className="p-3 border-t border-slate-200 flex justify-end">
+            <div className="p-4 border-t border-border flex justify-end">
               <button onClick={() => setSelectedPurchase(null)} className="btn-primary">
                 Close
               </button>
@@ -586,7 +563,7 @@ export function Purchase() {
           }}
         />
       )}
-    </div>
+    </PageShell>
   );
 }
 

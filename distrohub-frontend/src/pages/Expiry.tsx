@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Header } from '@/components/layout/Header';
+import { PageShell } from '@/components/layout/PageShell';
+import { StatCard } from '@/components/ui/stat-card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import {
   AlertTriangle,
   Package,
@@ -27,11 +30,12 @@ interface DashboardStats {
   expiring_soon_count: number;
 }
 
-const statusConfig = {
-  expired: { color: 'bg-red-100 text-red-700 border-red-200', label: 'Expired', icon: '🔴' },
-  critical: { color: 'bg-orange-100 text-orange-700 border-orange-200', label: 'Critical (<30 days)', icon: '🟠' },
-  warning: { color: 'bg-yellow-100 text-yellow-700 border-yellow-200', label: 'Warning (<60 days)', icon: '🟡' },
-  safe: { color: 'bg-green-100 text-green-700 border-green-200', label: 'Safe', icon: '🟢' },
+type ExpiryBadgeVariant = 'danger' | 'warning' | 'success' | 'info';
+const statusConfig: Record<string, { variant: ExpiryBadgeVariant; label: string }> = {
+  expired:  { variant: 'danger',  label: 'Expired' },
+  critical: { variant: 'danger',  label: 'Critical (<30 days)' },
+  warning:  { variant: 'warning', label: 'Warning (<60 days)' },
+  safe:     { variant: 'success', label: 'Safe' },
 };
 
 export function Expiry() {
@@ -152,180 +156,79 @@ export function Expiry() {
   const countMatches = criticalCount === dashboardCriticalCount;
 
   return (
-    <div className="min-h-screen">
-      <Header title="Expiry Alerts" />
+    <PageShell title="Expiry Alerts">
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <StatCard label="Expired"          value={expiredCount}  icon={AlertTriangle} color="red" />
+        <StatCard label="Critical (<30d)"  value={criticalCount} icon={Calendar}      color="amber"
+          hint={dashboardStats && !countMatches ? `Dashboard: ${dashboardStats.expiring_soon_count} ⚠` : undefined} />
+        <StatCard label="Warning (<60d)"   value={warningCount}  icon={Package}       color="purple" />
+        <StatCard label="Total Batches"    value={items.length}  icon={Package}       color="blue" />
+      </div>
 
-      <div className="p-3">
-        {/* Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2">
-          <div className="bg-white rounded-xl p-3 shadow-sm border-l-4 border-red-500">
-            <div className="flex items-center gap-2">
-              <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
-                <AlertTriangle className="w-6 h-6 text-red-600" />
+      {/* Table card */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <CardTitle className="text-base">Expiry Tracking</CardTitle>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <input type="text" placeholder="Search product, SKU, batch…" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="input-field pl-8 h-9 w-52 text-sm" />
               </div>
-              <div>
-                <p className="text-2xl font-bold text-red-600">{expiredCount}</p>
-                <p className="text-slate-500 text-sm">Expired</p>
+              <div className="relative">
+                <Filter className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <select value={filter} onChange={(e) => setFilter(e.target.value)} className="input-field pl-8 h-9 w-40 text-sm">
+                  <option value="all">All Items</option>
+                  <option value="expired">Expired Only</option>
+                  <option value="critical">Critical (&lt;30 days)</option>
+                  <option value="warning">Warning (&lt;60 days)</option>
+                  <option value="safe">Safe</option>
+                </select>
               </div>
+              {activeFiltersCount > 0 && (
+                <button onClick={clearFilters} className="flex items-center gap-1 h-9 px-3 text-sm rounded-lg border border-[hsl(var(--dh-red))]/30 bg-[hsl(var(--dh-red))]/5 text-[hsl(var(--dh-red))] hover:bg-[hsl(var(--dh-red))]/10 transition-colors">
+                  <X className="w-3.5 h-3.5" /> Clear ({activeFiltersCount})
+                </button>
+              )}
             </div>
           </div>
-          <div className="bg-white rounded-xl p-3 shadow-sm border-l-4 border-orange-500">
-            <div className="flex items-center gap-2">
-              <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-                <Calendar className="w-6 h-6 text-orange-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-orange-600">{criticalCount}</p>
-                <p className="text-slate-500 text-sm">Critical (&lt;30 days)</p>
-                {dashboardStats && (
-                  <p className="text-xs text-slate-400 mt-1">
-                    Dashboard: {dashboardStats.expiring_soon_count}
-                    {!countMatches && ' ⚠️ Mismatch'}
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl p-3 shadow-sm border-l-4 border-yellow-500">
-            <div className="flex items-center gap-2">
-              <div className="w-12 h-12 bg-yellow-100 rounded-xl flex items-center justify-center">
-                <Package className="w-6 h-6 text-yellow-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-yellow-600">{warningCount}</p>
-                <p className="text-slate-500 text-sm">Warning (&lt;60 days)</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl p-3 shadow-sm border-l-4 border-green-500">
-            <div className="flex items-center gap-2">
-              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                <Package className="w-6 h-6 text-green-600" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold text-green-600">{items.length}</p>
-                <p className="text-slate-500 text-sm">Total Batches</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-                {/* Search & Filter */}
-                <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex flex-wrap items-center gap-2">
-                  <div className="relative flex-1 min-w-64">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="Search by product name, SKU, or batch..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="input-field pl-10"
-                    />
-                  </div>
-
-                  <div className="relative">
-                    <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <select
-                      value={filter}
-                      onChange={(e) => setFilter(e.target.value)}
-                      className="input-field pl-10 w-48"
-                    >
-                      <option value="all">All Items</option>
-                      <option value="expired">Expired Only</option>
-                      <option value="critical">Critical (&lt;30 days)</option>
-                      <option value="warning">Warning (&lt;60 days)</option>
-                      <option value="safe">Safe</option>
-                    </select>
-                  </div>
-
-                  {activeFiltersCount > 0 && (
-                    <button
-                      onClick={clearFilters}
-                      className="flex items-center gap-1 px-2 py-1 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                    >
-                      <X className="w-4 h-4" />
-                      Clear ({activeFiltersCount})
-                    </button>
-                  )}
-                </div>
-
-        {/* Expiry Table */}
-        {loading ? (
-          <div className="bg-white rounded-xl p-8 text-center text-slate-500">
-            Loading expiry alerts...
-          </div>
-        ) : (
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+        </CardHeader>
+        <CardContent className="p-0">
+          {loading ? (
+            <div className="py-12 text-center text-sm text-muted-foreground">Loading expiry alerts…</div>
+          ) : (
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-50 border-b border-slate-200">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 border-b border-border">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Product Name</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">SKU</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Batch Number</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Expiry Date</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Days Remaining</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Quantity</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Location</th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-600 uppercase tracking-wider">Status</th>
+                    {['Product Name','SKU','Batch','Expiry Date','Days Remaining','Qty','Location','Status'].map(h => (
+                      <th key={h} className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{h}</th>
+                    ))}
                   </tr>
                 </thead>
-                <tbody className="bg-white divide-y divide-slate-200">
+                <tbody className="divide-y divide-border/60">
                   {filteredItems.map((item) => {
                     const isExpired = item.status === 'expired' || item.days_until_expiry < 0;
                     const isExpiringSoon = item.status === 'critical' || (item.days_until_expiry >= 0 && item.days_until_expiry <= 30);
                     const statusDisplay = isExpired ? 'expired' : isExpiringSoon ? 'critical' : item.status;
-                    
                     return (
-                      <tr
-                        key={item.id}
-                        className={`hover:bg-slate-50 ${
-                          isExpired
-                            ? 'bg-red-50'
-                            : isExpiringSoon
-                            ? 'bg-orange-50'
-                            : ''
-                        }`}
-                      >
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <div className="font-medium text-slate-900">{item.product_name}</div>
+                      <tr key={item.id} className={`transition-colors hover:bg-muted/30 ${isExpired ? 'bg-[hsl(var(--dh-red))]/5' : isExpiringSoon ? 'bg-[hsl(var(--dh-amber))]/5' : ''}`}>
+                        <td className="px-3 py-2.5 font-medium text-foreground">{item.product_name}</td>
+                        <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{item.sku || 'N/A'}</td>
+                        <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{item.batch_number}</td>
+                        <td className="px-3 py-2.5">
+                          <span className={`font-medium text-xs ${isExpired ? 'text-[hsl(var(--dh-red))]' : 'text-foreground'}`}>{item.expiry_date}</span>
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <div className="text-sm text-slate-600">{item.sku || 'N/A'}</div>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <div className="text-sm text-slate-600">{item.batch_number}</div>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <div className={`text-sm font-medium ${isExpired ? 'text-red-600' : 'text-slate-900'}`}>
-                            {item.expiry_date}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <div
-                            className={`text-sm font-semibold ${
-                              item.days_until_expiry < 0
-                                ? 'text-red-600'
-                                : item.days_until_expiry <= 30
-                                ? 'text-orange-600'
-                                : 'text-green-600'
-                            }`}
-                          >
-                            {item.days_until_expiry < 0
-                              ? `${Math.abs(item.days_until_expiry)} overdue`
-                              : item.days_until_expiry}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <div className="text-sm text-slate-900">{item.quantity}</div>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <div className="text-sm text-slate-600">{item.location || 'Main Warehouse'}</div>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusConfig[statusDisplay].color}`}>
-                            {statusConfig[statusDisplay].label}
+                        <td className="px-3 py-2.5">
+                          <span className={`font-semibold font-mono text-xs ${item.days_until_expiry < 0 ? 'text-[hsl(var(--dh-red))]' : item.days_until_expiry <= 30 ? 'text-[hsl(var(--dh-amber))]' : 'text-[hsl(var(--dh-green))]'}`}>
+                            {item.days_until_expiry < 0 ? `${Math.abs(item.days_until_expiry)}d overdue` : item.days_until_expiry}
                           </span>
+                        </td>
+                        <td className="px-3 py-2.5 font-mono text-foreground">{item.quantity}</td>
+                        <td className="px-3 py-2.5 text-muted-foreground">{item.location || 'Main Warehouse'}</td>
+                        <td className="px-3 py-2.5">
+                          <Badge variant={statusConfig[statusDisplay].variant}>{statusConfig[statusDisplay].label}</Badge>
                         </td>
                       </tr>
                     );
@@ -333,38 +236,25 @@ export function Expiry() {
                 </tbody>
               </table>
             </div>
-            {filteredItems.length === 0 && (
-              <div className="p-8 text-center text-slate-500">
-                {searchTerm || filter !== 'all'
-                  ? 'No items found for the selected filter.'
-                  : 'No expiry alerts. All products are safe!'}
-              </div>
-            )}
-          </div>
-        )}
-
-        {!loading && filteredItems.length === 0 && (
-          <div className="bg-white rounded-xl p-4 text-center text-slate-500">
-            {searchTerm || filter !== 'all'
-              ? 'No items found for the selected filter.'
-              : 'No expiry alerts. All products are safe!'}
-          </div>
-        )}
-
-        {/* FIFO Notice */}
-        <div className="mt-3 bg-blue-50 border border-blue-200 rounded-xl p-3">
-          <div className="flex items-start gap-2">
-            <AlertTriangle className="w-5 h-5 text-blue-600 mt-0.5" />
-            <div>
-              <h4 className="font-medium text-blue-900">FIFO Recommendation</h4>
-              <p className="text-sm text-blue-700">
-                Products with earlier expiry dates should be sold first. The system automatically suggests
-                items with nearest expiry when creating sales orders.
-              </p>
+          )}
+          {!loading && filteredItems.length === 0 && (
+            <div className="py-12 text-center text-sm text-muted-foreground">
+              {searchTerm || filter !== 'all' ? 'No items found for the selected filter.' : 'No expiry alerts. All products are safe!'}
             </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* FIFO Notice */}
+      <div className="bg-[hsl(var(--dh-blue))]/5 border border-[hsl(var(--dh-blue))]/20 rounded-xl p-3">
+        <div className="flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 text-[hsl(var(--dh-blue))] mt-0.5 shrink-0" />
+          <div>
+            <h4 className="font-medium text-foreground text-sm">FIFO Recommendation</h4>
+            <p className="text-sm text-muted-foreground">Products with earlier expiry dates should be sold first. The system automatically suggests items with nearest expiry when creating sales orders.</p>
           </div>
         </div>
       </div>
-    </div>
+    </PageShell>
   );
 }

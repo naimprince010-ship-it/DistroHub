@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Header } from '@/components/layout/Header';
+import { PageShell } from '@/components/layout/PageShell';
+import { StatCard } from '@/components/ui/stat-card';
+import { Card, CardContent } from '@/components/ui/card';
 import {
   Plus,
   DollarSign,
@@ -259,327 +261,153 @@ export function Payments() {
   };
 
   return (
-    <div className="min-h-screen">
-      <Header title="Payments & Receivables" />
-
-      <div className="p-3">
+    <PageShell title="Payments & Receivables">
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center">
-                <TrendingDown className="w-6 h-6 text-red-600" />
-              </div>
-            </div>
-            <p className="text-slate-500 text-sm">Total Receivables</p>
-            <p className="text-2xl font-bold text-red-600">
-              ৳ {totalReceivables.toLocaleString()}
-            </p>
-            {dashboardStats && (
-              <p className="text-xs text-slate-400 mt-1">
-                Dashboard: ৳ {dashboardStats.receivable_from_customers.toLocaleString()}
-              </p>
-            )}
-          </div>
-
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-12 h-12 bg-orange-100 rounded-xl flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-orange-600" />
-              </div>
-            </div>
-            <p className="text-slate-500 text-sm">Total Payables</p>
-            <p className="text-2xl font-bold text-orange-600">
-              ৳ {totalPayables.toLocaleString()}
-            </p>
-            {dashboardStats && (
-              <p className="text-xs text-slate-400 mt-1">
-                Dashboard: ৳ {dashboardStats.payable_to_supplier.toLocaleString()}
-              </p>
-            )}
-          </div>
-
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-12 h-12 bg-green-100 rounded-xl flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-green-600" />
-              </div>
-            </div>
-            <p className="text-slate-500 text-sm">Total Payments</p>
-            <p className="text-2xl font-bold text-green-600">
-              ৳ {totalPayments.toLocaleString()}
-            </p>
-            <p className="text-xs text-slate-400 mt-1">
-              This month: ৳ {totalPaymentsThisMonth.toLocaleString()}
-            </p>
-          </div>
-
-          <div className="bg-white rounded-xl p-3 shadow-sm">
-            <div className="flex items-center justify-between mb-2">
-              <div className="w-12 h-12 bg-blue-100 rounded-xl flex items-center justify-center">
-                <DollarSign className="w-6 h-6 text-blue-600" />
-              </div>
-            </div>
-            <p className="text-slate-500 text-sm">Outstanding</p>
-            <p className="text-2xl font-bold text-blue-600">
-              {receivables.filter((r) => r.total_due > 0).length + payables.filter((p) => p.total_due > 0).length}
-            </p>
-            <p className="text-xs text-slate-400 mt-1">
-              {receivables.filter((r) => r.total_due > 0).length} retailers, {payables.filter((p) => p.total_due > 0).length} suppliers
-            </p>
-          </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <StatCard label="Total Receivables" value={`৳ ${totalReceivables.toLocaleString()}`} icon={TrendingDown} color="red"
+            hint={dashboardStats ? `Dashboard: ৳ ${dashboardStats.receivable_from_customers.toLocaleString()}` : undefined} />
+          <StatCard label="Total Payables"    value={`৳ ${totalPayables.toLocaleString()}`}    icon={TrendingUp}   color="amber"
+            hint={dashboardStats ? `Dashboard: ৳ ${dashboardStats.payable_to_supplier.toLocaleString()}` : undefined} />
+          <StatCard label="Total Payments"    value={`৳ ${totalPayments.toLocaleString()}`}    icon={TrendingUp}   color="green"
+            hint={`This month: ৳ ${totalPaymentsThisMonth.toLocaleString()}`} />
+          <StatCard label="Outstanding"
+            value={receivables.filter((r) => r.total_due > 0).length + payables.filter((p) => p.total_due > 0).length}
+            icon={DollarSign} color="blue"
+            hint={`${receivables.filter((r) => r.total_due > 0).length} retailers, ${payables.filter((p) => p.total_due > 0).length} suppliers`} />
         </div>
 
         {/* Tabs */}
-        <div className="bg-white rounded-xl shadow-sm mb-2">
-          <div className="flex border-b border-slate-200">
-            <button
-              onClick={() => setActiveTab('receivables')}
-              className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
-                activeTab === 'receivables'
-                  ? 'text-primary-600 border-b-2 border-primary-600'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Receivables ({receivables.filter((r) => r.total_due > 0).length})
-            </button>
-            <button
-              onClick={() => setActiveTab('payables')}
-              className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
-                activeTab === 'payables'
-                  ? 'text-primary-600 border-b-2 border-primary-600'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Payables ({payables.filter((p) => p.total_due > 0).length})
-            </button>
-            <button
-              onClick={() => setActiveTab('payments')}
-              className={`flex-1 px-4 py-2 text-sm font-medium transition-colors ${
-                activeTab === 'payments'
-                  ? 'text-primary-600 border-b-2 border-primary-600'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              Payment History ({payments.length})
-            </button>
+        <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
+          <div className="flex border-b border-border px-1">
+            {[
+              { id: 'receivables', label: `Receivables (${receivables.filter((r) => r.total_due > 0).length})` },
+              { id: 'payables',    label: `Payables (${payables.filter((p) => p.total_due > 0).length})` },
+              { id: 'payments',   label: `Payment History (${payments.length})` },
+            ].map(tab => (
+              <button key={tab.id} onClick={() => setActiveTab(tab.id as any)}
+                className={`px-4 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px ${activeTab === tab.id ? 'text-[hsl(var(--primary))] border-[hsl(var(--primary))]' : 'text-muted-foreground border-transparent hover:text-foreground'}`}>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          {/* Search + action bar */}
+          <div className="flex items-center gap-2 p-3 border-b border-border">
+            <div className="flex-1 relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+              <input type="text"
+                placeholder={`Search ${activeTab === 'receivables' ? 'retailers' : activeTab === 'payables' ? 'suppliers' : 'payments'}…`}
+                value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)}
+                className="input-field pl-8 h-9 text-sm w-full" />
+            </div>
+            {activeTab === 'receivables' && (
+              <button onClick={() => { const r = receivables.filter((r) => r.total_due > 0); if (r.length > 0) { setSelectedRetailer(r[0]); setShowPaymentModal(true); } }}
+                className="btn-primary flex items-center gap-2 h-9 px-3 text-sm shrink-0">
+                <Plus className="w-4 h-4" /> Record Payment
+              </button>
+            )}
+            {activeTab === 'payables' && (
+              <button onClick={() => { const s = payables.filter((p) => p.total_due > 0); if (s.length > 0) { setSelectedSupplier(s[0]); setShowSupplierPaymentModal(true); } }}
+                className="btn-primary flex items-center gap-2 h-9 px-3 text-sm shrink-0">
+                <Plus className="w-4 h-4" /> Pay Supplier
+              </button>
+            )}
+          </div>
+
+          {/* Content */}
+          {loading ? (
+            <div className="py-12 text-center text-sm text-muted-foreground">Loading payments, receivables, and payables…</div>
+          ) : activeTab === 'receivables' ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 border-b border-border">
+                  <tr>
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Retailer</th>
+                    <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Total Due</th>
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Last Payment</th>
+                    <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {filteredReceivables.filter((r) => r.total_due > 0).sort((a, b) => b.total_due - a.total_due).map((receivable) => (
+                    <tr key={receivable.retailer_id} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-3 py-2.5">
+                        <div className="font-medium text-foreground">{receivable.shop_name || receivable.retailer_name}</div>
+                        {receivable.shop_name && receivable.shop_name !== receivable.retailer_name && <div className="text-xs text-muted-foreground">{receivable.retailer_name}</div>}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono font-semibold text-[hsl(var(--dh-red))]">৳ {receivable.total_due.toLocaleString()}</td>
+                      <td className="px-3 py-2.5 text-sm text-muted-foreground">
+                        {receivable.last_payment_date ? new Date(receivable.last_payment_date).toLocaleDateString() : 'Never'}
+                        {receivable.last_payment_amount != null && <span className="text-xs text-muted-foreground/70 ml-1">(৳{receivable.last_payment_amount.toLocaleString()})</span>}
+                      </td>
+                      <td className="px-3 py-2.5 text-center">
+                        <button onClick={() => { setSelectedRetailer(receivable); setShowPaymentModal(true); }} className="btn-primary text-xs h-7 px-3">Record Payment</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : activeTab === 'payables' ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 border-b border-border">
+                  <tr>
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Supplier</th>
+                    <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Total Due</th>
+                    <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Unpaid Purchases</th>
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Last Purchase</th>
+                    <th className="text-center px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {filteredPayables.filter((p) => p.total_due > 0).map((payable) => (
+                    <tr key={payable.supplier_name} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-3 py-2.5 font-medium text-foreground">{payable.supplier_name}</td>
+                      <td className="px-3 py-2.5 text-right font-mono font-semibold text-[hsl(var(--dh-amber))]">৳ {payable.total_due.toLocaleString()}</td>
+                      <td className="px-3 py-2.5 text-center text-muted-foreground">{payable.unpaid_purchases}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground">{payable.last_paid_date ? new Date(payable.last_paid_date).toLocaleDateString() : 'N/A'}</td>
+                      <td className="px-3 py-2.5 text-center">
+                        <button onClick={() => { setSelectedSupplier(payable); setShowSupplierPaymentModal(true); }} className="btn-primary text-xs h-7 px-3">Pay Supplier</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filteredPayables.filter((p) => p.total_due > 0).length === 0 && (
+                <div className="py-12 text-center text-sm text-muted-foreground">{searchTerm ? 'No payables found matching your search.' : 'No outstanding payables.'}</div>
+              )}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 border-b border-border">
+                  <tr>
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Date</th>
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Retailer</th>
+                    <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Amount</th>
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Method</th>
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {filteredPayments.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map((payment) => (
+                    <tr key={payment.id} className="hover:bg-muted/30 transition-colors">
+                      <td className="px-3 py-2.5 text-muted-foreground">{new Date(payment.created_at).toLocaleDateString()}</td>
+                      <td className="px-3 py-2.5 font-medium text-foreground">{payment.retailer_name}</td>
+                      <td className="px-3 py-2.5 text-right font-mono font-semibold text-[hsl(var(--dh-green))]">৳ {payment.amount.toLocaleString()}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground">{payment.payment_method}</td>
+                      <td className="px-3 py-2.5 text-sm text-muted-foreground">{payment.notes || '–'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filteredPayments.length === 0 && (
+                <div className="py-12 text-center text-sm text-muted-foreground">{searchTerm ? 'No payments found matching your search.' : 'No payments recorded yet.'}</div>
+              )}
+            </div>
+          )}
           </div>
         </div>
-
-        {/* Search Bar */}
-        <div className="bg-white rounded-xl p-2 shadow-sm mb-2 flex items-center gap-2">
-          <div className="flex-1 relative">
-            <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder={`Search ${activeTab === 'receivables' ? 'retailers' : activeTab === 'payables' ? 'suppliers' : 'payments'}...`}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="input-field pl-8 w-full"
-            />
-          </div>
-          {activeTab === 'receivables' && (
-            <button
-              onClick={() => {
-                const retailersWithDue = receivables.filter((r) => r.total_due > 0);
-                if (retailersWithDue.length > 0) {
-                  setSelectedRetailer(retailersWithDue[0]);
-                  setShowPaymentModal(true);
-                }
-              }}
-              className="btn-primary flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Record Payment
-            </button>
-          )}
-          {activeTab === 'payables' && (
-            <button
-              onClick={() => {
-                const suppliersWithDue = payables.filter((p) => p.total_due > 0);
-                if (suppliersWithDue.length > 0) {
-                  setSelectedSupplier(suppliersWithDue[0]);
-                  setShowSupplierPaymentModal(true);
-                }
-              }}
-              className="btn-primary flex items-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Pay Supplier
-            </button>
-          )}
-        </div>
-
-        {/* Content */}
-        {loading ? (
-          <div className="bg-white rounded-xl p-8 text-center text-slate-500">
-            Loading payments, receivables, and payables...
-          </div>
-        ) : activeTab === 'receivables' ? (
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="text-left p-2 font-semibold text-slate-700">Retailer</th>
-                    <th className="text-right p-2 font-semibold text-slate-700">Total Due</th>
-                    <th className="text-left p-2 font-semibold text-slate-700">Last Payment</th>
-                    <th className="text-center p-2 font-semibold text-slate-700">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredReceivables
-                    .filter((r) => r.total_due > 0)
-                    .sort((a, b) => b.total_due - a.total_due)
-                    .map((receivable) => (
-                      <tr key={receivable.retailer_id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-2">
-                          <div className="font-medium text-slate-900">
-                            {receivable.shop_name || receivable.retailer_name}
-                          </div>
-                          {receivable.shop_name && receivable.shop_name !== receivable.retailer_name && (
-                            <div className="text-xs text-slate-500">{receivable.retailer_name}</div>
-                          )}
-                        </td>
-                        <td className="p-2 text-right">
-                          <span className="font-semibold text-red-600">
-                            ৳ {receivable.total_due.toLocaleString()}
-                          </span>
-                        </td>
-                        <td className="p-2 text-slate-600">
-                          {receivable.last_payment_date
-                            ? new Date(receivable.last_payment_date).toLocaleDateString()
-                            : 'Never'}
-                          {receivable.last_payment_amount !== undefined && receivable.last_payment_amount !== null && (
-                            <span className="text-xs text-slate-400 ml-1">
-                              (৳{receivable.last_payment_amount.toLocaleString()})
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-2 text-center">
-                          <button
-                            onClick={() => {
-                              setSelectedRetailer(receivable);
-                              setShowPaymentModal(true);
-                            }}
-                            className="btn-primary text-sm px-3 py-1"
-                          >
-                            Record Payment
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-            {filteredReceivables.filter((r) => r.total_due > 0).length === 0 && (
-              <div className="p-8 text-center text-slate-500">
-                {searchTerm
-                  ? 'No receivables found matching your search.'
-                  : 'No outstanding receivables.'}
-              </div>
-            )}
-          </div>
-        ) : activeTab === 'payables' ? (
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="text-left p-2 font-semibold text-slate-700">Supplier</th>
-                    <th className="text-right p-2 font-semibold text-slate-700">Total Due</th>
-                    <th className="text-center p-2 font-semibold text-slate-700">Unpaid Purchases</th>
-                    <th className="text-left p-2 font-semibold text-slate-700">Last Purchase</th>
-                    <th className="text-center p-2 font-semibold text-slate-700">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredPayables
-                    .filter((p) => p.total_due > 0)
-                    .map((payable) => (
-                      <tr key={payable.supplier_name} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-2">
-                          <div className="font-medium text-slate-900">
-                            {payable.supplier_name}
-                          </div>
-                        </td>
-                        <td className="p-2 text-right">
-                          <span className="font-semibold text-orange-600">
-                            ৳ {payable.total_due.toLocaleString()}
-                          </span>
-                        </td>
-                        <td className="p-2 text-center text-slate-600">
-                          {payable.unpaid_purchases}
-                        </td>
-                        <td className="p-2 text-slate-600">
-                          {payable.last_paid_date
-                            ? new Date(payable.last_paid_date).toLocaleDateString()
-                            : 'N/A'}
-                        </td>
-                        <td className="p-2 text-center">
-                          <button
-                            onClick={() => {
-                              setSelectedSupplier(payable);
-                              setShowSupplierPaymentModal(true);
-                            }}
-                            className="btn-primary text-sm px-3 py-1"
-                          >
-                            Pay Supplier
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-            {filteredPayables.filter((p) => p.total_due > 0).length === 0 && (
-              <div className="p-8 text-center text-slate-500">
-                {searchTerm
-                  ? 'No payables found matching your search.'
-                  : 'No outstanding payables.'}
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-slate-50 border-b border-slate-200">
-                  <tr>
-                    <th className="text-left p-2 font-semibold text-slate-700">Date</th>
-                    <th className="text-left p-2 font-semibold text-slate-700">Retailer</th>
-                    <th className="text-right p-2 font-semibold text-slate-700">Amount</th>
-                    <th className="text-left p-2 font-semibold text-slate-700">Method</th>
-                    <th className="text-left p-2 font-semibold text-slate-700">Notes</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredPayments
-                    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-                    .map((payment) => (
-                      <tr key={payment.id} className="hover:bg-slate-50 transition-colors">
-                        <td className="p-2 text-slate-600">
-                          {new Date(payment.created_at).toLocaleDateString()}
-                        </td>
-                        <td className="p-2 font-medium text-slate-900">{payment.retailer_name}</td>
-                        <td className="p-2 text-right font-semibold text-green-600">
-                          ৳ {payment.amount.toLocaleString()}
-                        </td>
-                        <td className="p-2 text-slate-600">{payment.payment_method}</td>
-                        <td className="p-2 text-slate-500 text-sm">{payment.notes || '-'}</td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-            {filteredPayments.length === 0 && (
-              <div className="p-8 text-center text-slate-500">
-                {searchTerm ? 'No payments found matching your search.' : 'No payments recorded yet.'}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
 
       {/* Payment Modal */}
       {showPaymentModal && selectedRetailer && (
@@ -604,7 +432,7 @@ export function Payments() {
           onSave={handlePaySupplier}
         />
       )}
-    </div>
+    </PageShell>
   );
 }
 
@@ -648,42 +476,22 @@ function PaymentModal({ retailer, onClose, onSave }: PaymentModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl w-full max-w-md m-2 animate-fade-in">
-        <div className="p-3 border-b border-slate-200">
-          <h2 className="text-xl font-semibold text-slate-900">Record Payment</h2>
-          <p className="text-sm text-slate-500 mt-1">{retailer.retailer_name}</p>
-          <p className="text-sm text-red-600 font-medium mt-1">
-            Total Due: ৳ {retailer.total_due.toLocaleString()}
-          </p>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-xl">
+        <div className="p-4 border-b border-border">
+          <h2 className="text-lg font-semibold text-foreground">Record Payment</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">{retailer.retailer_name}</p>
+          <p className="text-sm font-medium text-[hsl(var(--dh-red))] mt-0.5">Total Due: ৳ {retailer.total_due.toLocaleString()}</p>
         </div>
-
-        <form onSubmit={handleSubmit} className="p-3 space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Amount</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              max={retailer.total_due}
-              value={formData.amount}
-              onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-              className="input-field"
-              required
-            />
-            <p className="text-xs text-slate-400 mt-1">
-              Maximum: ৳ {retailer.total_due.toLocaleString()}
-            </p>
+        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-foreground">Amount</label>
+            <input type="number" step="0.01" min="0" max={retailer.total_due} value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} className="input-field" required />
+            <p className="text-xs text-muted-foreground">Maximum: ৳ {retailer.total_due.toLocaleString()}</p>
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Payment Method</label>
-            <select
-              value={formData.payment_method}
-              onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-              className="input-field"
-              required
-            >
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-foreground">Payment Method</label>
+            <select value={formData.payment_method} onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })} className="input-field" required>
               <option value="cash">Cash</option>
               <option value="bank_transfer">Bank Transfer</option>
               <option value="mobile_banking">Mobile Banking</option>
@@ -691,25 +499,13 @@ function PaymentModal({ retailer, onClose, onSave }: PaymentModalProps) {
               <option value="other">Other</option>
             </select>
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Notes (Optional)</label>
-            <textarea
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              className="input-field"
-              rows={3}
-              placeholder="Payment notes..."
-            />
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-foreground">Notes (Optional)</label>
+            <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} className="input-field" rows={3} placeholder="Payment notes…" />
           </div>
-
           <div className="flex gap-2 pt-2">
-            <button type="button" onClick={onClose} className="btn-secondary flex-1">
-              Cancel
-            </button>
-            <button type="submit" className="btn-primary flex-1">
-              Record Payment
-            </button>
+            <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
+            <button type="submit" className="btn-primary flex-1">Record Payment</button>
           </div>
         </form>
       </div>
@@ -756,42 +552,22 @@ function SupplierPaymentModal({ supplier, onClose, onSave }: SupplierPaymentModa
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl w-full max-w-md m-2 animate-fade-in">
-        <div className="p-3 border-b border-slate-200">
-          <h2 className="text-xl font-semibold text-slate-900">Pay Supplier</h2>
-          <p className="text-sm text-slate-500 mt-1">{supplier.supplier_name}</p>
-          <p className="text-sm text-orange-600 font-medium mt-1">
-            Total Due: ৳ {supplier.total_due.toLocaleString()}
-          </p>
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-card border border-border rounded-2xl w-full max-w-md shadow-xl">
+        <div className="p-4 border-b border-border">
+          <h2 className="text-lg font-semibold text-foreground">Pay Supplier</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">{supplier.supplier_name}</p>
+          <p className="text-sm font-medium text-[hsl(var(--dh-amber))] mt-0.5">Total Due: ৳ {supplier.total_due.toLocaleString()}</p>
         </div>
-
-        <form onSubmit={handleSubmit} className="p-3 space-y-3">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Amount</label>
-            <input
-              type="number"
-              step="0.01"
-              min="0"
-              max={supplier.total_due}
-              value={formData.amount}
-              onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-              className="input-field"
-              required
-            />
-            <p className="text-xs text-slate-400 mt-1">
-              Maximum: ৳ {supplier.total_due.toLocaleString()}
-            </p>
+        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-foreground">Amount</label>
+            <input type="number" step="0.01" min="0" max={supplier.total_due} value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} className="input-field" required />
+            <p className="text-xs text-muted-foreground">Maximum: ৳ {supplier.total_due.toLocaleString()}</p>
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Payment Method</label>
-            <select
-              value={formData.payment_method}
-              onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-              className="input-field"
-              required
-            >
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-foreground">Payment Method</label>
+            <select value={formData.payment_method} onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })} className="input-field" required>
               <option value="cash">Cash</option>
               <option value="bank_transfer">Bank Transfer</option>
               <option value="mobile_banking">Mobile Banking</option>
@@ -799,25 +575,13 @@ function SupplierPaymentModal({ supplier, onClose, onSave }: SupplierPaymentModa
               <option value="other">Other</option>
             </select>
           </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Notes (Optional)</label>
-            <textarea
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              className="input-field"
-              rows={3}
-              placeholder="Payment notes..."
-            />
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-foreground">Notes (Optional)</label>
+            <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} className="input-field" rows={3} placeholder="Payment notes…" />
           </div>
-
           <div className="flex gap-2 pt-2">
-            <button type="button" onClick={onClose} className="btn-secondary flex-1">
-              Cancel
-            </button>
-            <button type="submit" className="btn-primary flex-1">
-              Pay Supplier
-            </button>
+            <button type="button" onClick={onClose} className="btn-secondary flex-1">Cancel</button>
+            <button type="submit" className="btn-primary flex-1">Pay Supplier</button>
           </div>
         </form>
       </div>
