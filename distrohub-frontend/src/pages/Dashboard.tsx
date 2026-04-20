@@ -299,6 +299,14 @@ export function Dashboard() {
       };
       console.error('[Dashboard] Error fetching dashboard data:', err);
 
+      // 401 → session expired/invalid — clear token and redirect to login
+      if (e.response?.status === 401) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
+        return;
+      }
+
       if (e.isTimeout || e.code === 'ECONNABORTED' || e.message?.includes?.('timeout')) {
         setError(t('dashboard.error_cold_start'));
       } else if (e.isNetworkError || e.code === 'ERR_NETWORK') {
@@ -306,10 +314,6 @@ export function Dashboard() {
       } else {
         const d = e.response?.data?.detail;
         setError(typeof d === 'string' ? d : t('dashboard.error_generic'));
-      }
-
-      if (e.response?.status === 401) {
-        return;
       }
     } finally {
       setLoading(false);
