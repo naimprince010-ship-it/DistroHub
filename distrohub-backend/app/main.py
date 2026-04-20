@@ -34,7 +34,7 @@ from app.models import (
     SaleUpdate, CollectionReport, CollectionReportSummary,
     RouteCreate, Route, RouteUpdate, RouteWithSales, RouteStatus,
     RouteReconciliationCreate, RouteReconciliation, RouteReconciliationUpdate,
-    MarketRouteCreate, MarketRoute,
+    MarketRouteCreate, MarketRoute, StockLedgerEntry,
     SrAccountability
 )
 from app.database import db
@@ -166,6 +166,565 @@ def _log_audit_event(
         )
     except Exception as e:
         print(f"[AUDIT] Failed to log audit event: {e}")
+
+def _record_stock_ledger_entries(
+    *,
+    voucher_type: str,
+    voucher_id: Optional[str],
+    items: List[dict],
+    quantity_key: str,
+    quantity_multiplier: int = 1,
+    warehouse_id: Optional[str] = None,
+    warehouse_name: Optional[str] = None,
+    created_by: Optional[str] = None,
+    remarks: Optional[str] = None,
+) -> None:
+    if not hasattr(db, "add_stock_ledger_entry"):
+        return
+    for item in items:
+        product_id = item.get("product_id")
+        if not product_id:
+            continue
+        quantity_raw = item.get(quantity_key) or item.get("quantity")
+        try:
+            quantity_change = int(quantity_raw) * quantity_multiplier
+        except (TypeError, ValueError):
+            continue
+        try:
+            product = db.get_product(product_id)
+            item_batch_id = item.get("batch_id")
+            item_batch_number = item.get("batch_number")
+            if not item_batch_id and item_batch_number:
+                matched_batch = _find_batch_by_product_and_number(str(product_id), item_batch_number)
+                if matched_batch:
+                    item_batch_id = matched_batch.get("id")
+                    item_batch_number = matched_batch.get("batch_number") or item_batch_number
+            item_warehouse_id = item.get("warehouse_id") or warehouse_id
+            item_warehouse_name = item.get("warehouse_name") or warehouse_name
+            if not item_warehouse_id and item_batch_id and hasattr(db, "get_batch"):
+                batch = db.get_batch(str(item_batch_id))
+                if batch:
+                    item_warehouse_id = batch.get("warehouse_id")
+                    if not item_warehouse_name:
+                        item_warehouse_name = batch.get("warehouse_name")
+            if item_warehouse_id and not item_warehouse_name and hasattr(db, "get_warehouse"):
+                wh = db.get_warehouse(str(item_warehouse_id))
+                if wh:
+                    item_warehouse_name = wh.get("name")
+            quantity_after = product.get("stock_quantity") if product else None
+            db.add_stock_ledger_entry(
+                {
+                    "product_id": product_id,
+                    "product_name": item.get("product_name") or (product.get("name") if product else None),
+                    "batch_id": item_batch_id,
+                    "batch_number": item_batch_number,
+                    "warehouse_id": item_warehouse_id,
+                    "warehouse_name": item_warehouse_name,
+                    "voucher_type": voucher_type,
+                    "voucher_id": voucher_id,
+                    "quantity_change": quantity_change,
+                    "quantity_after": quantity_after,
+                    "unit_cost": item.get("unit_price"),
+                    "remarks": remarks,
+                    "created_by": created_by,
+                }
+            )
+        except Exception as e:
+            print(f"[LEDGER] Failed to record stock ledger entry for {product_id}: {e}")
+
+
+def _find_batch_by_product_and_number(product_id: str, batch_number: Optional[str]) -> Optional[dict]:
+    if not product_id or not batch_number:
+        return None
+    batches = db.get_batches_by_product(product_id)
+    for b in batches:
+        if b.get("batch_number") == batch_number:
+            return b
+    return None
+
+
+def _record_stock_ledger_adjustment(
+    *,
+    product_id: str,
+    quantity_change: int,
+    created_by: Optional[str],
+    voucher_id: Optional[str],
+    remarks: str,
+    batch_id: Optional[str] = None,
+    batch_number: Optional[str] = None,
+    warehouse_id: Optional[str] = None,
+    warehouse_name: Optional[str] = None,
+) -> None:
+    """Single-line stock movement not tied to purchase/sale (opening, edit, batch create, sale delete restore)."""
+    if quantity_change == 0:
+        return
+    if not hasattr(db, "add_stock_ledger_entry"):
+        return
+    try:
+        if batch_id and hasattr(db, "get_batch"):
+            batch = db.get_batch(str(batch_id))
+            if batch:
+                if not batch_number:
+                    batch_number = batch.get("batch_number")
+                if not warehouse_id:
+                    warehouse_id = batch.get("warehouse_id")
+                if not warehouse_name:
+                    warehouse_name = batch.get("warehouse_name")
+        if warehouse_id and not warehouse_name and hasattr(db, "get_warehouse"):
+            wh = db.get_warehouse(str(warehouse_id))
+            if wh:
+                warehouse_name = wh.get("name")
+        product = db.get_product(product_id)
+        db.add_stock_ledger_entry(
+            {
+                "product_id": str(product_id),
+                "product_name": (product or {}).get("name"),
+                "batch_id": batch_id,
+                "batch_number": batch_number,
+                "warehouse_id": warehouse_id,
+                "warehouse_name": warehouse_name,
+                "voucher_type": "adjustment",
+                "voucher_id": voucher_id,
+                "quantity_change": int(quantity_change),
+                "quantity_after": (product or {}).get("stock_quantity") if product else None,
+                "unit_cost": None,
+                "remarks": remarks,
+                "created_by": created_by,
+            }
+        )
+    except Exception as e:
+        print(f"[LEDGER] adjustment entry failed for product {product_id}: {e}")
+
+
+def _record_opening_stock_ledger_for_product(product: dict, created_by: Optional[str]) -> None:
+    if not product or not product.get("id"):
+        return
+    qty = _to_int(product.get("stock_quantity"), 0)
+    if qty == 0:
+        return
+    _record_stock_ledger_adjustment(
+        product_id=str(product["id"]),
+        quantity_change=qty,
+        created_by=created_by,
+        voucher_id=str(product["id"]),
+        remarks="product_opening_stock",
+        batch_id=product.get("batch_id"),
+        batch_number=product.get("batch_number"),
+    )
+
+
+def _restore_inventory_from_sale_before_delete(
+    sale: dict,
+    created_by: Optional[str],
+    remark_prefix: str = "sale_delete_restore",
+) -> None:
+    """Put sold quantities back on batches + product summary, then log adjustment ledger lines."""
+    for item in sale.get("items") or []:
+        product_id = item.get("product_id")
+        if not product_id:
+            continue
+        qty = _to_int(item.get("quantity"), 0)
+        if qty <= 0:
+            continue
+        batch_number = item.get("batch_number")
+        batch = _find_batch_by_product_and_number(str(product_id), batch_number)
+        if batch and hasattr(db, "update_batch_quantity"):
+            try:
+                db.update_batch_quantity(batch["id"], qty)
+            except Exception as e:
+                print(f"[LEDGER] batch restore failed for batch {batch.get('id')}: {e}")
+        if hasattr(db, "update_product_stock"):
+            try:
+                db.update_product_stock(str(product_id), qty)
+            except Exception as e:
+                print(f"[LEDGER] product stock restore failed for {product_id}: {e}")
+        _record_stock_ledger_adjustment(
+            product_id=str(product_id),
+            quantity_change=qty,
+            created_by=created_by,
+            voucher_id=str(sale.get("id")) if sale.get("id") is not None else None,
+            remarks=f"{remark_prefix}:{sale.get('id')}",
+            batch_id=(batch or {}).get("id") if batch else item.get("batch_id"),
+            batch_number=batch_number,
+            warehouse_id=(batch or {}).get("warehouse_id") if batch else None,
+            warehouse_name=(batch or {}).get("warehouse_name") if batch else None,
+        )
+
+
+def _to_int(value: Any, default: int = 0) -> int:
+    try:
+        if value is None:
+            return default
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+def _build_stock_reconciliation_report(
+    include_only_mismatch: bool = True,
+    ledger_limit: int = 5000,
+) -> dict:
+    products = db.get_products()
+    ledger_rows_scanned = 0
+    ledger_net_by_product: Dict[str, int] = {}
+    ledger_count_by_product: Dict[str, int] = {}
+
+    if hasattr(db, "get_stock_ledger_aggregates_by_product"):
+        ledger_net_by_product, ledger_count_by_product, ledger_rows_scanned = (
+            db.get_stock_ledger_aggregates_by_product()
+        )
+    else:
+        safe_ledger_limit = max(500, min(ledger_limit, 20000))
+        ledger_rows = db.get_stock_ledger(limit=safe_ledger_limit) if hasattr(db, "get_stock_ledger") else []
+        ledger_rows_scanned = len(ledger_rows)
+        for row in ledger_rows:
+            product_id = row.get("product_id")
+            if not product_id:
+                continue
+            pid = str(product_id)
+            ledger_net_by_product[pid] = ledger_net_by_product.get(pid, 0) + _to_int(row.get("quantity_change"), 0)
+            ledger_count_by_product[pid] = ledger_count_by_product.get(pid, 0) + 1
+
+    items = []
+    mismatch_stock_vs_batch = 0
+    mismatch_batch_vs_ledger = 0
+    total_stock_quantity = 0
+    total_batch_quantity = 0
+    total_ledger_quantity = 0
+
+    for product in products:
+        product_id = product.get("id")
+        if not product_id:
+            continue
+        pid = str(product_id)
+
+        batches = db.get_batches_by_product(product_id)
+        batch_quantity = sum(_to_int(batch.get("quantity"), 0) for batch in batches)
+        stock_quantity = _to_int(product.get("stock_quantity"), 0)
+
+        ledger_quantity = ledger_net_by_product.get(pid)
+        ledger_entries = ledger_count_by_product.get(pid, 0)
+        if ledger_quantity is None:
+            ledger_quantity = 0
+
+        stock_vs_batch_diff = stock_quantity - batch_quantity
+        batch_vs_ledger_diff = batch_quantity - ledger_quantity if ledger_entries > 0 else None
+
+        has_stock_batch_mismatch = stock_vs_batch_diff != 0
+        has_batch_ledger_mismatch = batch_vs_ledger_diff is not None and batch_vs_ledger_diff != 0
+
+        if include_only_mismatch and not (has_stock_batch_mismatch or has_batch_ledger_mismatch):
+            continue
+
+        if has_stock_batch_mismatch:
+            mismatch_stock_vs_batch += 1
+        if has_batch_ledger_mismatch:
+            mismatch_batch_vs_ledger += 1
+
+        if has_stock_batch_mismatch and has_batch_ledger_mismatch:
+            status = "mismatch_both"
+        elif has_stock_batch_mismatch:
+            status = "mismatch_stock_vs_batch"
+        elif has_batch_ledger_mismatch:
+            status = "mismatch_batch_vs_ledger"
+        else:
+            status = "ok"
+
+        total_stock_quantity += stock_quantity
+        total_batch_quantity += batch_quantity
+        total_ledger_quantity += ledger_quantity
+
+        items.append(
+            {
+                "product_id": product_id,
+                "product_name": product.get("name"),
+                "sku": product.get("sku"),
+                "stock_quantity": stock_quantity,
+                "batch_quantity": batch_quantity,
+                "ledger_quantity": ledger_quantity,
+                "ledger_entries": ledger_entries,
+                "stock_vs_batch_diff": stock_vs_batch_diff,
+                "batch_vs_ledger_diff": batch_vs_ledger_diff,
+                "status": status,
+            }
+        )
+
+    return {
+        "generated_at": datetime.now().isoformat(),
+        "totals": {
+            "products_checked": len(products),
+            "rows_returned": len(items),
+            "mismatch_stock_vs_batch": mismatch_stock_vs_batch,
+            "mismatch_batch_vs_ledger": mismatch_batch_vs_ledger,
+            "sum_stock_quantity": total_stock_quantity,
+            "sum_batch_quantity": total_batch_quantity,
+            "sum_ledger_quantity": total_ledger_quantity,
+            "ledger_rows_scanned": ledger_rows_scanned,
+        },
+        "items": items,
+    }
+
+
+def _ledger_ts_from_row(row: dict) -> str:
+    ts = row.get("created_at")
+    if isinstance(ts, datetime):
+        return ts.isoformat()
+    if isinstance(ts, str) and ts.strip():
+        return ts
+    return datetime.now().isoformat()
+
+
+def _plan_stock_ledger_backfill(
+    *,
+    include_purchases: bool,
+    include_sales: bool,
+    include_returns: bool,
+    skip_voucher_if_ledger_exists: bool,
+) -> tuple[List[dict], dict]:
+    """
+    Build stock_ledger insert rows for historical data. Each row uses remarks
+    'backfill:...' for idempotent re-runs.
+    """
+    stats: Dict[str, Any] = {
+        "purchases_lines_seen": 0,
+        "purchases_lines_planned": 0,
+        "sales_lines_seen": 0,
+        "sales_lines_planned": 0,
+        "return_lines_seen": 0,
+        "return_lines_planned": 0,
+        "skipped_missing_line_id": 0,
+        "skipped_duplicate_remark": 0,
+        "skipped_whole_voucher": 0,
+        "returns_unavailable": False,
+    }
+    rows: List[dict] = []
+
+    if not hasattr(db, "add_stock_ledger_entry"):
+        return rows, stats
+
+    backfill_keys: set[str] = set()
+    if hasattr(db, "get_stock_ledger_backfill_keys"):
+        backfill_keys = db.get_stock_ledger_backfill_keys()
+
+    voucher_keys: set[tuple[str, str]] = set()
+    if skip_voucher_if_ledger_exists and hasattr(db, "get_stock_ledger_voucher_keys"):
+        voucher_keys = db.get_stock_ledger_voucher_keys()
+
+    if include_purchases and hasattr(db, "get_purchases"):
+        for purchase in db.get_purchases():
+            pid = str(purchase.get("id")) if purchase.get("id") is not None else None
+            if not pid:
+                continue
+            if skip_voucher_if_ledger_exists and ("purchase", pid) in voucher_keys:
+                stats["skipped_whole_voucher"] += len(purchase.get("items") or [])
+                continue
+            ts = _ledger_ts_from_row(purchase)
+            wid = purchase.get("warehouse_id")
+            wname = purchase.get("warehouse_name")
+            for item in purchase.get("items") or []:
+                stats["purchases_lines_seen"] += 1
+                line_id = item.get("id")
+                if not line_id:
+                    stats["skipped_missing_line_id"] += 1
+                    continue
+                remark = f"backfill:purchase_item:{line_id}"
+                if remark in backfill_keys:
+                    stats["skipped_duplicate_remark"] += 1
+                    continue
+                product_id = item.get("product_id")
+                if not product_id:
+                    stats["skipped_missing_line_id"] += 1
+                    continue
+                qty = _to_int(item.get("quantity"), 0)
+                if qty == 0:
+                    continue
+                item_batch_id = item.get("batch_id")
+                item_batch_number = item.get("batch_number")
+                batch_ref = None
+                if item_batch_id and hasattr(db, "get_batch"):
+                    batch_ref = db.get_batch(str(item_batch_id))
+                elif item_batch_number:
+                    batch_ref = _find_batch_by_product_and_number(str(product_id), item_batch_number)
+                    if batch_ref:
+                        item_batch_id = batch_ref.get("id")
+                        item_batch_number = batch_ref.get("batch_number") or item_batch_number
+                row_wid = item.get("warehouse_id") or wid
+                row_wname = item.get("warehouse_name") or wname
+                if batch_ref:
+                    row_wid = row_wid or batch_ref.get("warehouse_id")
+                    row_wname = row_wname or batch_ref.get("warehouse_name")
+                if row_wid and not row_wname and hasattr(db, "get_warehouse"):
+                    wh = db.get_warehouse(str(row_wid))
+                    if wh:
+                        row_wname = wh.get("name")
+                rows.append(
+                    {
+                        "product_id": str(product_id),
+                        "product_name": item.get("product_name"),
+                        "batch_id": item_batch_id,
+                        "batch_number": item_batch_number,
+                        "warehouse_id": row_wid,
+                        "warehouse_name": row_wname,
+                        "voucher_type": "purchase",
+                        "voucher_id": pid,
+                        "quantity_change": qty,
+                        "quantity_after": None,
+                        "unit_cost": item.get("unit_price"),
+                        "remarks": remark,
+                        "created_by": None,
+                        "created_at": ts,
+                    }
+                )
+                stats["purchases_lines_planned"] += 1
+
+    if include_sales and hasattr(db, "get_sales"):
+        for sale in db.get_sales():
+            sid = str(sale.get("id")) if sale.get("id") is not None else None
+            if not sid:
+                continue
+            if skip_voucher_if_ledger_exists and ("sale", sid) in voucher_keys:
+                stats["skipped_whole_voucher"] += len(sale.get("items") or [])
+                continue
+            ts = _ledger_ts_from_row(sale)
+            for item in sale.get("items") or []:
+                stats["sales_lines_seen"] += 1
+                line_id = item.get("id")
+                if not line_id:
+                    stats["skipped_missing_line_id"] += 1
+                    continue
+                remark = f"backfill:sale_item:{line_id}"
+                if remark in backfill_keys:
+                    stats["skipped_duplicate_remark"] += 1
+                    continue
+                product_id = item.get("product_id")
+                if not product_id:
+                    stats["skipped_missing_line_id"] += 1
+                    continue
+                qty = _to_int(item.get("quantity"), 0)
+                if qty == 0:
+                    continue
+                item_batch_id = item.get("batch_id")
+                item_batch_number = item.get("batch_number")
+                batch_ref = None
+                if item_batch_id and hasattr(db, "get_batch"):
+                    batch_ref = db.get_batch(str(item_batch_id))
+                elif item_batch_number:
+                    batch_ref = _find_batch_by_product_and_number(str(product_id), item_batch_number)
+                    if batch_ref:
+                        item_batch_id = batch_ref.get("id")
+                        item_batch_number = batch_ref.get("batch_number") or item_batch_number
+                row_wid = batch_ref.get("warehouse_id") if batch_ref else None
+                row_wname = batch_ref.get("warehouse_name") if batch_ref else None
+                if row_wid and not row_wname and hasattr(db, "get_warehouse"):
+                    wh = db.get_warehouse(str(row_wid))
+                    if wh:
+                        row_wname = wh.get("name")
+                rows.append(
+                    {
+                        "product_id": str(product_id),
+                        "product_name": item.get("product_name"),
+                        "batch_id": item_batch_id,
+                        "batch_number": item_batch_number,
+                        "warehouse_id": row_wid,
+                        "warehouse_name": row_wname,
+                        "voucher_type": "sale",
+                        "voucher_id": sid,
+                        "quantity_change": -qty,
+                        "quantity_after": None,
+                        "unit_cost": item.get("unit_price"),
+                        "remarks": remark,
+                        "created_by": None,
+                        "created_at": ts,
+                    }
+                )
+                stats["sales_lines_planned"] += 1
+
+    if include_returns:
+        if not hasattr(db, "get_all_sales_return_items_flat"):
+            stats["returns_unavailable"] = True
+        else:
+            for item in db.get_all_sales_return_items_flat():
+                stats["return_lines_seen"] += 1
+                rid = str(item.get("return_id")) if item.get("return_id") is not None else None
+                if not rid:
+                    stats["skipped_missing_line_id"] += 1
+                    continue
+                if skip_voucher_if_ledger_exists and ("sale_return", rid) in voucher_keys:
+                    stats["skipped_whole_voucher"] += 1
+                    continue
+                line_id = item.get("id")
+                if not line_id:
+                    stats["skipped_missing_line_id"] += 1
+                    continue
+                remark = f"backfill:sreturn_item:{line_id}"
+                if remark in backfill_keys:
+                    stats["skipped_duplicate_remark"] += 1
+                    continue
+                product_id = item.get("product_id")
+                if not product_id:
+                    stats["skipped_missing_line_id"] += 1
+                    continue
+                qty = _to_int(item.get("quantity_returned"), 0)
+                if qty == 0:
+                    continue
+                item_batch_id = item.get("batch_id")
+                item_batch_number = item.get("batch_number")
+                batch_ref = None
+                if item_batch_id and hasattr(db, "get_batch"):
+                    batch_ref = db.get_batch(str(item_batch_id))
+                elif item_batch_number:
+                    batch_ref = _find_batch_by_product_and_number(str(product_id), item_batch_number)
+                    if batch_ref:
+                        item_batch_id = batch_ref.get("id")
+                        item_batch_number = batch_ref.get("batch_number") or item_batch_number
+                row_wid = batch_ref.get("warehouse_id") if batch_ref else None
+                row_wname = batch_ref.get("warehouse_name") if batch_ref else None
+                if row_wid and not row_wname and hasattr(db, "get_warehouse"):
+                    wh = db.get_warehouse(str(row_wid))
+                    if wh:
+                        row_wname = wh.get("name")
+                ts_raw = item.get("_return_created_at")
+                if isinstance(ts_raw, datetime):
+                    ts = ts_raw.isoformat()
+                elif isinstance(ts_raw, str) and ts_raw.strip():
+                    ts = ts_raw
+                else:
+                    ts = datetime.now().isoformat()
+                rows.append(
+                    {
+                        "product_id": str(product_id),
+                        "product_name": item.get("product_name"),
+                        "batch_id": item_batch_id,
+                        "batch_number": item_batch_number,
+                        "warehouse_id": row_wid,
+                        "warehouse_name": row_wname,
+                        "voucher_type": "sale_return",
+                        "voucher_id": rid,
+                        "quantity_change": qty,
+                        "quantity_after": None,
+                        "unit_cost": item.get("unit_price"),
+                        "remarks": remark,
+                        "created_by": None,
+                        "created_at": ts,
+                    }
+                )
+                stats["return_lines_planned"] += 1
+
+    stats["rows_planned"] = len(rows)
+    return rows, stats
+
+
+def _apply_stock_ledger_backfill(rows: List[dict], dry_run: bool) -> int:
+    if dry_run or not rows:
+        return 0
+    if hasattr(db, "add_stock_ledger_entries_bulk"):
+        return int(db.add_stock_ledger_entries_bulk(rows))
+    inserted = 0
+    if hasattr(db, "add_stock_ledger_entry"):
+        for row in rows:
+            db.add_stock_ledger_entry(row)
+            inserted += 1
+    return inserted
+
 
 # Global exception handler to ensure JSON responses (must be before middleware)
 from fastapi.exceptions import RequestValidationError
@@ -301,10 +860,10 @@ async def login(credentials: UserLogin, request: Request):
                 elif hasattr(db, 'users'):
                     # InMemoryDatabase
                     db.users[user["id"]]["password_hash"] = new_hash
-                print(f"[LOGIN] ✅ Password hash upgraded to bcrypt for: {credentials.email}")
+                print(f"[LOGIN] Password hash upgraded to bcrypt for: {credentials.email}")
             except Exception as upgrade_err:
                 # Non-fatal: login still succeeds even if upgrade fails
-                print(f"[LOGIN] ⚠️ Failed to upgrade password hash: {upgrade_err}")
+                print(f"[LOGIN] Failed to upgrade password hash: {upgrade_err}")
         
         access_token = create_access_token(data={"sub": user["id"]})
         print(f"[LOGIN] Success: User {user['email']} logged in from origin: {origin}")
@@ -706,6 +1265,8 @@ async def create_product(product_data: ProductCreate, current_user: dict = Depen
             })
             product["batch_number"] = batch.get("batch_number")
             product["expiry_date"] = batch.get("expiry_date")
+
+        _record_opening_stock_ledger_for_product(product, current_user.get("id"))
         
         # Check for low stock and trigger SMS if needed
         stock_quantity = product.get("stock_quantity", 0)
@@ -775,9 +1336,22 @@ async def update_product(product_id: str, product_data: ProductCreate, current_u
         print(f"[API] Updating product {product_id} with data: {data}")
         print(f"[API] User: {current_user.get('email', 'unknown')}")
         
+        prior = db.get_product(product_id)
         product = db.update_product(product_id, data)
         if not product:
             raise HTTPException(status_code=404, detail="Product not found")
+
+        old_q = _to_int((prior or {}).get("stock_quantity"), 0)
+        new_q = _to_int(product.get("stock_quantity"), 0)
+        if prior is not None and old_q != new_q:
+            _record_stock_ledger_adjustment(
+                product_id=str(product_id),
+                quantity_change=new_q - old_q,
+                created_by=current_user.get("id"),
+                voucher_id=str(product_id),
+                remarks="product_stock_edit",
+                batch_number=product.get("batch_number") or (prior or {}).get("batch_number"),
+            )
         
         # Check for low stock and trigger SMS if needed
         stock_quantity = product.get("stock_quantity", 0)
@@ -856,6 +1430,20 @@ async def create_product_batch(product_id: str, batch_data: ProductBatchCreate, 
         "quantity": batch_data.quantity,
         "purchase_price": batch_data.purchase_price
     })
+    qty = int(batch_data.quantity)
+    if hasattr(db, "update_product_stock") and qty != 0:
+        db.update_product_stock(product_id, qty)
+    _record_stock_ledger_adjustment(
+        product_id=str(product_id),
+        quantity_change=qty,
+        created_by=current_user.get("id"),
+        voucher_id=str(product_id),
+        remarks=f"batch_create:{batch.get('id')}",
+        batch_id=batch.get("id"),
+        batch_number=batch.get("batch_number"),
+        warehouse_id=batch.get("warehouse_id"),
+        warehouse_name=batch.get("warehouse_name"),
+    )
     return ProductBatch(**batch)
 
 @app.get("/api/retailers", response_model=List[Retailer])
@@ -1085,6 +1673,17 @@ async def create_purchase(purchase_data: PurchaseCreate, request: Request, curre
             entity_id=purchase.get("id"),
             metadata={"invoice_number": purchase.get("invoice_number")},
         )
+        _record_stock_ledger_entries(
+            voucher_type="purchase",
+            voucher_id=purchase.get("id"),
+            items=purchase.get("items", []),
+            quantity_key="quantity",
+            quantity_multiplier=1,
+            warehouse_id=purchase.get("warehouse_id"),
+            warehouse_name=purchase.get("warehouse_name"),
+            created_by=current_user.get("id"),
+            remarks=f"Purchase {purchase.get('invoice_number')}",
+        )
         
         # Check for expiry alerts in purchase items
         from datetime import date, timedelta
@@ -1209,6 +1808,17 @@ async def update_sale(
         updated_sale = db.update_sale(sale_id, update_data)
         if not updated_sale:
             raise HTTPException(status_code=404, detail="Sale not found after update")
+
+        ds_new = update_data.get("delivery_status")
+        if isinstance(ds_new, str):
+            nd = ds_new.lower()
+            od = str((existing_sale.get("delivery_status") or "")).lower()
+            if nd in ("cancelled", "canceled") and od not in ("cancelled", "canceled"):
+                _restore_inventory_from_sale_before_delete(
+                    existing_sale,
+                    current_user.get("id"),
+                    remark_prefix="sale_cancel_restore",
+                )
         
         # Fetch complete sale with items
         complete_sale = db.get_sale(sale_id)
@@ -1268,6 +1878,15 @@ async def create_sale(sale_data: SaleCreate, request: Request, current_user: dic
             entity_type="sale",
             entity_id=sale.get("id"),
             metadata={"invoice_number": sale.get("invoice_number")},
+        )
+        _record_stock_ledger_entries(
+            voucher_type="sale",
+            voucher_id=sale.get("id"),
+            items=sale.get("items", []),
+            quantity_key="quantity",
+            quantity_multiplier=-1,
+            created_by=current_user.get("id"),
+            remarks=f"Sale {sale.get('invoice_number')}",
         )
         
         # Trigger new order SMS notification
@@ -1349,6 +1968,15 @@ async def create_sale_return(
             items=items,
             user_id=current_user.get("id")
         )
+        _record_stock_ledger_entries(
+            voucher_type="sale_return",
+            voucher_id=return_record.get("id"),
+            items=return_record.get("items", []),
+            quantity_key="quantity_returned",
+            quantity_multiplier=1,
+            created_by=current_user.get("id"),
+            remarks=f"Sales return {return_record.get('return_number')}",
+        )
         
         print(f"[API] Sale return created: return_id={return_record.get('id')}, return_number={return_record.get('return_number')}")
         
@@ -1403,7 +2031,15 @@ async def delete_sale(sale_id: str, current_user: dict = Depends(get_current_use
         sale = db.get_sale(sale_id)
         if not sale:
             raise HTTPException(status_code=404, detail="Sale not found")
-        
+
+        if not hasattr(db, "delete_sale"):
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail="Sale delete is not supported for this database backend",
+            )
+
+        _restore_inventory_from_sale_before_delete(sale, current_user.get("id"))
+
         # Delete the sale
         db.delete_sale(sale_id)
         return {"message": "Sale deleted successfully"}
@@ -1505,6 +2141,167 @@ async def create_payment(payment_data: PaymentCreate, current_user: dict = Depen
 @app.get("/api/inventory", response_model=List[InventoryItem])
 async def get_inventory(current_user: dict = Depends(get_current_user)):
     return db.get_inventory()
+
+@app.get("/api/stock-ledger", response_model=List[StockLedgerEntry])
+async def get_stock_ledger(
+    product_id: Optional[str] = None,
+    limit: int = 200,
+    current_user: dict = Depends(get_current_user),
+):
+    safe_limit = max(1, min(limit, 500))
+    if not hasattr(db, "get_stock_ledger"):
+        return []
+    rows = db.get_stock_ledger(product_id=product_id, limit=safe_limit)
+    return [StockLedgerEntry(**row) for row in rows]
+
+@app.get("/api/reports/stock-reconciliation")
+async def get_stock_reconciliation_report(
+    include_only_mismatch: bool = True,
+    ledger_limit: int = 5000,
+    current_user: dict = Depends(get_current_user),
+):
+    try:
+        return _build_stock_reconciliation_report(
+            include_only_mismatch=include_only_mismatch,
+            ledger_limit=ledger_limit,
+        )
+    except Exception as e:
+        error_msg = str(e)
+        error_type = type(e).__name__
+        print(f"[API] Error generating stock reconciliation report: {error_type}: {error_msg}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate stock reconciliation report: {error_type}: {error_msg}"
+        )
+
+@app.post("/api/admin/stock-reconciliation/fix")
+async def fix_stock_reconciliation(
+    source: str = "batch",
+    dry_run: bool = True,
+    current_user: dict = Depends(get_current_user),
+):
+    if current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+
+    source_key = (source or "batch").strip().lower()
+    if source_key not in {"batch", "ledger"}:
+        raise HTTPException(status_code=400, detail="source must be either 'batch' or 'ledger'")
+
+    report = _build_stock_reconciliation_report(include_only_mismatch=False, ledger_limit=10000)
+
+    updated_count = 0
+    skipped_count = 0
+    updates = []
+
+    for row in report.get("items", []):
+        product_id = row.get("product_id")
+        current_stock = _to_int(row.get("stock_quantity"), 0)
+        target_stock = _to_int(row.get("batch_quantity"), 0) if source_key == "batch" else row.get("ledger_quantity")
+
+        if source_key == "ledger" and row.get("ledger_entries", 0) == 0:
+            skipped_count += 1
+            continue
+
+        target_stock = _to_int(target_stock, 0)
+        if current_stock == target_stock:
+            continue
+
+        updates.append(
+            {
+                "product_id": product_id,
+                "product_name": row.get("product_name"),
+                "sku": row.get("sku"),
+                "from_stock_quantity": current_stock,
+                "to_stock_quantity": target_stock,
+            }
+        )
+
+        if not dry_run:
+            updated = db.update_product(product_id, {"stock_quantity": target_stock})
+            if updated:
+                updated_count += 1
+            else:
+                skipped_count += 1
+
+    if dry_run:
+        updated_count = len(updates)
+
+    return {
+        "source": source_key,
+        "dry_run": dry_run,
+        "summary": {
+            "candidate_updates": len(updates),
+            "applied_updates": updated_count if not dry_run else 0,
+            "skipped": skipped_count,
+        },
+        "updates": updates,
+    }
+
+
+@app.post("/api/admin/stock-ledger/backfill")
+async def admin_stock_ledger_backfill(
+    request: Request,
+    dry_run: bool = True,
+    include_purchases: bool = True,
+    include_sales: bool = True,
+    include_returns: bool = True,
+    skip_voucher_if_ledger_exists: bool = True,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    One-time / rare: rebuild stock_ledger rows from historical purchases, sales,
+    and sales return line items. Idempotent via remarks keys like backfill:*.
+
+    Query params:
+    - dry_run: preview only (default True)
+    - skip_voucher_if_ledger_exists: if any ledger row already exists for the
+      same (voucher_type, voucher_id), skip that whole voucher (avoids doubling
+      when live hooks already wrote rows for newer data).
+    """
+    if current_user.get("role") != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    if not hasattr(db, "add_stock_ledger_entry"):
+        raise HTTPException(
+            status_code=status.HTTP_501_NOT_IMPLEMENTED,
+            detail="Stock ledger is not available for this database backend",
+        )
+
+    rows, stats = _plan_stock_ledger_backfill(
+        include_purchases=include_purchases,
+        include_sales=include_sales,
+        include_returns=include_returns,
+        skip_voucher_if_ledger_exists=skip_voucher_if_ledger_exists,
+    )
+    inserted = _apply_stock_ledger_backfill(rows, dry_run=dry_run)
+
+    if not dry_run and inserted > 0:
+        _log_audit_event(
+            action="stock_ledger_backfill_applied",
+            request=request,
+            actor_id=current_user.get("id"),
+            entity_type="stock_ledger",
+            entity_id=None,
+            metadata={
+                "inserted_rows": inserted,
+                "stats": stats,
+            },
+        )
+
+    sample = rows[:25]
+    return {
+        "dry_run": dry_run,
+        "inserted_rows": inserted if not dry_run else 0,
+        "would_insert_rows": len(rows) if dry_run else 0,
+        "stats": stats,
+        "sample": sample,
+    }
+
 
 @app.get("/api/expiry-alerts", response_model=List[ExpiryAlert])
 async def get_expiry_alerts(current_user: dict = Depends(get_current_user)):
@@ -1709,7 +2506,9 @@ async def import_products(products: List[ProductCreate], current_user: dict = De
                 "quantity": max(0, int(data.get("stock_quantity", 0))),
                 "purchase_price": data.get("purchase_price", 0),
             })
-        imported.append(Product(**_attach_latest_batch(product)))
+        product = _attach_latest_batch(product)
+        _record_opening_stock_ledger_for_product(product, current_user.get("id"))
+        imported.append(Product(**product))
     return {"imported": len(imported), "products": imported}
 
 # Category endpoints

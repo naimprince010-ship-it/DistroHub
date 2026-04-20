@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { PageShell } from '@/components/layout/PageShell';
 import {
   Download,
@@ -507,7 +508,14 @@ export function Reports() {
   };
 
   return (
-    <PageShell title="Reports">
+    <PageShell
+      title="Reports"
+      actions={
+        <Link to="/reports/stock-reconciliation" className="btn-secondary inline-flex h-9 items-center gap-2 px-3">
+          Stock Reconciliation
+        </Link>
+      }
+    >
         {/* Report Type Tabs */}
         <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
           <div className="flex border-b border-border px-1">

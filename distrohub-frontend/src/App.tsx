@@ -15,6 +15,7 @@ import { Payments } from '@/pages/Payments';
 import { Receivables } from '@/pages/Receivables';
 import { Expiry } from '@/pages/Expiry';
 import { Reports } from '@/pages/Reports';
+import { StockReconciliation } from '@/pages/StockReconciliation';
 import { Settings } from '@/pages/Settings';
 import { Categories } from '@/pages/Categories';
 import { OfflineProvider } from '@/contexts/OfflineContext';
@@ -72,6 +73,7 @@ function App() {
                   <Route path="receivables" element={<Receivables />} />
                   <Route path="expiry" element={<Expiry />} />
                   <Route path="reports" element={<Reports />} />
+                  <Route path="reports/stock-reconciliation" element={<StockReconciliation />} />
                   <Route path="settings" element={<Settings />} />
                   <Route path="categories" element={<Categories />} />
                 </Route>

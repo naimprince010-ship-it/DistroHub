@@ -2,7 +2,7 @@ import os
 import hashlib
 import bcrypt as _bcrypt_lib
 from datetime import datetime, date, timedelta
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 from supabase import create_client, Client
 from app.models import (
     UserRole, PaymentStatus, OrderStatus, ExpiryStatus,
@@ -39,7 +39,7 @@ class SupabaseDatabase:
         try:
             test = self.client.table("users").select("id").limit(1).execute()
             # If we get here, connection works (even if 0 rows returned)
-            print(f"[DB] ✅ Supabase connection verified ({len(test.data or [])} user(s) visible)")
+            print(f"[DB] Supabase connection verified ({len(test.data or [])} user(s) visible)")
         except Exception as e:
             raise ValueError(f"Supabase key cannot query users table: {e}")
 
@@ -535,7 +535,9 @@ class SupabaseDatabase:
                         "total": item_total
                     }
                     item_result = self.client.table("purchase_items").insert(purchase_item_data).execute()
-                    purchase_items.append(item_result.data[0] if item_result.data else purchase_item_data)
+                    purchase_item = item_result.data[0] if item_result.data else purchase_item_data
+                    purchase_item["batch_id"] = existing_batch.get("id")
+                    purchase_items.append(purchase_item)
                     continue
 
             # Create new batch with warehouse_id
@@ -568,7 +570,9 @@ class SupabaseDatabase:
                 "total": item_total
             }
             item_result = self.client.table("purchase_items").insert(purchase_item_data).execute()
-            purchase_items.append(item_result.data[0] if item_result.data else purchase_item_data)
+            purchase_item = item_result.data[0] if item_result.data else purchase_item_data
+            purchase_item["batch_id"] = batch.get("id") if batch else None
+            purchase_items.append(purchase_item)
         
         purchase["items"] = purchase_items
         total_elapsed = time.time() - start_time
@@ -743,7 +747,9 @@ class SupabaseDatabase:
                     error_detail = f"Sale item insert returned no data. sale_id={actual_sale_id}, product_id={item['product_id']}"
                     print(f"[Supabase] ERROR: {error_detail}")
                     raise ValueError(f"Failed to create sale_item: {error_detail}")
-                sale_items.append(item_result.data[0])
+                sale_item = item_result.data[0]
+                sale_item["batch_id"] = item.get("batch_id")
+                sale_items.append(sale_item)
             except Exception as e:
                 error_msg = str(e)
                 error_type = type(e).__name__
@@ -1688,6 +1694,172 @@ class SupabaseDatabase:
         # #endregion
         
         return inserted_payment
+
+    def add_stock_ledger_entry(self, data: dict) -> dict:
+        created_at = data.get("created_at")
+        if created_at is None:
+            created_ts = datetime.now().isoformat()
+        elif isinstance(created_at, datetime):
+            created_ts = created_at.isoformat()
+        else:
+            created_ts = str(created_at)
+        payload = {
+            "product_id": data["product_id"],
+            "product_name": data.get("product_name"),
+            "batch_id": data.get("batch_id"),
+            "batch_number": data.get("batch_number"),
+            "warehouse_id": data.get("warehouse_id"),
+            "warehouse_name": data.get("warehouse_name"),
+            "voucher_type": data["voucher_type"],
+            "voucher_id": data.get("voucher_id"),
+            "quantity_change": int(data.get("quantity_change", 0)),
+            "quantity_after": data.get("quantity_after"),
+            "unit_cost": data.get("unit_cost"),
+            "remarks": data.get("remarks"),
+            "created_by": data.get("created_by"),
+            "created_at": created_ts,
+        }
+        result = self.client.table("stock_ledger").insert(payload).execute()
+        return result.data[0] if result.data else payload
+
+    def get_stock_ledger(self, product_id: Optional[str] = None, limit: int = 200) -> List[dict]:
+        query = self.client.table("stock_ledger").select("*").order("created_at", desc=True).limit(limit)
+        if product_id:
+            query = query.eq("product_id", product_id)
+        result = query.execute()
+        return result.data or []
+
+    def get_stock_ledger_backfill_keys(self) -> set[str]:
+        keys: set[str] = set()
+        page_size = 1000
+        offset = 0
+        while True:
+            result = (
+                self.client.table("stock_ledger")
+                .select("remarks")
+                .like("remarks", "backfill%")
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            rows = result.data or []
+            for row in rows:
+                r = row.get("remarks")
+                if r and str(r).startswith("backfill:"):
+                    keys.add(str(r))
+            if len(rows) < page_size:
+                break
+            offset += page_size
+        return keys
+
+    def get_stock_ledger_voucher_keys(self) -> set[tuple[str, str]]:
+        keys: set[tuple[str, str]] = set()
+        page_size = 2000
+        offset = 0
+        while True:
+            result = (
+                self.client.table("stock_ledger")
+                .select("voucher_type,voucher_id")
+                .not_.is_("voucher_id", "null")
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            rows = result.data or []
+            for row in rows:
+                vt = row.get("voucher_type")
+                vid = row.get("voucher_id")
+                if vt is not None and vid is not None:
+                    keys.add((str(vt), str(vid)))
+            if len(rows) < page_size:
+                break
+            offset += page_size
+        return keys
+
+    def add_stock_ledger_entries_bulk(self, rows: List[dict]) -> int:
+        if not rows:
+            return 0
+        inserted = 0
+        chunk_size = 250
+        for i in range(0, len(rows), chunk_size):
+            chunk = rows[i : i + chunk_size]
+            payloads = []
+            for data in chunk:
+                created_at = data.get("created_at")
+                if created_at is None:
+                    created_ts = datetime.now().isoformat()
+                elif isinstance(created_at, datetime):
+                    created_ts = created_at.isoformat()
+                else:
+                    created_ts = str(created_at)
+                payloads.append(
+                    {
+                        "product_id": data["product_id"],
+                        "product_name": data.get("product_name"),
+                        "batch_id": data.get("batch_id"),
+                        "batch_number": data.get("batch_number"),
+                        "warehouse_id": data.get("warehouse_id"),
+                        "warehouse_name": data.get("warehouse_name"),
+                        "voucher_type": data["voucher_type"],
+                        "voucher_id": data.get("voucher_id"),
+                        "quantity_change": int(data.get("quantity_change", 0)),
+                        "quantity_after": data.get("quantity_after"),
+                        "unit_cost": data.get("unit_cost"),
+                        "remarks": data.get("remarks"),
+                        "created_by": data.get("created_by"),
+                        "created_at": created_ts,
+                    }
+                )
+            self.client.table("stock_ledger").insert(payloads).execute()
+            inserted += len(payloads)
+        return inserted
+
+    def get_stock_ledger_aggregates_by_product(self) -> Tuple[Dict[str, int], Dict[str, int], int]:
+        """Paginate entire stock_ledger and aggregate net qty + entry counts per product."""
+        net: Dict[str, int] = {}
+        cnt: Dict[str, int] = {}
+        total_rows = 0
+        page_size = 5000
+        offset = 0
+        while True:
+            result = (
+                self.client.table("stock_ledger")
+                .select("product_id,quantity_change")
+                .range(offset, offset + page_size - 1)
+                .execute()
+            )
+            rows = result.data or []
+            for row in rows:
+                pid = row.get("product_id")
+                if not pid:
+                    continue
+                pid = str(pid)
+                q = int(row.get("quantity_change") or 0)
+                net[pid] = net.get(pid, 0) + q
+                cnt[pid] = cnt.get(pid, 0) + 1
+            total_rows += len(rows)
+            if len(rows) < page_size:
+                break
+            offset += page_size
+        return net, cnt, total_rows
+
+    def get_all_sales_return_items_flat(self) -> List[dict]:
+        items_res = self.client.table("sales_return_items").select("*").execute()
+        items = items_res.data or []
+        if not items:
+            return []
+        return_ids = list({str(i["return_id"]) for i in items if i.get("return_id")})
+        if not return_ids:
+            return items
+        returns_res = self.client.table("sales_returns").select("*").in_("id", return_ids).execute()
+        rmap = {str(r["id"]): r for r in (returns_res.data or [])}
+        out: List[dict] = []
+        for it in items:
+            rid = it.get("return_id")
+            ret = rmap.get(str(rid), {})
+            merged = dict(it)
+            merged["_return_created_at"] = ret.get("created_at")
+            merged["_return_number"] = ret.get("return_number")
+            out.append(merged)
+        return out
     
     def get_inventory(self) -> List[InventoryItem]:
         inventory = []

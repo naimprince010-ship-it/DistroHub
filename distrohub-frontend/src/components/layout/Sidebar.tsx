@@ -10,13 +10,13 @@ import {
   Receipt,
   FileText,
   Settings,
-  LogOut,
   TrendingUp,
   AlertTriangle,
   RotateCcw,
   MapPin,
   DollarSign,
   ChevronLeft,
+  PanelLeftOpen,
   Menu,
   X,
   BarChart3,
@@ -201,12 +201,6 @@ export function Sidebar() {
     [t]
   );
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    window.location.href = '/login';
-  };
-
   const NavRow = ({ item }: { item: MenuItem }) => {
     const active =
       item.path === '/settings?tab=suppliers'
@@ -317,34 +311,26 @@ export function Sidebar() {
               onClick={() => setIsCollapsed(!isCollapsed)}
               className={cn(
                 'w-full flex items-center rounded-xl transition-colors duration-200',
-                'text-[hsl(var(--sidebar-muted))] hover:text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))]',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--sidebar-ring))]',
-                isCollapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5'
+                isCollapsed
+                  ? 'min-h-[48px] flex-col justify-center gap-0.5 p-2 text-[hsl(var(--sidebar-foreground))] bg-[hsl(var(--sidebar-accent))] ring-1 ring-[hsl(var(--sidebar-border))] hover:bg-[hsl(var(--sidebar-accent))]/85'
+                  : 'gap-3 px-3 py-2.5 text-[hsl(var(--sidebar-muted))] hover:text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))]',
               )}
               aria-pressed={isCollapsed}
               title={isCollapsed ? t('sidebar.expand_panel') : t('sidebar.collapse_panel')}
             >
-              <ChevronLeft
-                className={cn('w-5 h-5 transition-transform duration-300', isCollapsed && 'rotate-180')}
-                aria-hidden
-              />
+              {isCollapsed ? (
+                <>
+                  <PanelLeftOpen className="h-4 w-4 text-[hsl(var(--sidebar-foreground))]" aria-hidden />
+                  <span className="text-[10px] font-semibold leading-none text-[hsl(var(--sidebar-foreground))]">Open</span>
+                </>
+              ) : (
+                <ChevronLeft className="h-5 w-5 text-current" aria-hidden />
+              )}
               {!isCollapsed && <span className="text-sm font-medium">{t('sidebar.collapse_panel')}</span>}
             </button>
           )}
 
-          <button
-            type="button"
-            onClick={handleLogout}
-            className={cn(
-              'w-full flex items-center rounded-xl transition-colors duration-200',
-              'text-[hsl(var(--sidebar-muted))] hover:text-rose-500 hover:bg-rose-500/10',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-400/50',
-              isCollapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5'
-            )}
-          >
-            <LogOut className="w-5 h-5 flex-shrink-0" aria-hidden />
-            {!isCollapsed && <span className="text-sm font-semibold">{t('common.logout')}</span>}
-          </button>
         </div>
       </div>
     </TooltipProvider>

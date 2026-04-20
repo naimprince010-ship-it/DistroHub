@@ -1,5 +1,5 @@
 from datetime import datetime, date, timedelta
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import uuid
 import hashlib
 import bcrypt as _bcrypt_lib
@@ -33,6 +33,7 @@ class InMemoryDatabase:
         self.sms_queue: Dict[str, dict] = {}
         self.sms_logs: List[dict] = []
         self.audit_logs: List[dict] = []
+        self.stock_ledger: List[dict] = []
         self._seed_data()
     
     def _seed_data(self):
@@ -389,6 +390,7 @@ class InMemoryDatabase:
                 "purchase_id": purchase_id,
                 "product_id": item["product_id"],
                 "product_name": product["name"],
+                "batch_id": batch["id"],
                 "batch_number": item["batch_number"],
                 "expiry_date": item["expiry_date"],
                 "quantity": item["quantity"],
@@ -447,6 +449,7 @@ class InMemoryDatabase:
                 "sale_id": sale_id,
                 "product_id": item["product_id"],
                 "product_name": product["name"],
+                "batch_id": item["batch_id"],
                 "batch_number": batch["batch_number"],
                 "quantity": item["quantity"],
                 "unit_price": item["unit_price"],
@@ -551,6 +554,82 @@ class InMemoryDatabase:
                 batches=[ProductBatch(**b) for b in batches]
             ))
         return inventory
+
+    def add_stock_ledger_entry(self, data: dict) -> dict:
+        created_at = data.get("created_at")
+        if created_at is None:
+            created_at = datetime.now()
+        elif isinstance(created_at, str):
+            try:
+                created_at = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
+            except ValueError:
+                created_at = datetime.now()
+        elif not isinstance(created_at, datetime):
+            created_at = datetime.now()
+        entry = {
+            "id": generate_id(),
+            "product_id": data["product_id"],
+            "product_name": data.get("product_name"),
+            "batch_id": data.get("batch_id"),
+            "batch_number": data.get("batch_number"),
+            "warehouse_id": data.get("warehouse_id"),
+            "warehouse_name": data.get("warehouse_name"),
+            "voucher_type": data["voucher_type"],
+            "voucher_id": data.get("voucher_id"),
+            "quantity_change": int(data.get("quantity_change", 0)),
+            "quantity_after": data.get("quantity_after"),
+            "unit_cost": data.get("unit_cost"),
+            "remarks": data.get("remarks"),
+            "created_by": data.get("created_by"),
+            "created_at": created_at,
+        }
+        self.stock_ledger.append(entry)
+        return entry
+
+    def get_stock_ledger(self, product_id: Optional[str] = None, limit: int = 200) -> List[dict]:
+        records = self.stock_ledger
+        if product_id:
+            records = [row for row in records if row.get("product_id") == product_id]
+        records = sorted(records, key=lambda row: row.get("created_at", datetime.min), reverse=True)
+        return records[:limit]
+
+    def get_stock_ledger_backfill_keys(self) -> set[str]:
+        keys: set[str] = set()
+        for row in self.stock_ledger:
+            r = row.get("remarks")
+            if r and str(r).startswith("backfill:"):
+                keys.add(str(r))
+        return keys
+
+    def get_stock_ledger_voucher_keys(self) -> set[tuple[str, str]]:
+        keys: set[tuple[str, str]] = set()
+        for row in self.stock_ledger:
+            vt = row.get("voucher_type")
+            vid = row.get("voucher_id")
+            if vt is not None and vid is not None:
+                keys.add((str(vt), str(vid)))
+        return keys
+
+    def add_stock_ledger_entries_bulk(self, rows: List[dict]) -> int:
+        inserted = 0
+        for row in rows:
+            self.add_stock_ledger_entry(row)
+            inserted += 1
+        return inserted
+
+    def get_stock_ledger_aggregates_by_product(self) -> Tuple[Dict[str, int], Dict[str, int], int]:
+        """Sum quantity_change and row counts per product_id over the full ledger."""
+        net: Dict[str, int] = {}
+        cnt: Dict[str, int] = {}
+        for row in self.stock_ledger:
+            pid = row.get("product_id")
+            if not pid:
+                continue
+            pid = str(pid)
+            q = int(row.get("quantity_change") or 0)
+            net[pid] = net.get(pid, 0) + q
+            cnt[pid] = cnt.get(pid, 0) + 1
+        return net, cnt, len(self.stock_ledger)
     
     def get_expiry_alerts(self) -> List[ExpiryAlert]:
         alerts = []
@@ -868,15 +947,15 @@ def get_database():
     if use_supabase and supabase_url and supabase_key:
         try:
             from app.supabase_db import SupabaseDatabase
-            print(f"[DB] 🟢 Initializing SupabaseDatabase (URL: {supabase_url[:15]}...)")
+            print(f"[DB] Initializing SupabaseDatabase (URL: {supabase_url[:15]}...)")
             return SupabaseDatabase()
         except Exception as e:
-            print(f"[DB] 🔴 Failed to connect to Supabase: {e}")
+            print(f"[DB] Failed to connect to Supabase: {e}")
             import traceback
             traceback.print_exc()
-            print("[DB] ⚠️ Falling back to in-memory database")
+            print("[DB] Falling back to in-memory database")
     
-    print("[DB] 🏠 Using InMemoryDatabase (Local/Dev Mode)")
+    print("[DB] Using InMemoryDatabase (Local/Dev Mode)")
     return InMemoryDatabase()
 
 db = get_database()

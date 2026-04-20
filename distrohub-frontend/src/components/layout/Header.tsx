@@ -165,7 +165,6 @@ export function Header({ title }: HeaderProps) {
       <div className="flex items-center gap-2 lg:gap-4">
         {/* Search Bar - Hidden on small mobile */}
         <div className="hidden sm:block relative group">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none z-10 transition-colors group-focus-within:text-primary" />
           <input
             ref={searchInputRef}
             type="text"
@@ -173,11 +172,12 @@ export function Header({ title }: HeaderProps) {
             value={localSearch}
             onChange={(e) => handleSearchChange(e.target.value)}
             className={cn(
-              'h-10 py-2.5 pl-10 pr-8 rounded-lg',
+              'h-10 rounded-xl py-2.5 pl-4 pr-16',
               'w-40 md:w-56 lg:w-72',
-              'text-sm text-foreground placeholder:text-muted-foreground',
-              'bg-muted/50 border border-border',
-              'focus:outline-none focus:ring-2 focus:ring-ring focus:bg-background focus:border-primary',
+              'text-sm text-slate-700 placeholder:text-slate-400',
+              'bg-slate-50/85 border border-slate-200/80',
+              'shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]',
+              'focus:outline-none focus:ring-2 focus:ring-slate-300/70 focus:bg-white focus:border-slate-300',
               'transition-all duration-200'
             )}
           />
@@ -189,17 +189,7 @@ export function Header({ title }: HeaderProps) {
             >
               <X className="w-4 h-4" />
             </button>
-          ) : (
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 hidden lg:flex items-center pointer-events-none">
-              <kbd className={cn(
-                'h-5 px-1.5 rounded border border-border bg-background',
-                'text-[10px] font-medium text-muted-foreground',
-                'flex items-center opacity-70 group-focus-within:hidden'
-              )}>
-                Ctrl K
-              </kbd>
-            </div>
-          )}
+          ) : null}
         </div>
 
         {/* Mobile search button */}
@@ -330,6 +320,9 @@ export function Header({ title }: HeaderProps) {
                   {currentUser.role || t('common.administrator')}
                 </span>
               </div>
+              <span className="hidden lg:inline-flex h-7 w-7 items-center justify-center rounded-md bg-muted/40 text-muted-foreground">
+                <User className="h-4 w-4" />
+              </span>
               <ChevronDown className="w-4 h-4 text-muted-foreground hidden lg:block" />
             </button>
           </DropdownMenuTrigger>

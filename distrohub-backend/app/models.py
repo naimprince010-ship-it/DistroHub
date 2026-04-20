@@ -328,6 +328,29 @@ class InventoryItem(BaseModel):
     total_stock: int
     batches: List[ProductBatch]
 
+class StockVoucherType(str, Enum):
+    PURCHASE = "purchase"
+    SALE = "sale"
+    SALE_RETURN = "sale_return"
+    ADJUSTMENT = "adjustment"
+
+class StockLedgerEntry(BaseModel):
+    id: str
+    product_id: str
+    product_name: Optional[str] = None
+    batch_id: Optional[str] = None
+    batch_number: Optional[str] = None
+    warehouse_id: Optional[str] = None
+    warehouse_name: Optional[str] = None
+    voucher_type: StockVoucherType
+    voucher_id: Optional[str] = None
+    quantity_change: int
+    quantity_after: Optional[int] = None
+    unit_cost: Optional[float] = None
+    remarks: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: datetime
+
 class WarehouseCreate(BaseModel):
     """Create warehouse request"""
     name: str

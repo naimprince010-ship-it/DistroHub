@@ -11,12 +11,12 @@ _jwt_secret_from_env = os.environ.get("JWT_SECRET_KEY")
 if not _jwt_secret_from_env:
     import logging as _logging
     _logging.getLogger(__name__).warning(
-        "[AUTH] ⚠️  JWT_SECRET_KEY env var not set! Using insecure fallback key. "
+        "[AUTH] WARNING: JWT_SECRET_KEY env var not set! Using insecure fallback key. "
         "Set JWT_SECRET_KEY in production environment variables."
     )
 else:
     # Safely log that we found a secret and its prefix to help owner verify configuration
-    print(f"[AUTH] ✅ JWT_SECRET_KEY loaded (Prefix: {_jwt_secret_from_env[:4]}... Length: {len(_jwt_secret_from_env)})")
+    print(f"[AUTH] JWT_SECRET_KEY loaded (Prefix: {_jwt_secret_from_env[:4]}... Length: {len(_jwt_secret_from_env)})")
 
 JWT_SECRET = _jwt_secret_from_env or "distrohub_super_secret_key_123456789"
 ALGORITHM = "HS256"

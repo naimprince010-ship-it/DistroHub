@@ -9,6 +9,7 @@ import {
   Upload,
   Download,
   Edit,
+  Eye,
   Trash2,
   Package,
   AlertTriangle,
@@ -21,6 +22,8 @@ import {
   TrendingUp,
   CalendarDays,
   Activity,
+  Settings2,
+  History,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from '@/hooks/use-toast';
@@ -42,6 +45,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useLanguage } from '@/contexts/LanguageContext';
 // @ts-ignore - exceljs types may not be available in build
 import { Workbook } from 'exceljs';
@@ -77,6 +89,24 @@ interface Product {
   image_url: string;
 }
 
+interface StockLedgerRow {
+  id: string;
+  product_id: string;
+  product_name?: string;
+  batch_id?: string;
+  batch_number?: string;
+  warehouse_id?: string;
+  warehouse_name?: string;
+  voucher_type: 'purchase' | 'sale' | 'sale_return' | 'adjustment';
+  voucher_id?: string;
+  quantity_change: number;
+  quantity_after?: number;
+  unit_cost?: number;
+  remarks?: string;
+  created_by?: string;
+  created_at: string;
+}
+
 
 interface Category {
   id: string;
@@ -100,6 +130,8 @@ interface Unit {
 }
 
 const LOW_STOCK_THRESHOLD = 50;
+
+type ProductColumnKey = 'sku' | 'category' | 'unit' | 'purchase' | 'selling' | 'stock' | 'pcsCtn' | 'batch' | 'expiry';
 
 function isExpiringSoonDate(expiryDate: string): boolean {
   if (!expiryDate) return false;
@@ -132,6 +164,9 @@ export function Products() {
   const [refreshing, setRefreshing] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [detailProduct, setDetailProduct] = useState<Product | null>(null);
+  const [detailLedger, setDetailLedger] = useState<StockLedgerRow[]>([]);
+  const [detailLedgerLoading, setDetailLedgerLoading] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState<string>('all');
   const [stockFilter, setStockFilter] = useState<string>('all');
   const [expiryFilter, setExpiryFilter] = useState<string>('all');
@@ -140,6 +175,29 @@ export function Products() {
   const [categories, setCategories] = useState<string[]>([]);
   const [suppliers, setSuppliers] = useState<string[]>([]);
   const [units, setUnits] = useState<string[]>([]);
+  const [visibleColumns, setVisibleColumns] = useState<Record<ProductColumnKey, boolean>>({
+    sku: true,
+    category: true,
+    unit: true,
+    purchase: true,
+    selling: true,
+    stock: true,
+    pcsCtn: true,
+    batch: true,
+    expiry: true,
+  });
+
+  const columnLabels: Record<ProductColumnKey, string> = {
+    sku: t('common.sku'),
+    category: t('common.category'),
+    unit: t('common.unit'),
+    purchase: t('common.purchase'),
+    selling: t('common.selling'),
+    stock: t('common.stock'),
+    pcsCtn: t('common.pcs_ctn'),
+    batch: t('common.batch'),
+    expiry: t('common.expiry'),
+  };
 
   const mapApiProductToRecord = (p: any, synced: boolean): ProductRecord => ({
     id: p.id,
@@ -343,6 +401,28 @@ export function Products() {
     fetchCategoriesAndSuppliers();
     fetchProducts();
   }, []);
+
+  useEffect(() => {
+    const fetchDetailLedger = async () => {
+      if (!detailProduct?.id) {
+        setDetailLedger([]);
+        return;
+      }
+      try {
+        setDetailLedgerLoading(true);
+        const response = await api.get('/api/stock-ledger', {
+          params: { product_id: detailProduct.id, limit: 300 },
+        });
+        setDetailLedger(Array.isArray(response.data) ? response.data : []);
+      } catch (error) {
+        console.error('[Products] Failed to fetch stock ledger', error);
+        setDetailLedger([]);
+      } finally {
+        setDetailLedgerLoading(false);
+      }
+    };
+    fetchDetailLedger();
+  }, [detailProduct?.id]);
 
   // Memoize expensive category calculation
   const allCategories = useMemo(() => {
@@ -556,6 +636,17 @@ export function Products() {
     setSearchParams(next, { replace: true });
   };
 
+  const toggleColumn = (key: ProductColumnKey, checked: boolean) => {
+    setVisibleColumns((prev) => ({ ...prev, [key]: checked }));
+  };
+
+  const ledgerLabel = (kind: StockLedgerRow['voucher_type']) => {
+    if (kind === 'sale_return') return 'Sale Return';
+    if (kind === 'purchase') return 'Purchase';
+    if (kind === 'sale') return 'Sale';
+    return 'Adjustment';
+  };
+
   return (
     <PageShell
       title={t('common.products')}
@@ -596,7 +687,7 @@ export function Products() {
         </>
       }
     >
-      <div className="mx-auto max-w-[1680px] space-y-5">
+      <div className="w-full space-y-5">
         {/* KPI tiles */}
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           <StatCard label={t('products.stat_total')}    value={productStats.total}    icon={Package}      color="blue" />
@@ -607,7 +698,7 @@ export function Products() {
 
         {/* Filters card */}
         <Card>
-          <CardHeader className="pb-3">
+          <CardHeader className="px-4 py-3 pb-2">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <CardTitle className="text-base">{t('products.filter_section')}</CardTitle>
               <div className="flex flex-wrap items-center gap-2">
@@ -620,7 +711,7 @@ export function Products() {
               </div>
             </div>
           </CardHeader>
-          <CardContent className="pt-0">
+          <CardContent className="px-4 pb-4 pt-0">
             {searchTerm && (
               <div className="mb-3 flex flex-wrap items-center gap-2">
                 <span className="text-xs font-medium text-muted-foreground">{t('products.search_chip_label')}:</span>
@@ -633,15 +724,17 @@ export function Products() {
                 </div>
               </div>
             )}
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12 xl:items-end">
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-12 xl:items-end">
               <div className="min-w-0 xl:col-span-4">
-                <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="product-category">
+                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="product-category">
                   {t('products.filter_label_category')}
                 </label>
                 <div className="relative">
-                  <Filter className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                  <span className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2" aria-hidden>
+                    <Filter className="h-3.5 w-3.5 text-muted-foreground" />
+                  </span>
                   <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                    <SelectTrigger id="product-category" className="h-9 w-full pl-9 text-sm [&>span]:line-clamp-1">
+                    <SelectTrigger id="product-category" className="h-9 w-full !pl-11 pr-8 text-sm leading-none [&>span]:line-clamp-1">
                       <SelectValue placeholder={t('common.all_categories')} />
                     </SelectTrigger>
                     <SelectContent position="popper" className="max-h-72">
@@ -652,13 +745,15 @@ export function Products() {
                 </div>
               </div>
               <div className="min-w-0 xl:col-span-4">
-                <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="product-stock">
+                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="product-stock">
                   {t('products.filter_label_stock')}
                 </label>
                 <div className="relative">
-                  <Activity className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                  <span className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2" aria-hidden>
+                    <Activity className="h-3.5 w-3.5 text-muted-foreground" />
+                  </span>
                   <Select value={stockFilter} onValueChange={setStockFilter}>
-                    <SelectTrigger id="product-stock" className="h-9 w-full pl-9 text-sm [&>span]:line-clamp-1">
+                    <SelectTrigger id="product-stock" className="h-9 w-full !pl-11 pr-8 text-sm leading-none [&>span]:line-clamp-1">
                       <SelectValue placeholder={t('common.all_stock')} />
                     </SelectTrigger>
                     <SelectContent position="popper">
@@ -671,13 +766,15 @@ export function Products() {
                 </div>
               </div>
               <div className="min-w-0 xl:col-span-2">
-                <label className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="product-expiry">
+                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="product-expiry">
                   {t('products.filter_label_expiry')}
                 </label>
                 <div className="relative">
-                  <CalendarDays className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                  <span className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2" aria-hidden>
+                    <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+                  </span>
                   <Select value={expiryFilter} onValueChange={setExpiryFilter}>
-                    <SelectTrigger id="product-expiry" className="h-9 w-full pl-9 text-sm [&>span]:line-clamp-1">
+                    <SelectTrigger id="product-expiry" className="h-9 w-full !pl-11 pr-8 text-sm leading-none [&>span]:line-clamp-1">
                       <SelectValue placeholder={t('common.all_expiry')} />
                     </SelectTrigger>
                     <SelectContent position="popper">
@@ -690,7 +787,9 @@ export function Products() {
                 </div>
               </div>
               <div className="min-w-0 xl:col-span-2">
-                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-transparent select-none" aria-hidden>a</span>
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-transparent select-none" aria-hidden>
+                  spacer
+                </span>
                 <button type="button" onClick={clearFilters} disabled={activeFiltersCount === 0}
                   className="inline-flex h-9 w-full items-center justify-center gap-1 rounded-lg border border-border bg-card px-2 text-sm font-medium text-muted-foreground transition-colors enabled:border-[hsl(var(--dh-red))]/30 enabled:bg-[hsl(var(--dh-red))]/5 enabled:text-[hsl(var(--dh-red))] disabled:cursor-not-allowed disabled:opacity-50">
                   <X className="h-4 w-4 shrink-0" aria-hidden />
@@ -707,11 +806,48 @@ export function Products() {
           <CardHeader className="pb-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <CardTitle className="text-base">{t('products.title')}</CardTitle>
-              <span className="text-xs text-muted-foreground">
-                {t('products.toolbar_count')
-                  .replace('{{f}}', String(filteredProducts.length))
-                  .replace('{{t}}', String(products.length))}
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-muted-foreground">
+                  {t('products.toolbar_count')
+                    .replace('{{f}}', String(filteredProducts.length))
+                    .replace('{{t}}', String(products.length))}
+                </span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted/40"
+                    >
+                      <Settings2 className="h-3.5 w-3.5" aria-hidden />
+                      Edit columns
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuLabel>Edit columns</DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    {(Object.keys(columnLabels) as ProductColumnKey[]).map((key) => (
+                      <DropdownMenuCheckboxItem
+                        key={key}
+                        checked={visibleColumns[key]}
+                        onCheckedChange={(checked) => toggleColumn(key, checked === true)}
+                      >
+                        {columnLabels[key]}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <button
+                  type="button"
+                  onClick={() => {
+                    fetchCategoriesAndSuppliers();
+                    setShowAddModal(true);
+                  }}
+                  className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted/40"
+                >
+                  <Plus className="h-3.5 w-3.5" aria-hidden />
+                  Add product
+                </button>
+              </div>
             </div>
           </CardHeader>
           <CardContent className="p-0">
@@ -732,33 +868,35 @@ export function Products() {
             <>
                 <table className="w-full min-w-[1100px] border-separate border-spacing-0 text-sm">
                   <thead>
-                    <tr>
-                      <th className="sticky top-0 z-30 w-12 border-b border-border bg-muted/40 p-2.5 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">#</th>
-                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.products')}</th>
-                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.sku')}</th>
-                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.category')}</th>
-                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.unit')}</th>
-                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.purchase')}</th>
-                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.selling')}</th>
-                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.stock')}</th>
-                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.pcs_ctn')}</th>
-                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.batch')}</th>
-                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.expiry')}</th>
-                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 p-2.5 text-center text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{t('common.actions')}</th>
+                    <tr className="[&>th]:border-r [&>th]:border-border/50 [&>th:last-child]:border-r-0">
+                      <th className="sticky top-0 z-30 w-12 border-b border-border bg-muted/40 px-2.5 py-3 text-center text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">#</th>
+                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-left text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.products')}</th>
+                      {visibleColumns.sku && <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-left text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.sku')}</th>}
+                      {visibleColumns.category && <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-left text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.category')}</th>}
+                      {visibleColumns.unit && <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-right text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.unit')}</th>}
+                      {visibleColumns.purchase && <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-right text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.purchase')}</th>}
+                      {visibleColumns.selling && <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-right text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.selling')}</th>}
+                      {visibleColumns.stock && <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-right text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.stock')}</th>}
+                      {visibleColumns.pcsCtn && <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-right text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.pcs_ctn')}</th>}
+                      {visibleColumns.batch && <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-left text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.batch')}</th>}
+                      {visibleColumns.expiry && <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-left text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.expiry')}</th>}
+                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-center text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.actions')}</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border/60">
+                  <tbody>
                     {filteredProducts.map((product, index) => {
                       const stockLevel = product.stock_quantity === 0 ? 'out' : product.stock_quantity < LOW_STOCK_THRESHOLD ? 'low' : 'ok';
                       const expiryStatus = isExpiredDate(product.expiry_date) ? 'expired' : isExpiringSoonDate(product.expiry_date) ? 'soon' : 'ok';
                       const isAlert = stockLevel === 'out' || stockLevel === 'low' || expiryStatus === 'expired' || expiryStatus === 'soon';
 
                       return (
-                        <tr key={product.id}
+                        <tr
+                          key={product.id}
                           className={cn(
                             'transition-colors hover:bg-muted/30',
                             isAlert && 'bg-[hsl(var(--dh-amber))]/5',
-                            stockLevel === 'out' && 'bg-[hsl(var(--dh-red))]/5'
+                            stockLevel === 'out' && 'bg-[hsl(var(--dh-red))]/5',
+                            '[&>td]:border-b [&>td]:border-border/70 [&>td]:border-r [&>td]:border-r-border/50 [&>td:last-child]:border-r-0'
                           )}>
                           <td className="p-2.5 text-center text-xs tabular-nums text-muted-foreground">{index + 1}</td>
                           <td className="p-2.5">
@@ -766,43 +904,63 @@ export function Products() {
                               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--primary))]/10">
                                 <Package className="h-4 w-4 text-[hsl(var(--primary))]" aria-hidden />
                               </div>
-                              <span className="truncate font-medium text-foreground" title={product.name}>{product.name}</span>
+                              <button
+                                type="button"
+                                onClick={() => setDetailProduct(product)}
+                                className="truncate text-left font-medium text-foreground hover:text-[hsl(var(--primary))]"
+                                title={product.name}
+                              >
+                                {product.name}
+                              </button>
                             </div>
                           </td>
-                          <td className="p-2.5 font-mono text-xs text-muted-foreground">{product.sku}</td>
-                          <td className="p-2.5">
-                            <Badge variant="muted" className="max-w-[140px] truncate">{product.category}</Badge>
-                          </td>
-                          <td className="p-2.5 text-right text-sm text-muted-foreground">{product.unit}</td>
-                          <td className="p-2.5 text-right tabular-nums text-sm text-foreground">{formatMoney(product.purchase_price)}</td>
-                          <td className="p-2.5 text-right font-semibold tabular-nums text-sm text-foreground">{formatMoney(product.selling_price)}</td>
-                          <td className="p-2.5 text-right">
-                            <span className={cn('tabular-nums font-medium text-sm',
-                              product.stock_quantity === 0 && 'font-semibold text-[hsl(var(--dh-red))]',
-                              product.stock_quantity > 0 && product.stock_quantity < LOW_STOCK_THRESHOLD && 'text-[hsl(var(--dh-amber))]',
-                              product.stock_quantity >= LOW_STOCK_THRESHOLD && 'text-[hsl(var(--dh-green))]'
-                            )}>
-                              {product.stock_quantity}
-                            </span>
-                          </td>
-                          <td className="p-2.5 text-right text-xs tabular-nums text-muted-foreground">{product.pieces_per_carton || product.pack_size || '—'}</td>
-                          <td className="p-2.5 font-mono text-xs text-muted-foreground">{product.batch_number || '—'}</td>
-                          <td className="p-2.5">
-                            <div className="flex items-center gap-1">
-                              {isExpiredDate(product.expiry_date) ? (
-                                <span className="text-xs font-medium text-[hsl(var(--dh-red))]">{product.expiry_date || '—'}</span>
-                              ) : (
-                                <>
-                                  {isExpiringSoonDate(product.expiry_date) && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[hsl(var(--dh-amber))]" aria-hidden />}
-                                  <span className={cn('text-xs', isExpiringSoonDate(product.expiry_date) ? 'font-medium text-[hsl(var(--dh-amber))]' : 'text-muted-foreground')}>
-                                    {product.expiry_date || '—'}
-                                  </span>
-                                </>
-                              )}
-                            </div>
-                          </td>
+                          {visibleColumns.sku && <td className="p-2.5 font-mono text-xs text-muted-foreground">{product.sku}</td>}
+                          {visibleColumns.category && (
+                            <td className="p-2.5">
+                              <Badge variant="muted" className="max-w-[140px] truncate">{product.category}</Badge>
+                            </td>
+                          )}
+                          {visibleColumns.unit && <td className="p-2.5 text-right text-sm text-muted-foreground">{product.unit}</td>}
+                          {visibleColumns.purchase && <td className="p-2.5 text-right tabular-nums text-sm text-foreground">{formatMoney(product.purchase_price)}</td>}
+                          {visibleColumns.selling && <td className="p-2.5 text-right font-semibold tabular-nums text-sm text-foreground">{formatMoney(product.selling_price)}</td>}
+                          {visibleColumns.stock && (
+                            <td className="p-2.5 text-right">
+                              <span className={cn('tabular-nums font-medium text-sm',
+                                product.stock_quantity === 0 && 'font-semibold text-[hsl(var(--dh-red))]',
+                                product.stock_quantity > 0 && product.stock_quantity < LOW_STOCK_THRESHOLD && 'text-[hsl(var(--dh-amber))]',
+                                product.stock_quantity >= LOW_STOCK_THRESHOLD && 'text-[hsl(var(--dh-green))]'
+                              )}>
+                                {product.stock_quantity}
+                              </span>
+                            </td>
+                          )}
+                          {visibleColumns.pcsCtn && (
+                            <td className="p-2.5 text-right text-xs tabular-nums text-muted-foreground">{product.pieces_per_carton || product.pack_size || '—'}</td>
+                          )}
+                          {visibleColumns.batch && <td className="p-2.5 font-mono text-xs text-muted-foreground">{product.batch_number || '—'}</td>}
+                          {visibleColumns.expiry && (
+                            <td className="p-2.5">
+                              <div className="flex items-center gap-1">
+                                {isExpiredDate(product.expiry_date) ? (
+                                  <span className="text-xs font-medium text-[hsl(var(--dh-red))]">{product.expiry_date || '—'}</span>
+                                ) : (
+                                  <>
+                                    {isExpiringSoonDate(product.expiry_date) && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[hsl(var(--dh-amber))]" aria-hidden />}
+                                    <span className={cn('text-xs', isExpiringSoonDate(product.expiry_date) ? 'font-medium text-[hsl(var(--dh-amber))]' : 'text-muted-foreground')}>
+                                      {product.expiry_date || '—'}
+                                    </span>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          )}
                           <td className="p-2.5">
                             <div className="flex items-center justify-center gap-1">
+                              <button type="button" onClick={() => setDetailProduct(product)}
+                                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-[hsl(var(--primary))]/10 hover:text-[hsl(var(--primary))]"
+                                title="Details">
+                                <Eye className="h-4 w-4" />
+                              </button>
                               <button type="button" onClick={() => setEditingProduct(product)}
                                 className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-[hsl(var(--primary))]/10 hover:text-[hsl(var(--primary))]"
                                 title={t('products.edit')}>
@@ -833,6 +991,86 @@ export function Products() {
           </CardContent>
         </Card>
       </div>
+
+      {detailProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <div>
+                <h2 className="text-base font-semibold text-foreground">{detailProduct.name}</h2>
+                <p className="text-xs text-muted-foreground">{detailProduct.sku} · {detailProduct.category}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetailProduct(null)}
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                aria-label="Close details"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <div className="max-h-[calc(90vh-60px)] overflow-auto p-4">
+              <Tabs defaultValue="overview">
+                <TabsList className="mb-3">
+                  <TabsTrigger value="overview">Overview</TabsTrigger>
+                  <TabsTrigger value="ledger" className="gap-1">
+                    <History className="h-3.5 w-3.5" />
+                    Stock ledger
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="overview">
+                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                    <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Stock</p><p className="text-lg font-semibold">{detailProduct.stock_quantity}</p></CardContent></Card>
+                    <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Purchase</p><p className="text-lg font-semibold">{formatMoney(detailProduct.purchase_price)}</p></CardContent></Card>
+                    <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Selling</p><p className="text-lg font-semibold">{formatMoney(detailProduct.selling_price)}</p></CardContent></Card>
+                    <Card><CardContent className="p-3"><p className="text-xs text-muted-foreground">Batch</p><p className="text-sm font-mono font-semibold">{detailProduct.batch_number || '—'}</p></CardContent></Card>
+                  </div>
+                </TabsContent>
+                <TabsContent value="ledger">
+                  <div className="rounded-lg border border-border">
+                    <div className="max-h-[55vh] overflow-auto">
+                      <table className="w-full min-w-[900px] text-sm">
+                        <thead className="bg-muted/40">
+                          <tr className="border-b border-border">
+                            <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Date</th>
+                            <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Type</th>
+                            <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Batch</th>
+                            <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Warehouse</th>
+                            <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Qty Change</th>
+                            <th className="px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Qty After</th>
+                            <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Remarks</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {detailLedgerLoading ? (
+                            <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">Loading stock ledger…</td></tr>
+                          ) : detailLedger.length === 0 ? (
+                            <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No stock ledger entries found.</td></tr>
+                          ) : detailLedger.map((row) => (
+                            <tr key={row.id} className="border-b border-border/60 hover:bg-muted/20">
+                              <td className="px-3 py-2.5 text-muted-foreground">{new Date(row.created_at).toLocaleString()}</td>
+                              <td className="px-3 py-2.5">
+                                <Badge variant="outline">{ledgerLabel(row.voucher_type)}</Badge>
+                              </td>
+                              <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{row.batch_number || '—'}</td>
+                              <td className="px-3 py-2.5 text-muted-foreground">{row.warehouse_name || row.warehouse_id || '—'}</td>
+                              <td className={cn('px-3 py-2.5 text-right font-mono font-semibold', row.quantity_change >= 0 ? 'text-[hsl(var(--dh-green))]' : 'text-[hsl(var(--dh-red))]')}>
+                                {row.quantity_change > 0 ? `+${row.quantity_change}` : row.quantity_change}
+                              </td>
+                              <td className="px-3 py-2.5 text-right font-mono text-foreground">{row.quantity_after ?? '—'}</td>
+                              <td className="px-3 py-2.5 text-xs text-muted-foreground">{row.remarks || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </TabsContent>
+              </Tabs>
+            </div>
+          </div>
+        </div>
+      )}
 
       <AlertDialog
         open={deleteId !== null}
