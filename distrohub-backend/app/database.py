@@ -36,7 +36,9 @@ class InMemoryDatabase:
         self._seed_data()
     
     def _seed_data(self):
-        admin_id = generate_id()
+        # ⚠️ FIXED IDs — do NOT change these. They must stay constant across
+        # server restarts so that JWT tokens remain valid after Render cold starts.
+        admin_id = "admin-distrohub-0001"
         self.users[admin_id] = {
             "id": admin_id,
             "email": "admin@distrohub.com",
@@ -47,7 +49,7 @@ class InMemoryDatabase:
             "created_at": datetime.now()
         }
 
-        sales_id = generate_id()
+        sales_id = "sales-distrohub-0001"
         self.users[sales_id] = {
             "id": sales_id,
             "email": "sales@distrohub.com",
