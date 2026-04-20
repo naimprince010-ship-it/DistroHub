@@ -60,6 +60,7 @@ function App() {
                   }
                 >
                   <Route index element={<Dashboard />} />
+                  <Route path="dashboard" element={<Dashboard />} />
                   <Route path="products" element={<Products />} />
                   <Route path="retailers" element={<Retailers />} />
                   <Route path="purchase" element={<Purchase />} />
