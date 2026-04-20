@@ -47,7 +47,7 @@ def fix_user_password():
     print("Test Login After Fix:")
     print("=" * 60)
     print("""
-    curl -X POST https://distrohub-backend.onrender.com/api/auth/login \\
+    curl -X POST https://distrohub-backend.vercel.app/api/auth/login \\
       -H "Content-Type: application/json" \\
       -d '{"email":"admin@distrohub.com","password":"admin123"}'
     """)

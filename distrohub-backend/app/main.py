@@ -392,7 +392,12 @@ async def google_login():
         )
     
     # Get redirect URI from environment or use default
-    redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI", "https://distrohub-backend.onrender.com/api/auth/google/callback")
+    redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI", "")
+    if not redirect_uri:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="GOOGLE_REDIRECT_URI environment variable not set."
+        )
     
     # Google OAuth parameters
     params = {
@@ -426,7 +431,9 @@ async def google_callback(code: str = None, error: str = None):
     
     google_client_id = os.environ.get("GOOGLE_CLIENT_ID")
     google_client_secret = os.environ.get("GOOGLE_CLIENT_SECRET")
-    redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI", "https://distrohub-backend.onrender.com/api/auth/google/callback")
+    redirect_uri = os.environ.get("GOOGLE_REDIRECT_URI", "")
+    if not redirect_uri:
+        return RedirectResponse(url=f"{frontend_url}/login?error=redirect_uri_not_configured")
     
     if not google_client_id or not google_client_secret:
         return RedirectResponse(url=f"{frontend_url}/login?error=oauth_not_configured")

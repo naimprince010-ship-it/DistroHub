@@ -14,7 +14,7 @@ import os
 from datetime import datetime
 
 # Configuration
-BASE_URL = os.environ.get("API_URL", "https://distrohub-backend.onrender.com")
+BASE_URL = os.environ.get("API_URL", "https://distrohub-backend.vercel.app")
 ADMIN_EMAIL = "admin@distrohub.com"
 ADMIN_PASSWORD = "admin123"
 

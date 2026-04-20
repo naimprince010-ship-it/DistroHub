@@ -35,7 +35,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 }
 
 function App() {
-  // Start keep-alive service to prevent Render cold starts
   useEffect(() => {
     startKeepAlive();
     return () => {

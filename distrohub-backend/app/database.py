@@ -37,7 +37,7 @@ class InMemoryDatabase:
     
     def _seed_data(self):
         # ⚠️ FIXED IDs — do NOT change these. They must stay constant across
-        # server restarts so that JWT tokens remain valid after Render cold starts.
+        # server restarts so that JWT tokens remain valid.
         admin_id = "admin-distrohub-0001"
         self.users[admin_id] = {
             "id": admin_id,
