@@ -34,6 +34,15 @@ class SupabaseDatabase:
         self.client = get_supabase_client()
         if not self.client:
             raise ValueError("Supabase credentials not configured")
+        # Verify the key actually works — this triggers fallback to InMemoryDatabase
+        # if the key is wrong/insufficient (e.g. anon key with RLS blocking server reads).
+        try:
+            test = self.client.table("users").select("id").limit(1).execute()
+            # If we get here, connection works (even if 0 rows returned)
+            print(f"[DB] ✅ Supabase connection verified ({len(test.data or [])} user(s) visible)")
+        except Exception as e:
+            raise ValueError(f"Supabase key cannot query users table: {e}")
+
     
     def hash_password(self, password: str) -> str:
         """Hash password using bcrypt."""
