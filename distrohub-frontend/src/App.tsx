@@ -16,6 +16,7 @@ import { Receivables } from '@/pages/Receivables';
 import { Expiry } from '@/pages/Expiry';
 import { Reports } from '@/pages/Reports';
 import { Settings } from '@/pages/Settings';
+import { Categories } from '@/pages/Categories';
 import { OfflineProvider } from '@/contexts/OfflineContext';
 import { LanguageProvider } from '@/contexts/LanguageContext';
 import { OfflineIndicator } from '@/components/OfflineIndicator';
@@ -72,6 +73,7 @@ function App() {
                   <Route path="expiry" element={<Expiry />} />
                   <Route path="reports" element={<Reports />} />
                   <Route path="settings" element={<Settings />} />
+                  <Route path="categories" element={<Categories />} />
                 </Route>
               </Routes>
               <OfflineIndicator />

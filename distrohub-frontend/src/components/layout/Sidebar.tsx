@@ -168,7 +168,7 @@ export function Sidebar() {
         label: t('sidebar.inventory'),
         items: [
           { icon: Package, label: t('common.products'), path: '/products' },
-          { icon: Tags, label: t('common.categories'), path: '/settings?tab=categories' },
+          { icon: Tags, label: t('common.categories'), path: '/categories' },
           { icon: Warehouse, label: t('common.inventory'), path: '/inventory' },
           { icon: AlertTriangle, label: t('common.expiry_alerts'), path: '/expiry' },
         ],
