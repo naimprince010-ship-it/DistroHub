@@ -866,13 +866,15 @@ def get_database():
     if use_supabase and supabase_url and supabase_key:
         try:
             from app.supabase_db import SupabaseDatabase
+            print(f"[DB] 🟢 Initializing SupabaseDatabase (URL: {supabase_url[:15]}...)")
             return SupabaseDatabase()
         except Exception as e:
-            print(f"Failed to connect to Supabase: {e}")
+            print(f"[DB] 🔴 Failed to connect to Supabase: {e}")
             import traceback
             traceback.print_exc()
-            print("Falling back to in-memory database")
+            print("[DB] ⚠️ Falling back to in-memory database")
     
+    print("[DB] 🏠 Using InMemoryDatabase (Local/Dev Mode)")
     return InMemoryDatabase()
 
 db = get_database()

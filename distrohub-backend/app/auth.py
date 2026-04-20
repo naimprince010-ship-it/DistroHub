@@ -14,6 +14,10 @@ if not _jwt_secret_from_env:
         "[AUTH] ⚠️  JWT_SECRET_KEY env var not set! Using insecure fallback key. "
         "Set JWT_SECRET_KEY in production environment variables."
     )
+else:
+    # Safely log that we found a secret and its prefix to help owner verify configuration
+    print(f"[AUTH] ✅ JWT_SECRET_KEY loaded (Prefix: {_jwt_secret_from_env[:4]}... Length: {len(_jwt_secret_from_env)})")
+
 JWT_SECRET = _jwt_secret_from_env or "distrohub_super_secret_key_123456789"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
@@ -32,7 +36,11 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=ALGORITHM)
     return encoded_jwt
 
-def verify_token(token: str) -> Optional[dict]:
+def verify_token(token: str) -> dict:
+    """
+    Verify and decode JWT token.
+    Returns payload if valid, raises HTTPException if invalid or expired.
+    """
     try:
         payload = jwt.decode(
             token,
@@ -41,8 +49,34 @@ def verify_token(token: str) -> Optional[dict]:
             options=JWT_DECODE_OPTIONS,
         )
         return payload
-    except JWTError:
-        return None
+    except jwt.ExpiredSignatureError:
+        print("[AUTH] Token has expired")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired. Please login again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except jwt.JWTClaimsError:
+        print("[AUTH] Invalid token claims")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid session attributes. Please login again.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except JWTError as e:
+        print(f"[AUTH] JWT Verification failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid authentication credentials: {str(e)}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except Exception as e:
+        print(f"[AUTH] Unexpected error during token verification: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication process failed",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
 
 def _normalize_role(raw) -> UserRole:
@@ -58,13 +92,8 @@ def _normalize_role(raw) -> UserRole:
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
+    # verify_token now raises HTTPException internally on error
     payload = verify_token(token)
-    if payload is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authentication credentials",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
     
     user_id = payload.get("sub")
     if user_id is None:
