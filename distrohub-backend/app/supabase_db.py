@@ -1,5 +1,6 @@
 import os
 import hashlib
+import bcrypt as _bcrypt_lib
 from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional
 from supabase import create_client, Client
@@ -8,6 +9,17 @@ from app.models import (
     ProductBatch, InventoryItem, ExpiryAlert, DashboardStats,
     RefundType
 )
+
+def _normalize_role(raw) -> UserRole:
+    """Case-insensitive role normalization. DB may store 'Admin' or 'admin'."""
+    if raw is None:
+        return UserRole.SALES_REP
+    s = str(raw).strip().lower()
+    if s == UserRole.ADMIN.value:
+        return UserRole.ADMIN
+    if s == UserRole.SALES_REP.value:
+        return UserRole.SALES_REP
+    return UserRole.SALES_REP
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
@@ -24,10 +36,27 @@ class SupabaseDatabase:
             raise ValueError("Supabase credentials not configured")
     
     def hash_password(self, password: str) -> str:
-        return hashlib.sha256(password.encode()).hexdigest()
-    
+        """Hash password using bcrypt."""
+        pwd_bytes = password.encode("utf-8")[:72]
+        salt = _bcrypt_lib.gensalt(rounds=12)
+        return _bcrypt_lib.hashpw(pwd_bytes, salt).decode("utf-8")
+
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        return self.hash_password(plain_password) == hashed_password
+        """Verify password. Supports both bcrypt (new) and SHA-256 (legacy) hashes."""
+        if not hashed_password:
+            return False
+        if hashed_password.startswith("$2b$") or hashed_password.startswith("$2a$"):
+            try:
+                return _bcrypt_lib.checkpw(
+                    plain_password.encode("utf-8")[:72],
+                    hashed_password.encode("utf-8")
+                )
+            except Exception:
+                return False
+        else:
+            # Legacy SHA-256 fallback (backward compatibility)
+            sha256_hash = hashlib.sha256(plain_password.encode()).hexdigest()
+            return sha256_hash == hashed_password
 
     def log_audit_event(
         self,
@@ -58,7 +87,7 @@ class SupabaseDatabase:
         result = self.client.table("users").select("*").eq("email", email).execute()
         if result.data:
             user = result.data[0]
-            user["role"] = UserRole(user["role"]) if user.get("role") else UserRole.SALES_REP
+            user["role"] = _normalize_role(user.get("role"))
             return user
         return None
     
@@ -67,7 +96,7 @@ class SupabaseDatabase:
         result = self.client.table("users").select("*").eq("id", user_id).execute()
         if result.data:
             user = result.data[0]
-            user["role"] = UserRole(user["role"]) if user.get("role") else UserRole.SALES_REP
+            user["role"] = _normalize_role(user.get("role"))
             return user
         return None
     
@@ -76,7 +105,7 @@ class SupabaseDatabase:
         result = self.client.table("users").select("*").order("created_at", desc=True).execute()
         users = result.data or []
         for user in users:
-            user["role"] = UserRole(user["role"]) if user.get("role") else UserRole.SALES_REP
+            user["role"] = _normalize_role(user.get("role"))
         return users
     
     def create_user(self, email: str, name: str, password: str, role: UserRole, phone: str = None) -> dict:

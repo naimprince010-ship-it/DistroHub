@@ -287,6 +287,24 @@ async def login(credentials: UserLogin, request: Request):
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password"
             )
+
+        # Auto-upgrade legacy SHA-256 hash → bcrypt on successful login
+        current_hash = user.get("password_hash", "")
+        if not (current_hash.startswith("$2b$") or current_hash.startswith("$2a$")):
+            try:
+                new_hash = db.hash_password(credentials.password)
+                if hasattr(db, 'client'):
+                    # SupabaseDatabase
+                    db.client.table("users").update(
+                        {"password_hash": new_hash}
+                    ).eq("id", user["id"]).execute()
+                elif hasattr(db, 'users'):
+                    # InMemoryDatabase
+                    db.users[user["id"]]["password_hash"] = new_hash
+                print(f"[LOGIN] ✅ Password hash upgraded to bcrypt for: {credentials.email}")
+            except Exception as upgrade_err:
+                # Non-fatal: login still succeeds even if upgrade fails
+                print(f"[LOGIN] ⚠️ Failed to upgrade password hash: {upgrade_err}")
         
         access_token = create_access_token(data={"sub": user["id"]})
         print(f"[LOGIN] Success: User {user['email']} logged in from origin: {origin}")

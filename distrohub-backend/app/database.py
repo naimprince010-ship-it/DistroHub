@@ -2,6 +2,7 @@ from datetime import datetime, date, timedelta
 from typing import Dict, List, Optional
 import uuid
 import hashlib
+import bcrypt as _bcrypt_lib
 from app.models import (
     User, UserRole, Product, ProductBatch, Retailer, Purchase, PurchaseItem,
     Sale, SaleItem, Payment, PaymentStatus, OrderStatus, ExpiryStatus,
@@ -42,10 +43,10 @@ class InMemoryDatabase:
             "name": "Admin User",
             "role": UserRole.ADMIN,
             "phone": "01700000000",
-            "password_hash": hashlib.sha256("admin123".encode()).hexdigest(),
+            "password_hash": _bcrypt_lib.hashpw(b"admin123", _bcrypt_lib.gensalt()).decode(),
             "created_at": datetime.now()
         }
-        
+
         sales_id = generate_id()
         self.users[sales_id] = {
             "id": sales_id,
@@ -53,7 +54,7 @@ class InMemoryDatabase:
             "name": "Sales Rep",
             "role": UserRole.SALES_REP,
             "phone": "01711111111",
-            "password_hash": hashlib.sha256("sales123".encode()).hexdigest(),
+            "password_hash": _bcrypt_lib.hashpw(b"sales123", _bcrypt_lib.gensalt()).decode(),
             "created_at": datetime.now()
         }
         
@@ -167,10 +168,26 @@ class InMemoryDatabase:
         }
     
     def hash_password(self, password: str) -> str:
-        return hashlib.sha256(password.encode()).hexdigest()
-    
+        """Hash password using bcrypt."""
+        pwd_bytes = password.encode("utf-8")[:72]
+        salt = _bcrypt_lib.gensalt(rounds=12)
+        return _bcrypt_lib.hashpw(pwd_bytes, salt).decode("utf-8")
+
     def verify_password(self, plain_password: str, hashed_password: str) -> bool:
-        return self.hash_password(plain_password) == hashed_password
+        """Verify password. Supports both bcrypt (new) and SHA-256 (legacy) hashes."""
+        if not hashed_password:
+            return False
+        if hashed_password.startswith("$2b$") or hashed_password.startswith("$2a$"):
+            try:
+                return _bcrypt_lib.checkpw(
+                    plain_password.encode("utf-8")[:72],
+                    hashed_password.encode("utf-8")
+                )
+            except Exception:
+                return False
+        else:
+            # Legacy SHA-256 fallback
+            return hashlib.sha256(plain_password.encode()).hexdigest() == hashed_password
 
     def log_audit_event(
         self,

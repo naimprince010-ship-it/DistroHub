@@ -7,7 +7,14 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.database import db
 from app.models import UserRole
 
-JWT_SECRET = os.environ.get("JWT_SECRET_KEY", "distrohub_super_secret_key_123456789")
+_jwt_secret_from_env = os.environ.get("JWT_SECRET_KEY")
+if not _jwt_secret_from_env:
+    import logging as _logging
+    _logging.getLogger(__name__).warning(
+        "[AUTH] ⚠️  JWT_SECRET_KEY env var not set! Using insecure fallback key. "
+        "Set JWT_SECRET_KEY in production environment variables."
+    )
+JWT_SECRET = _jwt_secret_from_env or "distrohub_super_secret_key_123456789"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24
 # Clock skew between client and server (serverless / devices) — reduces spurious exp failures
