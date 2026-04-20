@@ -123,7 +123,7 @@ export function Login() {
       </div>
 
       {/* Right Panel — login form */}
-      <div className="w-full lg:w-[45%] flex items-center justify-center bg-background relative">
+      <div className="w-full lg:w-[45%] flex items-center justify-center bg-background relative overflow-y-auto">
         {/* Subtle pattern */}
         <div
           className="absolute inset-0 opacity-[0.025]"
@@ -132,7 +132,7 @@ export function Login() {
           }}
         />
 
-        <div className="w-full max-w-md px-8 py-12 relative z-10">
+        <div className="w-full max-w-lg px-6 py-10 relative z-10">
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-8">
             <div className="w-14 h-14 bg-[hsl(var(--primary))] rounded-xl flex items-center justify-center mx-auto mb-3 shadow-lg">
@@ -143,7 +143,7 @@ export function Login() {
           </div>
 
           {/* Card wrapper */}
-          <div className="bg-card border border-border rounded-2xl p-8 shadow-sm">
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
             <div className="mb-7">
               <h2 className="text-2xl font-bold text-foreground">Welcome back</h2>
               <p className="text-muted-foreground mt-1 text-sm">Enter your credentials to access your account</p>
@@ -174,7 +174,7 @@ export function Login() {
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder="name@company.com"
                   required
-                  className="h-11"
+                  className="h-11 w-full text-sm"
                 />
               </div>
 
@@ -190,7 +190,7 @@ export function Login() {
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="Enter your password"
                     required
-                    className="h-11 pr-11"
+                    className="h-11 w-full text-sm pr-11"
                   />
                   <button
                     type="button"
