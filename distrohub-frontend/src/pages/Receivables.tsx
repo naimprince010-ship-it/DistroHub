@@ -298,7 +298,10 @@ export function Receivables() {
           ) : null}
 
           {filteredReceivables.length === 0 && (
-            <div className="py-12 text-center text-sm text-muted-foreground">No receivables found. All accounts are clear!</div>
+            <div className="dh-empty-state py-10">
+              <p className="dh-empty-state-title">No receivables found</p>
+              <p className="dh-empty-state-desc">All accounts are clear.</p>
+            </div>
           )}
         </>
       )}
@@ -471,8 +474,8 @@ function PaymentModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-card border border-border rounded-2xl w-full max-w-md max-h-[90vh] overflow-y-auto shadow-xl">
+    <div className="dh-modal-overlay">
+      <div className="dh-modal-panel w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="p-4 border-b border-border">
           <h2 className="text-lg font-semibold text-foreground">Record Payment</h2>
           <p className="text-sm text-muted-foreground">{receivable.shop_name}</p>

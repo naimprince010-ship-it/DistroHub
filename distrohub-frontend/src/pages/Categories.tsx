@@ -187,7 +187,7 @@ export function Categories() {
             <div className="text-center py-12 text-muted-foreground">{t('settings.category_loading')}</div>
           ) : (
             <>
-              <div className="overflow-x-auto rounded-lg border border-border">
+              <div className="dh-table-shell">
                 <table className="w-full min-w-[780px] text-sm">
                   <thead className="bg-muted/40 border-b border-border">
                     <tr>
@@ -211,7 +211,7 @@ export function Categories() {
                   </thead>
                   <tbody className="divide-y divide-border/70">
                     {categoriesTable.paginatedRows.map((category, idx) => (
-                      <tr key={category.id} className="hover:bg-muted/30 transition-colors">
+                      <tr key={category.id} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                         <td className="px-3 py-2.5 text-xs text-muted-foreground">{(categoriesTable.page - 1) * categoriesTable.pageSize + idx + 1}</td>
                         <td className="px-3 py-2.5">
                           <div className="flex items-center gap-2">
@@ -265,8 +265,8 @@ export function Categories() {
               </div>
 
               {filteredCategories.length === 0 && !loading && (
-                <div className="text-center py-12 text-muted-foreground">
-                  {t('settings.category_none')}
+                <div className="dh-empty-state py-10">
+                  <p className="dh-empty-state-title">{t('settings.category_none')}</p>
                 </div>
               )}
             </>
@@ -276,8 +276,8 @@ export function Categories() {
 
       {/* Add/Edit Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-card rounded-xl p-5 w-full max-w-md border border-border shadow-xl">
+        <div className="dh-modal-overlay">
+          <div className="dh-modal-panel w-full max-w-md p-5">
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-lg font-semibold text-foreground">
                 {editingCategory ? t('settings.category_modal_edit') : t('settings.category_modal_add')}
@@ -350,8 +350,8 @@ export function Categories() {
 
       {/* Delete Confirm Modal */}
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-card rounded-xl p-5 w-full max-w-sm border border-border shadow-xl">
+        <div className="dh-modal-overlay">
+          <div className="dh-modal-panel w-full max-w-sm p-5">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
                 <AlertTriangle className="w-5 h-5 text-red-600" />

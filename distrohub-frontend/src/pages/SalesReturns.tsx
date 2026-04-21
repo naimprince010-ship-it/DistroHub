@@ -147,7 +147,7 @@ export function SalesReturns() {
           {loading ? (
             <div className="px-3 py-8 text-center text-sm text-muted-foreground">Loading sales returns…</div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="dh-table-shell border-0 shadow-none">
               <table className="w-full text-sm">
                 <thead className="bg-muted/40 border-b border-border">
                   <tr>
@@ -165,7 +165,7 @@ export function SalesReturns() {
                     const saleReturns = returns.get(sale.id) || [];
                     const saleReturnAmount = saleReturns.reduce((sum, ret) => sum + ret.total_return_amount, 0);
                     return (
-                      <tr key={sale.id} className="hover:bg-muted/30 transition-colors">
+                      <tr key={sale.id} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                         <td className="px-3 py-2.5 font-medium text-[hsl(var(--primary))]">{sale.invoice_number}</td>
                         <td className="px-3 py-2.5 text-foreground">{sale.retailer_name}</td>
                         <td className="px-3 py-2.5 text-muted-foreground">{sale.order_date}</td>
@@ -210,7 +210,10 @@ export function SalesReturns() {
             </div>
           )}
           {!loading && filteredSales.length === 0 && (
-            <div className="px-3 py-8 text-center text-sm text-muted-foreground">No sales found. Try adjusting your search.</div>
+            <div className="dh-empty-state py-10">
+              <p className="dh-empty-state-title">No sales found</p>
+              <p className="dh-empty-state-desc">Try adjusting your search.</p>
+            </div>
           )}
         </div>
       </div>
@@ -285,8 +288,8 @@ function CreateReturnModal({
   const totalReturnAmount = formData.items.reduce((sum, item) => sum + item.quantity_returned * item.unit_price, 0);
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2">
-      <div className="bg-card border border-border rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-xl">
+    <div className="dh-modal-overlay">
+      <div className="dh-modal-panel w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="px-4 py-3 border-b border-border flex items-center justify-between">
           <div>
             <h2 className="text-base font-semibold text-foreground">Create Sales Return</h2>
@@ -389,8 +392,8 @@ function ReturnDetailsModal({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2">
-      <div className="bg-card border border-border rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-xl">
+    <div className="dh-modal-overlay">
+      <div className="dh-modal-panel w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <div className="px-4 py-3 border-b border-border flex items-center justify-between">
           <div>
             <h2 className="text-base font-semibold text-foreground">{returnData.return_number}</h2>
@@ -423,7 +426,7 @@ function ReturnDetailsModal({
 
           <div>
             <h3 className="text-sm font-semibold text-foreground mb-2">Return Items</h3>
-            <div className="rounded-lg border border-border overflow-hidden">
+            <div className="dh-table-shell">
               <table className="w-full text-sm">
                 <thead className="bg-muted/40 border-b border-border">
                   <tr>
@@ -435,7 +438,7 @@ function ReturnDetailsModal({
                 </thead>
                 <tbody className="divide-y divide-border/60">
                   {returnData.items.map((item, index) => (
-                    <tr key={index} className="hover:bg-muted/20">
+                    <tr key={index} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                       <td className="px-3 py-2 text-foreground">{item.product_name}</td>
                       <td className="px-3 py-2 text-right font-mono text-muted-foreground">{item.quantity_returned}</td>
                       <td className="px-3 py-2 text-right font-mono text-muted-foreground">৳ {item.unit_price}</td>

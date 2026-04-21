@@ -315,8 +315,9 @@ export function Sales() {
           {loading ? (
             <div className="py-12 text-center text-muted-foreground text-sm">Loading sales orders…</div>
           ) : filteredOrders.length === 0 ? (
-            <div className="py-12 text-center text-muted-foreground text-sm">
-              No orders found. Adjust your search or create a new order.
+            <div className="dh-empty-state">
+              <p className="dh-empty-state-title">No orders found</p>
+              <p className="dh-empty-state-desc">Adjust your search or create a new order.</p>
             </div>
           ) : (
             <Table>

@@ -20,6 +20,10 @@ import {
   Phone,
   MapPin,
   Building2,
+  BadgeDollarSign,
+  Scale,
+  FlaskConical,
+  Package,
   AlertTriangle,
   ChevronDown,
 } from 'lucide-react';
@@ -28,6 +32,7 @@ import { logger } from '@/lib/logger';
 import * as smsApi from '@/lib/smsApi';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from '@/hooks/use-toast';
+import { cn } from '@/lib/utils';
 import type {
   SmsSettings,
   SmsSettingsCreate,
@@ -69,7 +74,7 @@ export function Settings() {
       { id: 'suppliers', label: t('common.suppliers'), icon: Truck },
       { id: 'categories', label: t('common.categories'), icon: Tags },
       { id: 'units', label: t('common.units'), icon: Ruler },
-      { id: 'price-lists', label: 'Price Lists', icon: Tags },
+      { id: 'price-lists', label: 'Price Lists', icon: BadgeDollarSign },
       { id: 'market-routes', label: t('common.routes'), icon: MapPin },
       { id: 'sales-reps', label: t('common.sales_reps'), icon: User },
       { id: 'profile', label: t('common.profile'), icon: UserCircle },
@@ -91,33 +96,50 @@ export function Settings() {
 
   return (
     <PageShell title={t('settings.title')} subtitle={t('settings.subtitle')}>
-      <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
-        <div
-          className="border-b border-border bg-muted/30"
+      <div className="flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-[0_1px_2px_rgba(15,23,42,0.06),0_20px_45px_-24px_rgba(15,23,42,0.5)] md:flex-row">
+        <nav
+          className={cn(
+            'flex shrink-0 flex-col gap-1 border-border bg-muted/20 p-2.5',
+            'max-h-[min(40vh,320px)] overflow-y-auto md:max-h-none md:w-52 md:overflow-y-auto lg:w-56',
+            'border-b md:border-b-0 md:border-r'
+          )}
           role="tablist"
           aria-label={t('settings.tabs_aria')}
         >
-          <div className="flex gap-0 overflow-x-auto px-1">
-            {tabs.map((tab) => (
+          <p className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/80">
+            Sections
+          </p>
+          {tabs.map((tab) => {
+            const selected = activeTab === tab.id;
+            return (
               <button
                 key={tab.id}
                 type="button"
                 role="tab"
-                aria-selected={activeTab === tab.id}
+                aria-selected={selected}
                 onClick={() => handleTabChange(tab.id)}
-                className={`flex shrink-0 items-center gap-2 px-3 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${activeTab === tab.id
-                  ? 'text-[hsl(var(--primary))] border-[hsl(var(--primary))] bg-card'
-                  : 'text-muted-foreground border-transparent hover:text-foreground hover:bg-card/60'
-                  }`}
+                className={cn(
+                  'group flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium tracking-[0.01em] transition-all duration-200 ease-out',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--primary))]/40',
+                  selected
+                    ? 'bg-card text-foreground shadow-[0_8px_18px_-12px_rgba(59,130,246,0.55)] ring-1 ring-[hsl(var(--primary))]/20'
+                    : 'text-muted-foreground hover:-translate-y-px hover:bg-card/90 hover:text-foreground hover:shadow-[0_8px_14px_-12px_rgba(15,23,42,0.65)]'
+                )}
               >
-                <tab.icon className="w-4 h-4 shrink-0 opacity-90" aria-hidden />
-                {tab.label}
+                <tab.icon
+                  className={cn(
+                    'h-4 w-4 shrink-0 transition-colors duration-200',
+                    selected ? 'text-[hsl(var(--primary))]' : 'text-muted-foreground group-hover:text-foreground'
+                  )}
+                  aria-hidden
+                />
+                <span className="min-w-0 truncate">{tab.label}</span>
               </button>
-            ))}
-          </div>
-        </div>
+            );
+          })}
+        </nav>
 
-        <div className="p-3 md:p-4">
+        <div className="min-h-0 min-w-0 flex-1 overflow-y-auto p-4 md:p-5">
           {activeTab === 'suppliers' && <SupplierManagement />}
           {activeTab === 'categories' && <CategoryManagement />}
           {activeTab === 'units' && <UnitManagement />}
@@ -520,7 +542,7 @@ function SupplierManagement() {
       )}
 
       <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           type="text"
           placeholder={t('settings.supplier_search_ph')}
@@ -530,52 +552,52 @@ function SupplierManagement() {
         />
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full">
+      <div className="dh-table-shell">
+        <table className="dh-data-table w-full">
           <thead>
-            <tr className="bg-slate-50">
-              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_name')}</th>
-              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_contact')}</th>
-              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_phone')}</th>
-              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_address')}</th>
-              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_actions')}</th>
+            <tr>
+              <th>{t('settings.table_name')}</th>
+              <th>{t('settings.table_contact')}</th>
+              <th>{t('settings.table_phone')}</th>
+              <th>{t('settings.table_address')}</th>
+              <th>{t('settings.table_actions')}</th>
             </tr>
           </thead>
           <tbody>
             {filteredSuppliers.map((supplier) => (
-              <tr key={supplier.id} className="border-b border-slate-100 hover:bg-slate-50">
-                <td className="p-2">
+              <tr key={supplier.id}>
+                <td>
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
                       <Truck className="w-4 h-4 text-primary-600" />
                     </div>
-                    <span className="font-medium text-slate-900">{supplier.name}</span>
+                    <span className="font-medium text-foreground">{supplier.name}</span>
                   </div>
                 </td>
-                <td className="p-2">
-                  <div className="flex items-center gap-1 text-slate-600">
+                <td>
+                  <div className="flex items-center gap-1 text-muted-foreground">
                     <Building2 className="w-4 h-4" />
                     {supplier.contact_person || '-'}
                   </div>
                 </td>
-                <td className="p-2">
-                  <div className="flex items-center gap-1 text-slate-600">
+                <td>
+                  <div className="flex items-center gap-1 text-muted-foreground">
                     <Phone className="w-4 h-4" />
                     {supplier.phone}
                   </div>
                 </td>
-                <td className="p-2">
-                  <div className="flex items-center gap-1 text-slate-600">
+                <td>
+                  <div className="flex items-center gap-1 text-muted-foreground">
                     <MapPin className="w-4 h-4" />
                     {supplier.address || '-'}
                   </div>
                 </td>
-                <td className="p-2">
+                <td>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => handleEdit(supplier)} className="p-1 hover:bg-slate-100 rounded text-slate-600">
+                    <button onClick={() => handleEdit(supplier)} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground">
                       <Edit className="w-4 h-4" />
                     </button>
-                    <button onClick={() => setDeleteConfirm(supplier.id)} className="p-1 hover:bg-red-50 rounded text-red-500">
+                    <button onClick={() => setDeleteConfirm(supplier.id)} className="rounded-lg p-1.5 text-destructive/90 transition-colors hover:bg-destructive/10">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -585,13 +607,13 @@ function SupplierManagement() {
           </tbody>
         </table>
         {filteredSuppliers.length === 0 && !loading && (
-          <div className="text-center py-8 text-slate-500">{t('settings.supplier_none')}</div>
+          <div className="dh-empty-in-table">{t('settings.supplier_none')}</div>
         )}
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-4 w-full max-w-md">
+        <div className="dh-modal-overlay">
+          <div className="dh-modal-panel p-4 max-w-md">
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-lg font-semibold">{editingSupplier ? t('settings.supplier_modal_edit') : t('settings.supplier_modal_add')}</h4>
               <button
@@ -673,8 +695,8 @@ function SupplierManagement() {
       )}
 
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-4 w-full max-w-sm">
+        <div className="dh-modal-overlay">
+          <div className="dh-modal-panel p-4 max-w-sm">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
                 <AlertTriangle className="w-5 h-5 text-red-600" />
@@ -873,7 +895,7 @@ function SalesRepManagement() {
       )}
 
       <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           type="text"
           placeholder={t('settings.sales_rep_search_ph')}
@@ -883,41 +905,41 @@ function SalesRepManagement() {
         />
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full">
+      <div className="dh-table-shell">
+        <table className="dh-data-table w-full">
           <thead>
-            <tr className="bg-slate-50">
-              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_name')}</th>
-              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_email')}</th>
-              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_phone')}</th>
-              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_actions')}</th>
+            <tr>
+              <th>{t('settings.table_name')}</th>
+              <th>{t('settings.table_email')}</th>
+              <th>{t('settings.table_phone')}</th>
+              <th>{t('settings.table_actions')}</th>
             </tr>
           </thead>
           <tbody>
             {filteredReps.map((rep) => (
-              <tr key={rep.id} className="border-b border-slate-100 hover:bg-slate-50">
-                <td className="p-2">
+              <tr key={rep.id}>
+                <td>
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
                       <User className="w-4 h-4 text-primary-600" />
                     </div>
-                    <span className="font-medium text-slate-900">{rep.name}</span>
+                    <span className="font-medium text-foreground">{rep.name}</span>
                   </div>
                 </td>
-                <td className="p-2 text-slate-600">{rep.email}</td>
-                <td className="p-2 text-slate-600">{rep.phone || '-'}</td>
-                <td className="p-2">
+                <td className="text-muted-foreground">{rep.email}</td>
+                <td className="text-muted-foreground">{rep.phone || '-'}</td>
+                <td>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => handleEdit(rep)}
-                      className="p-1 hover:bg-slate-100 rounded text-slate-600"
+                      className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
                       title="Edit"
                     >
                       <Edit className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => setDeleteConfirm(rep.id)}
-                      className="p-1 hover:bg-red-50 rounded text-red-500"
+                      className="rounded-lg p-1.5 text-destructive/90 transition-colors hover:bg-destructive/10"
                       title="Delete"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -929,13 +951,13 @@ function SalesRepManagement() {
           </tbody>
         </table>
         {filteredReps.length === 0 && !loading && (
-          <div className="text-center py-8 text-slate-500">{t('settings.sales_rep_none')}</div>
+          <div className="dh-empty-in-table">{t('settings.sales_rep_none')}</div>
         )}
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-4 w-full max-w-md">
+        <div className="dh-modal-overlay">
+          <div className="dh-modal-panel p-4 max-w-md">
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-lg font-semibold">{editingRep ? t('settings.sales_rep_modal_edit') : t('settings.sales_rep_modal_add')}</h4>
               <button
@@ -1022,8 +1044,8 @@ function SalesRepManagement() {
       )}
 
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-4 w-full max-w-sm">
+        <div className="dh-modal-overlay">
+          <div className="dh-modal-panel p-4 max-w-sm">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
                 <AlertTriangle className="w-5 h-5 text-red-600" />
@@ -1258,7 +1280,7 @@ function CategoryManagement() {
       </div>
 
       <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           type="text"
           placeholder={t('settings.category_search_ph')}
@@ -1270,39 +1292,52 @@ function CategoryManagement() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {filteredCategories.map((category) => (
-          <div key={category.id} className="bg-slate-50 rounded-lg p-3 hover:shadow-md transition-shadow">
+          <div
+            key={category.id}
+            className="rounded-xl border border-border/80 bg-card p-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 ease-out hover:-translate-y-px hover:shadow-[0_12px_24px_-18px_rgba(15,23,42,0.35)]"
+          >
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-2">
-                <div className="w-10 h-10 bg-primary-100 rounded-lg flex items-center justify-center">
-                  <Tags className="w-5 h-5 text-primary-600" />
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+                  <Tags className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                  <h4 className="font-medium text-slate-900">{category.name}</h4>
-                  <p className="text-xs text-slate-500">{category.product_count} {t('settings.products_suffix')}</p>
+                  <h4 className="font-medium text-foreground">{category.name}</h4>
+                  <p className="text-xs text-muted-foreground">
+                    {category.product_count} {t('settings.products_suffix')}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={() => handleEdit(category)} className="p-1 hover:bg-slate-200 rounded text-slate-600">
-                  <Edit className="w-4 h-4" />
+                <button
+                  onClick={() => handleEdit(category)}
+                  className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+                >
+                  <Edit className="h-4 w-4" />
                 </button>
-                <button onClick={() => setDeleteConfirm(category.id)} className="p-1 hover:bg-red-100 rounded text-red-500">
-                  <Trash2 className="w-4 h-4" />
+                <button
+                  onClick={() => setDeleteConfirm(category.id)}
+                  className="rounded-lg p-1.5 text-destructive/90 transition-colors hover:bg-destructive/10"
+                >
+                  <Trash2 className="h-4 w-4" />
                 </button>
               </div>
             </div>
             {category.description && (
-              <p className="text-sm text-slate-600 mt-2">{category.description}</p>
+              <p className="mt-2 text-sm text-muted-foreground">{category.description}</p>
             )}
           </div>
         ))}
       </div>
       {filteredCategories.length === 0 && !loading && (
-        <div className="text-center py-8 text-slate-500">{t('settings.category_none')}</div>
+        <div className="dh-empty-in-table rounded-xl border border-dashed border-border/70 bg-muted/10">
+          {t('settings.category_none')}
+        </div>
       )}
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-4 w-full max-w-md">
+        <div className="dh-modal-overlay">
+          <div className="dh-modal-panel p-4 max-w-md">
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-lg font-semibold">{editingCategory ? t('settings.category_modal_edit') : t('settings.category_modal_add')}</h4>
               <button
@@ -1362,8 +1397,8 @@ function CategoryManagement() {
       )}
 
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-4 w-full max-w-sm">
+        <div className="dh-modal-overlay">
+          <div className="dh-modal-panel p-4 max-w-sm">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
                 <AlertTriangle className="w-5 h-5 text-red-600" />
@@ -1540,7 +1575,7 @@ function MarketRouteManagement() {
       )}
 
       <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           type="text"
           placeholder={t('settings.route_search_ph')}
@@ -1550,41 +1585,41 @@ function MarketRouteManagement() {
         />
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full">
+      <div className="dh-table-shell">
+        <table className="dh-data-table w-full">
           <thead>
-            <tr className="bg-slate-50">
-              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_route')}</th>
-              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_subarea')}</th>
-              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_market_day')}</th>
-              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_actions')}</th>
+            <tr>
+              <th>{t('settings.table_route')}</th>
+              <th>{t('settings.table_subarea')}</th>
+              <th>{t('settings.table_market_day')}</th>
+              <th>{t('settings.table_actions')}</th>
             </tr>
           </thead>
           <tbody>
             {filteredRoutes.map((route) => (
-              <tr key={route.id} className="border-b border-slate-100 hover:bg-slate-50">
-                <td className="p-2">
+              <tr key={route.id}>
+                <td>
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
                       <MapPin className="w-4 h-4 text-primary-600" />
                     </div>
-                    <span className="font-medium text-slate-900">{route.name}</span>
+                    <span className="font-medium text-foreground">{route.name}</span>
                   </div>
                 </td>
-                <td className="p-2 text-slate-600">{route.sub_area || '-'}</td>
-                <td className="p-2 text-slate-600">{route.market_day || '-'}</td>
-                <td className="p-2">
+                <td className="text-muted-foreground">{route.sub_area || '-'}</td>
+                <td className="text-muted-foreground">{route.market_day || '-'}</td>
+                <td>
                   <div className="flex items-center gap-1">
                     <button
                       onClick={() => handleEdit(route)}
-                      className="p-1 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded transition-colors"
+                      className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary"
                       title="Edit"
                     >
                       <Edit className="w-4 h-4" />
                     </button>
                     <button
                       onClick={() => setDeleteConfirm(route.id)}
-                      className="p-1 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
+                      className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                       title="Delete"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -1595,7 +1630,7 @@ function MarketRouteManagement() {
             ))}
             {filteredRoutes.length === 0 && (
               <tr>
-                <td colSpan={4} className="p-4 text-center text-slate-500">
+                <td colSpan={4} className="dh-empty-in-table border-b-0">
                   {t('settings.route_none')}
                 </td>
               </tr>
@@ -1605,9 +1640,9 @@ function MarketRouteManagement() {
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto m-2 animate-fade-in">
-            <div className="p-3 border-b border-slate-200 flex items-center justify-between">
+        <div className="dh-modal-overlay">
+          <div className="dh-modal-panel m-2 max-h-[90vh] w-full max-w-lg animate-fade-in overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-border/80 p-3">
               <h2 className="text-xl font-semibold text-slate-900">
                 {editingRoute ? t('settings.route_modal_edit') : t('settings.route_modal_add')}
               </h2>
@@ -1675,8 +1710,8 @@ function MarketRouteManagement() {
       )}
 
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-4 w-full max-w-md">
+        <div className="dh-modal-overlay">
+          <div className="dh-modal-panel p-4 max-w-md">
             <h3 className="text-lg font-semibold text-slate-900 mb-2">{t('settings.delete_route_title')}</h3>
             <p className="text-slate-600 mb-4">{t('settings.delete_route_body')}</p>
             <div className="flex gap-2">
@@ -1742,6 +1777,36 @@ function UnitManagement() {
       u.abbreviation.toLowerCase().includes(searchTerm.toLowerCase())
     );
   }, [units, searchTerm]);
+
+  const getUnitIcon = useCallback((unit: Unit) => {
+    const token = `${unit.name} ${unit.abbreviation}`.toLowerCase();
+
+    if (
+      /(kg|g|gram|kilogram|weight|ton|lb|oz|pound)/.test(token)
+    ) {
+      return Scale;
+    }
+
+    if (
+      /(l|ml|liter|litre|cc|volume)/.test(token)
+    ) {
+      return FlaskConical;
+    }
+
+    if (
+      /(pack|box|piece|dozen|carton|set|bundle|case|pkt|pcs)/.test(token)
+    ) {
+      return Package;
+    }
+
+    if (
+      /(m|cm|mm|meter|metre|inch|ft|yard|length)/.test(token)
+    ) {
+      return Ruler;
+    }
+
+    return Ruler;
+  }, []);
 
   const handleSubmit = async () => {
     if (isSubmitting) {
@@ -1853,7 +1918,7 @@ function UnitManagement() {
       )}
 
       <div className="relative max-w-md">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           type="text"
           placeholder={t('settings.unit_search_ph')}
@@ -1863,55 +1928,57 @@ function UnitManagement() {
         />
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full">
+      <div className="dh-table-shell">
+        <table className="dh-data-table w-full">
           <thead>
-            <tr className="bg-slate-50">
-              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_unit_name')}</th>
-              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_abbr')}</th>
-              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_desc')}</th>
-              <th className="text-left p-2 font-medium text-slate-600">{t('settings.table_actions')}</th>
+            <tr>
+              <th>{t('settings.table_unit_name')}</th>
+              <th>{t('settings.table_abbr')}</th>
+              <th>{t('settings.table_desc')}</th>
+              <th>{t('settings.table_actions')}</th>
             </tr>
           </thead>
           <tbody>
-            {filteredUnits.map((unit) => (
-              <tr key={unit.id} className="border-b border-slate-100 hover:bg-slate-50">
-                <td className="p-2">
+            {filteredUnits.map((unit) => {
+              const UnitIcon = getUnitIcon(unit);
+              return (
+              <tr key={unit.id}>
+                <td>
                   <div className="flex items-center gap-2">
                     <div className="w-8 h-8 bg-primary-100 rounded-full flex items-center justify-center">
-                      <Ruler className="w-4 h-4 text-primary-600" />
+                      <UnitIcon className="w-4 h-4 text-primary-600" />
                     </div>
-                    <span className="font-medium text-slate-900">{unit.name}</span>
+                    <span className="font-medium text-foreground">{unit.name}</span>
                   </div>
                 </td>
-                <td className="p-2">
-                  <span className="px-2 py-1 bg-slate-100 rounded text-sm font-mono">{unit.abbreviation}</span>
+                <td>
+                  <span className="rounded-md bg-muted/80 px-2 py-1 font-mono text-sm">{unit.abbreviation}</span>
                 </td>
-                <td className="p-2 text-slate-600">
+                <td className="text-muted-foreground">
                   {unit.description || '-'}
                 </td>
-                <td className="p-2">
+                <td>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => handleEdit(unit)} className="p-1 hover:bg-slate-100 rounded text-slate-600">
+                    <button onClick={() => handleEdit(unit)} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground">
                       <Edit className="w-4 h-4" />
                     </button>
-                    <button onClick={() => setDeleteConfirm(unit.id)} className="p-1 hover:bg-red-50 rounded text-red-500">
+                    <button onClick={() => setDeleteConfirm(unit.id)} className="rounded-lg p-1.5 text-destructive/90 transition-colors hover:bg-destructive/10">
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
                 </td>
               </tr>
-            ))}
+            )})}
           </tbody>
         </table>
         {filteredUnits.length === 0 && !loading && (
-          <div className="text-center py-8 text-slate-500">{t('settings.unit_none')}</div>
+          <div className="dh-empty-in-table">{t('settings.unit_none')}</div>
         )}
       </div>
 
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-4 w-full max-w-md">
+        <div className="dh-modal-overlay">
+          <div className="dh-modal-panel p-4 max-w-md">
             <div className="flex items-center justify-between mb-4">
               <h4 className="text-lg font-semibold">{editingUnit ? t('settings.unit_modal_edit') : t('settings.unit_modal_add')}</h4>
               <button
@@ -1983,8 +2050,8 @@ function UnitManagement() {
       )}
 
       {deleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-4 w-full max-w-sm">
+        <div className="dh-modal-overlay">
+          <div className="dh-modal-panel p-4 max-w-sm">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
                 <AlertTriangle className="w-5 h-5 text-red-600" />
@@ -2616,28 +2683,28 @@ function PriceListManagement() {
         <button type="submit" className="btn-primary">Add Price List</button>
       </form>
 
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="min-w-full text-sm">
-          <thead className="bg-muted/40">
+      <div className="dh-table-shell">
+        <table className="dh-data-table min-w-full">
+          <thead>
             <tr>
-              <th className="px-3 py-2 text-left">Name</th>
-              <th className="px-3 py-2 text-left">Currency</th>
-              <th className="px-3 py-2 text-right">Priority</th>
-              <th className="px-3 py-2 text-left">Status</th>
+              <th>Name</th>
+              <th>Currency</th>
+              <th className="text-right">Priority</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td className="px-3 py-4 text-muted-foreground" colSpan={4}>Loading...</td></tr>
+              <tr><td className="dh-empty-in-table border-b-0 text-muted-foreground" colSpan={4}>Loading...</td></tr>
             ) : priceLists.length === 0 ? (
-              <tr><td className="px-3 py-4 text-muted-foreground" colSpan={4}>No price lists yet.</td></tr>
+              <tr><td className="dh-empty-in-table border-b-0 text-muted-foreground" colSpan={4}>No price lists yet.</td></tr>
             ) : (
               priceLists.map((pl) => (
-                <tr key={pl.id} className="border-t border-border">
-                  <td className="px-3 py-2">{pl.name}</td>
-                  <td className="px-3 py-2">{pl.currency}</td>
-                  <td className="px-3 py-2 text-right">{pl.priority}</td>
-                  <td className="px-3 py-2">{pl.is_active ? 'Active' : 'Inactive'}</td>
+                <tr key={pl.id}>
+                  <td className="font-medium">{pl.name}</td>
+                  <td className="text-muted-foreground">{pl.currency}</td>
+                  <td className="text-right font-mono text-sm">{pl.priority}</td>
+                  <td className="text-muted-foreground">{pl.is_active ? 'Active' : 'Inactive'}</td>
                 </tr>
               ))
             )}

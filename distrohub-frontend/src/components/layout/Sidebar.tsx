@@ -210,13 +210,13 @@ export function Sidebar() {
       <Link
         to={item.path}
         className={cn(
-          'group flex items-center rounded-xl transition-all duration-200',
+          'group flex items-center rounded-xl transition-all duration-200 ease-out',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--sidebar-ring))] focus-visible:ring-offset-2 focus-visible:ring-offset-[hsl(var(--sidebar-background))]',
           'relative overflow-hidden',
-          isCollapsed ? 'justify-center p-3' : 'gap-3 px-3 py-2.5',
+          isCollapsed ? 'justify-center p-2' : 'gap-3 px-3 py-2.5',
           active
-            ? 'bg-[hsl(var(--sidebar-ring))]/10 text-[hsl(var(--sidebar-ring))]'
-            : 'text-[hsl(var(--sidebar-muted))] hover:bg-[hsl(var(--sidebar-accent))] hover:text-[hsl(var(--sidebar-foreground))]'
+            ? 'bg-[hsl(var(--sidebar-ring))]/10 text-[hsl(var(--sidebar-ring))] shadow-[0_10px_22px_-16px_hsl(var(--sidebar-ring)/0.8)]'
+            : 'text-[hsl(var(--sidebar-muted))] hover:-translate-y-px hover:bg-[hsl(var(--sidebar-accent))] hover:text-[hsl(var(--sidebar-foreground))] hover:shadow-[0_8px_18px_-16px_rgba(15,23,42,0.7)]'
         )}
         aria-current={active ? 'page' : undefined}
         title={isCollapsed ? item.label : undefined}
@@ -234,7 +234,7 @@ export function Sidebar() {
           )}
           aria-hidden
         />
-        {!isCollapsed && <span className="text-sm font-medium truncate">{item.label}</span>}
+              {!isCollapsed && <span className="truncate text-sm font-medium tracking-[-0.01em]">{item.label}</span>}
       </Link>
     );
 
@@ -257,7 +257,7 @@ export function Sidebar() {
         <div
           className={cn(
             'flex items-center shrink-0 transition-all duration-300 border-b border-[hsl(var(--sidebar-border))]',
-            isCollapsed ? 'px-3 py-5 justify-center' : 'px-5 py-6 gap-3'
+            isCollapsed ? 'px-2 py-3 justify-center' : 'px-5 py-6 gap-3'
           )}
         >
           <div className="relative flex-shrink-0">
@@ -283,17 +283,22 @@ export function Sidebar() {
           )}
         </div>
 
-        <nav className="flex-1 min-h-0 px-3 py-4 overflow-y-auto overscroll-contain custom-scrollbar">
+        <nav
+          className={cn(
+            'flex-1 min-h-0 overflow-y-auto overscroll-contain custom-scrollbar',
+            isCollapsed ? 'px-2 py-2' : 'px-3 py-4'
+          )}
+        >
           {menuGroups.map((group, groupIndex) => (
-            <div key={group.label} className={cn(groupIndex > 0 && 'mt-6')}>
+            <div key={group.label} className={cn(groupIndex > 0 && (isCollapsed ? 'mt-2' : 'mt-6'))}>
               {!isCollapsed ? (
-                <h2 className="px-2 mb-2 text-[10px] font-semibold text-[hsl(var(--sidebar-muted))] uppercase tracking-[0.14em]">
+                <h2 className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--sidebar-muted))]">
                   {group.label}
                 </h2>
-              ) : (
-                <div className="h-px bg-[hsl(var(--sidebar-border))] mx-1 my-4" role="separator" />
-              )}
-              <ul className="space-y-1">
+              ) : groupIndex > 0 ? (
+                <div className="h-px bg-[hsl(var(--sidebar-border))] mx-1 my-1.5" role="separator" aria-hidden />
+              ) : null}
+              <ul className={cn(isCollapsed ? 'space-y-0.5' : 'space-y-1')}>
                 {group.items.map((item) => (
                   <li key={item.path}>
                     <NavRow item={item} />
@@ -310,11 +315,11 @@ export function Sidebar() {
               type="button"
               onClick={() => setIsCollapsed(!isCollapsed)}
               className={cn(
-                'w-full flex items-center rounded-xl transition-colors duration-200',
+                'w-full flex items-center rounded-xl transition-all duration-200 ease-out',
                 'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[hsl(var(--sidebar-ring))]',
                 isCollapsed
-                  ? 'min-h-[48px] flex-col justify-center gap-0.5 p-2 text-[hsl(var(--sidebar-foreground))] bg-[hsl(var(--sidebar-accent))] ring-1 ring-[hsl(var(--sidebar-border))] hover:bg-[hsl(var(--sidebar-accent))]/85'
-                  : 'gap-3 px-3 py-2.5 text-[hsl(var(--sidebar-muted))] hover:text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))]',
+                  ? 'min-h-10 flex-col justify-center gap-0.5 px-2 py-2 text-[hsl(var(--sidebar-foreground))] bg-[hsl(var(--sidebar-accent))] ring-1 ring-[hsl(var(--sidebar-border))] hover:bg-[hsl(var(--sidebar-accent))]/85'
+                  : 'gap-3 px-3 py-2.5 text-[hsl(var(--sidebar-muted))] hover:-translate-y-px hover:text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))]',
               )}
               aria-pressed={isCollapsed}
               title={isCollapsed ? t('sidebar.expand_panel') : t('sidebar.collapse_panel')}
@@ -351,7 +356,7 @@ export function Sidebar() {
           className={cn(
             shellClass,
             'fixed left-0 top-0 h-full w-[min(288px,88vw)] z-50 transition-transform duration-300 ease-out',
-            'border-r border-[hsl(var(--sidebar-border))] shadow-xl shadow-black/10',
+            'border-r border-[hsl(var(--sidebar-border))] shadow-xl shadow-black/15',
             isMobileOpen ? 'translate-x-0' : '-translate-x-full'
           )}
           aria-hidden={!isMobileOpen}
@@ -368,7 +373,7 @@ export function Sidebar() {
       className={cn(
         shellClass,
         'fixed left-0 top-0 h-screen z-40 transition-[width] duration-300 ease-out',
-        'border-r border-[hsl(var(--sidebar-border))] shadow-sm',
+        'border-r border-[hsl(var(--sidebar-border))] shadow-[0_1px_2px_rgba(15,23,42,0.08),0_18px_36px_-30px_rgba(15,23,42,0.5)]',
         isCollapsed ? 'w-[76px]' : 'w-[260px]'
       )}
     >

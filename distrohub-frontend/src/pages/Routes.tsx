@@ -118,7 +118,7 @@ export function Routes() {
           {loading ? (
             <div className="px-3 py-8 text-center text-sm text-muted-foreground">Loading routes…</div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="dh-table-shell border-0 shadow-none">
               <table className="w-full text-sm">
                 <thead className="bg-muted/40 border-b border-border">
                   <tr>
@@ -133,7 +133,7 @@ export function Routes() {
                 </thead>
                 <tbody className="divide-y divide-border/60">
                   {routes.map((route) => (
-                    <tr key={route.id} className="hover:bg-muted/30 transition-colors">
+                    <tr key={route.id} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                       <td className="px-3 py-2.5 font-medium text-[hsl(var(--primary))]">{route.route_number}</td>
                       <td className="px-3 py-2.5 text-foreground">{route.assigned_to_name}</td>
                       <td className="px-3 py-2.5 text-muted-foreground">{formatDateBD(route.route_date)}</td>
@@ -170,7 +170,10 @@ export function Routes() {
             </div>
           )}
           {!loading && routes.length === 0 && (
-            <div className="px-3 py-8 text-center text-sm text-muted-foreground">No routes found. Create a new route to get started.</div>
+            <div className="dh-empty-state py-10">
+              <p className="dh-empty-state-title">No routes found</p>
+              <p className="dh-empty-state-desc">Create a new route to get started.</p>
+            </div>
           )}
         </div>
       </div>
@@ -285,8 +288,8 @@ function CreateRouteModal({ onClose, onSave }: { onClose: () => void; onSave: ()
   }, {} as Record<string, SalesOrder[]>);
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2">
-      <div className="bg-card border border-border rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-xl">
+    <div className="dh-modal-overlay">
+      <div className="dh-modal-panel w-full max-w-4xl max-h-[90vh] overflow-y-auto">
         <div className="px-4 py-3 border-b border-border flex items-center justify-between">
           <h2 className="text-base font-semibold text-foreground">Create New Route</h2>
           <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
@@ -406,16 +409,16 @@ function RouteDetailsModal({
 
   if (loading) {
     return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-card border border-border rounded-2xl p-8 text-sm text-muted-foreground">Loading…</div>
+      <div className="dh-modal-overlay">
+        <div className="dh-modal-panel p-8 text-sm text-muted-foreground">Loading…</div>
       </div>
     );
   }
   if (!routeDetails) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-2">
-      <div className="bg-card border border-border rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-xl">
+    <div className="dh-modal-overlay">
+      <div className="dh-modal-panel w-full max-w-4xl max-h-[90vh] overflow-y-auto">
         <div className="px-4 py-3 border-b border-border flex items-center justify-between">
           <div>
             <h2 className="text-base font-semibold text-foreground">{routeDetails.route_number}</h2>

@@ -5,8 +5,16 @@ export default {
   theme: {
   	extend: {
   		fontFamily: {
-  			sans: ['Sora', 'Hind Siliguri', 'system-ui', 'sans-serif'],
-  			mono: ['DM Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+				sans: [
+					'-apple-system',
+					'BlinkMacSystemFont',
+					'SF Pro Text',
+					'SF Pro Display',
+					'system-ui',
+					'Segoe UI',
+					'sans-serif',
+				],
+				mono: ['SF Mono', 'DM Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
   		},
   		spacing: {
   			'1': '8px',

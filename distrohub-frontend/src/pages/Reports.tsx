@@ -770,7 +770,7 @@ export function Reports() {
         {loading ? (
           <div className="py-12 text-center text-sm text-muted-foreground">Loading report data…</div>
         ) : activeReport === 'sales' ? (
-          <div className="overflow-x-auto">
+          <div className="dh-table-shell border-0 shadow-none">
             <table className="w-full text-sm">
               <thead className="bg-muted/40 border-b border-border">
                 <tr>
@@ -788,7 +788,7 @@ export function Reports() {
                   const returnedQty = sale.returned_qty || 0;
                   const netItems = sale.net_items || totalItems;
                   return (
-                    <tr key={sale.id} className="hover:bg-muted/30 transition-colors">
+                    <tr key={sale.id} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                       <td className="px-3 py-2.5 text-muted-foreground">{formatDate(sale.created_at)}</td>
                       <td className="px-3 py-2.5">
                         <button onClick={() => setSelectedInvoice(sale)} className="font-medium text-[hsl(var(--primary))] hover:underline flex items-center gap-1">
@@ -834,11 +834,14 @@ export function Reports() {
               </div>
             )}
             {filteredSalesReport.length === 0 && (
-              <div className="py-12 text-center text-sm text-muted-foreground">No sales found for the selected filters.</div>
+              <div className="dh-empty-state py-10">
+                <p className="dh-empty-state-title">No sales found</p>
+                <p className="dh-empty-state-desc">Try adjusting your filters.</p>
+              </div>
             )}
           </div>
         ) : activeReport === 'sales-returns' ? (
-          <div className="overflow-x-auto">
+          <div className="dh-table-shell border-0 shadow-none">
             <table className="w-full text-sm">
               <thead className="bg-muted/40 border-b border-border">
                 <tr>
@@ -853,7 +856,7 @@ export function Reports() {
               </thead>
               <tbody className="divide-y divide-border/60">
                 {filteredSalesReturns.map((return_record) => (
-                  <tr key={return_record.id} className="hover:bg-muted/30 transition-colors">
+                  <tr key={return_record.id} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                     <td className="px-3 py-2.5 text-muted-foreground">{new Date(return_record.created_at).toLocaleDateString()}</td>
                     <td className="px-3 py-2.5 font-medium text-[hsl(var(--primary))]">{return_record.return_number}</td>
                     <td className="px-3 py-2.5 text-muted-foreground">{return_record.invoice_number || '–'}</td>
@@ -877,11 +880,14 @@ export function Reports() {
               </tfoot>
             </table>
             {filteredSalesReturns.length === 0 && (
-              <div className="py-12 text-center text-sm text-muted-foreground">No returns found for the selected filters.</div>
+              <div className="dh-empty-state py-10">
+                <p className="dh-empty-state-title">No returns found</p>
+                <p className="dh-empty-state-desc">Try adjusting your filters.</p>
+              </div>
             )}
           </div>
         ) : activeReport === 'purchases' ? (
-          <div className="overflow-x-auto">
+          <div className="dh-table-shell border-0 shadow-none">
             <table className="w-full text-sm">
               <thead className="bg-muted/40 border-b border-border">
                 <tr>
@@ -895,7 +901,7 @@ export function Reports() {
               </thead>
               <tbody className="divide-y divide-border/60">
                 {filteredPurchases.map((purchase) => (
-                  <tr key={purchase.id} className="hover:bg-muted/30 transition-colors">
+                  <tr key={purchase.id} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                     <td className="px-3 py-2.5 text-muted-foreground">{new Date(purchase.created_at).toLocaleDateString()}</td>
                     <td className="px-3 py-2.5 font-medium text-[hsl(var(--primary))]">{purchase.invoice_number}</td>
                     <td className="px-3 py-2.5 text-foreground">{purchase.supplier_name}</td>
@@ -915,11 +921,14 @@ export function Reports() {
                 </tfoot>
             </table>
             {filteredPurchases.length === 0 && (
-              <div className="py-12 text-center text-sm text-muted-foreground">No purchases found for the selected filters.</div>
+              <div className="dh-empty-state py-10">
+                <p className="dh-empty-state-title">No purchases found</p>
+                <p className="dh-empty-state-desc">Try adjusting your filters.</p>
+              </div>
             )}
           </div>
         ) : activeReport === 'stock' ? (
-          <div className="overflow-x-auto">
+          <div className="dh-table-shell border-0 shadow-none">
             <table className="w-full text-sm">
               <thead className="bg-muted/40 border-b border-border">
                 <tr>
@@ -932,7 +941,7 @@ export function Reports() {
               </thead>
               <tbody className="divide-y divide-border/60">
                 {filteredInventory.map((item) => (
-                  <tr key={item.product_id} className="hover:bg-muted/30 transition-colors">
+                  <tr key={item.product_id} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                     <td className="px-3 py-2.5 font-medium text-foreground">{item.product_name}</td>
                     <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{item.sku}</td>
                     <td className="px-3 py-2.5 text-muted-foreground">{item.category}</td>
@@ -950,7 +959,10 @@ export function Reports() {
               </tfoot>
             </table>
             {filteredInventory.length === 0 && (
-              <div className="py-12 text-center text-sm text-muted-foreground">No products found for the selected filters.</div>
+              <div className="dh-empty-state py-10">
+                <p className="dh-empty-state-title">No products found</p>
+                <p className="dh-empty-state-desc">Try adjusting your filters.</p>
+              </div>
             )}
           </div>
         ) : activeReport === 'collection' ? (
@@ -960,7 +972,7 @@ export function Reports() {
             ) : collectionPayments.length === 0 ? (
               <div className="py-12 text-center text-sm text-muted-foreground">No payment records found for the selected period.</div>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="dh-table-shell border-0 shadow-none">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/40 border-b border-border">
                     <tr>
@@ -975,7 +987,7 @@ export function Reports() {
                   </thead>
                   <tbody className="divide-y divide-border/60">
                     {collectionPayments.map((payment: any) => (
-                      <tr key={payment.id} className="hover:bg-muted/30 transition-colors">
+                      <tr key={payment.id} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                         <td className="px-3 py-2.5 text-muted-foreground">{formatDate(payment.created_at)}</td>
                         <td className="px-3 py-2.5 font-medium text-[hsl(var(--primary))]">{payment.invoice_number || '–'}</td>
                         <td className="px-3 py-2.5 text-muted-foreground">{payment.retailer_name}</td>
@@ -1003,7 +1015,7 @@ export function Reports() {
             )}
           </div>
         ) : activeReport === 'margins' ? (
-          <div className="overflow-x-auto">
+          <div className="dh-table-shell border-0 shadow-none">
             <table className="w-full text-sm">
               <thead className="bg-muted/40 border-b border-border">
                 <tr>
@@ -1019,7 +1031,7 @@ export function Reports() {
               </thead>
               <tbody className="divide-y divide-border/60">
                 {marginRows.map((row, idx) => (
-                  <tr key={`${row.sale_id}-${row.product_id}-${idx}`} className="hover:bg-muted/30 transition-colors">
+                  <tr key={`${row.sale_id}-${row.product_id}-${idx}`} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                     <td className="px-3 py-2.5 text-muted-foreground">{formatDate(row.created_at)}</td>
                     <td className="px-3 py-2.5 font-medium text-[hsl(var(--primary))]">{row.invoice_number || '—'}</td>
                     <td className="px-3 py-2.5 text-foreground">{row.product_name || row.product_id}</td>
@@ -1033,7 +1045,10 @@ export function Reports() {
               </tbody>
             </table>
             {marginRows.length === 0 && (
-              <div className="py-12 text-center text-sm text-muted-foreground">No margin rows found for the selected filters.</div>
+              <div className="dh-empty-state py-10">
+                <p className="dh-empty-state-title">No margin rows found</p>
+                <p className="dh-empty-state-desc">Try adjusting your filters.</p>
+              </div>
             )}
           </div>
         ) : null}
@@ -1041,8 +1056,8 @@ export function Reports() {
 
       {/* Invoice Details Modal */}
       {selectedInvoice && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card border border-border rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="dh-modal-overlay">
+          <div className="dh-modal-panel max-w-4xl w-full max-h-[90vh] overflow-y-auto">
             <div className="sticky top-0 bg-card border-b border-border p-4 flex items-center justify-between">
               <h2 className="text-lg font-bold text-foreground">Invoice Details – {selectedInvoice.invoice_number}</h2>
               <button onClick={() => setSelectedInvoice(null)} className="p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
@@ -1080,7 +1095,7 @@ export function Reports() {
                         const returnedItem = returnItems.find(ri => ri.sale_item_id === item.id);
                         const returnedQty = returnedItem?.quantity_returned || 0;
                         return (
-                          <tr key={idx} className="hover:bg-muted/20">
+                          <tr key={idx} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                             <td className="px-3 py-2 text-foreground">{item.product_name}</td>
                             <td className="px-3 py-2 text-right font-mono text-muted-foreground">{item.quantity}</td>
                             <td className={`px-3 py-2 text-right font-mono font-semibold ${returnedQty > 0 ? 'text-[hsl(var(--dh-red))]' : 'text-muted-foreground/50'}`}>{returnedQty > 0 ? returnedQty : '–'}</td>

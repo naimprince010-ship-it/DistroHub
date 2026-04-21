@@ -417,9 +417,9 @@ function StockOverview() {
           {loading ? (
             <div className="py-12 text-center text-sm text-muted-foreground">Loading inventory…</div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 border-b border-border">
+            <div className="dh-table-shell border-0 shadow-none">
+              <table className="w-full border-collapse text-sm">
+                <thead className="border-b border-border/80 bg-muted/35">
                   <tr>
                     <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Product</th>
                     <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">SKU</th>
@@ -432,7 +432,7 @@ function StockOverview() {
                 </thead>
                 <tbody className="divide-y divide-border/60">
                   {filteredInventory.map((item) => (
-                    <tr key={item.id} className="hover:bg-muted/30 transition-colors">
+                    <tr key={item.id} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                       <td className="px-3 py-2.5">
                         <div className="flex items-center gap-2">
                           <div className="w-8 h-8 bg-[hsl(var(--primary))]/10 rounded-lg flex items-center justify-center">
@@ -467,7 +467,10 @@ function StockOverview() {
             </div>
           )}
           {!loading && filteredInventory.length === 0 && (
-            <div className="py-12 text-center text-sm text-muted-foreground">No inventory items found. Try adjusting your search or filters.</div>
+            <div className="dh-empty-state">
+              <p className="dh-empty-state-title">No inventory items</p>
+              <p className="dh-empty-state-desc">Try adjusting your search or filters.</p>
+            </div>
           )}
         </CardContent>
       </Card>

@@ -23,11 +23,7 @@ interface DashboardStatsBrief {
   expiring_soon_count?: number;
 }
 
-interface HeaderProps {
-  title: string;
-}
-
-export function Header({ title }: HeaderProps) {
+export function Header() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [localSearch, setLocalSearch] = useState(searchParams.get('q') || '');
   const [alertStats, setAlertStats] = useState<{ low: number; exp: number } | null>(null);
@@ -127,37 +123,32 @@ export function Header({ title }: HeaderProps) {
   };
 
   return (
-    <header className="h-16 bg-background/80 backdrop-blur-xl border-b border-border sticky top-0 z-30 flex items-center justify-between px-4 lg:px-6 transition-all duration-300">
-      {/* Left: Mobile menu trigger, Title and Online Badge */}
+    <header className="sticky top-0 z-30 flex h-[68px] items-center justify-between border-b border-border/80 bg-background/82 px-4 backdrop-blur-xl transition-all duration-300 lg:px-6">
+      {/* Left: Mobile menu trigger and online/sync status */}
       <div className="flex items-center gap-3">
         {/* Mobile menu trigger */}
         <SidebarTrigger />
         
-        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3">
-          <h2 className="text-xl lg:text-2xl font-semibold text-foreground leading-none tracking-tight text-balance">
-            {t(`common.${title.toLowerCase().replace(/ /g, '_')}`) || title}
-          </h2>
-          <div className="flex items-center gap-2">
-            <OnlineStatusBadge />
-            {pendingSyncCount > 0 && (
-              <button
-                onClick={syncData}
-                disabled={!isOnline || isSyncing}
-                className={cn(
-                  'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1',
-                  'text-xs font-medium transition-all duration-200',
-                  'bg-primary/10 text-primary border border-primary/20',
-                  'hover:bg-primary/20 disabled:opacity-50',
-                  'focus-ring'
-                )}
-                title={t('common.sync')}
-              >
-                <RefreshCw className={cn('h-3.5 w-3.5', isSyncing && 'animate-spin')} />
-                <span className="hidden sm:inline">{t('common.sync')}</span>
-                <span>({pendingSyncCount})</span>
-              </button>
-            )}
-          </div>
+        <div className="flex items-center gap-2">
+          <OnlineStatusBadge />
+          {pendingSyncCount > 0 && (
+            <button
+              onClick={syncData}
+              disabled={!isOnline || isSyncing}
+              className={cn(
+                'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1',
+                'text-xs font-medium transition-all duration-200',
+                'bg-primary/10 text-primary border border-primary/20',
+                'hover:-translate-y-px hover:bg-primary/20 disabled:opacity-50',
+                'focus-ring'
+              )}
+              title={t('common.sync')}
+            >
+              <RefreshCw className={cn('h-3.5 w-3.5', isSyncing && 'animate-spin')} />
+              <span className="hidden sm:inline">{t('common.sync')}</span>
+              <span>({pendingSyncCount})</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -174,10 +165,10 @@ export function Header({ title }: HeaderProps) {
             className={cn(
               'h-10 rounded-xl py-2.5 pl-4 pr-16',
               'w-40 md:w-56 lg:w-72',
-              'text-sm text-slate-700 placeholder:text-slate-400',
-              'bg-slate-50/85 border border-slate-200/80',
-              'shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]',
-              'focus:outline-none focus:ring-2 focus:ring-slate-300/70 focus:bg-white focus:border-slate-300',
+              'text-sm text-foreground placeholder:text-muted-foreground',
+              'bg-card/90 border border-border/80',
+              'shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]',
+              'focus:outline-none focus:ring-2 focus:ring-ring/40 focus:bg-background focus:border-ring/40',
               'transition-all duration-200'
             )}
           />
@@ -196,8 +187,8 @@ export function Header({ title }: HeaderProps) {
         <button
           onClick={() => searchInputRef.current?.focus()}
           className={cn(
-            'sm:hidden flex items-center justify-center w-10 h-10 rounded-lg',
-            'text-muted-foreground hover:text-foreground hover:bg-accent',
+            'sm:hidden flex items-center justify-center w-10 h-10 rounded-xl border border-border/70 bg-card/60',
+            'text-muted-foreground hover:-translate-y-px hover:text-foreground hover:bg-accent',
             'transition-colors duration-200 focus-ring'
           )}
           aria-label="Search"
@@ -210,8 +201,8 @@ export function Header({ title }: HeaderProps) {
           <PopoverTrigger asChild>
             <button
               className={cn(
-                'relative h-10 w-10 flex items-center justify-center rounded-lg',
-                'text-muted-foreground hover:text-foreground hover:bg-accent',
+                'relative h-10 w-10 flex items-center justify-center rounded-xl border border-border/70 bg-card/60',
+                'text-muted-foreground hover:-translate-y-px hover:text-foreground hover:bg-accent',
                 'transition-all duration-200 focus-ring group'
               )}
               aria-label={t('common.notifications')}
@@ -297,9 +288,9 @@ export function Header({ title }: HeaderProps) {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className={cn(
-              'flex items-center gap-2 pl-2 lg:pl-3 py-1.5 pr-2 rounded-lg',
-              'hover:bg-accent transition-colors focus-ring group',
-              'border-l border-border'
+              'flex items-center gap-2 rounded-xl border border-border/70 bg-card/60 px-2.5 py-1.5',
+              'hover:bg-accent/70 hover:border-border transition-all duration-200 focus-ring group',
+              'shadow-sm'
             )}>
               <div className={cn(
                 'w-8 h-8 rounded-lg flex items-center justify-center',
@@ -316,14 +307,11 @@ export function Header({ title }: HeaderProps) {
               </div>
               <div className="hidden lg:flex flex-col items-start leading-tight">
                 <span className="text-sm font-semibold text-foreground">{currentUser.name || 'Admin'}</span>
-                <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold">
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mt-0.5">
                   {currentUser.role || t('common.administrator')}
                 </span>
               </div>
-              <span className="hidden lg:inline-flex h-7 w-7 items-center justify-center rounded-md bg-muted/40 text-muted-foreground">
-                <User className="h-4 w-4" />
-              </span>
-              <ChevronDown className="w-4 h-4 text-muted-foreground hidden lg:block" />
+              <ChevronDown className="w-4 h-4 text-muted-foreground hidden lg:block transition-transform group-data-[state=open]:rotate-180" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56 p-1 shadow-xl border-border rounded-xl">

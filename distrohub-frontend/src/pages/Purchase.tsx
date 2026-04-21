@@ -385,9 +385,9 @@ export function Purchase() {
             <div className="py-12 text-center text-sm text-muted-foreground">Loading purchases…</div>
           ) : (
             <>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/40 border-b border-border">
+              <div className="dh-table-shell border-0 shadow-none">
+                <table className="w-full border-collapse text-sm">
+                  <thead className="border-b border-border/80 bg-muted/35">
                     <tr>
                       <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Invoice #</th>
                       <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Supplier</th>
@@ -401,7 +401,7 @@ export function Purchase() {
                   </thead>
                   <tbody className="divide-y divide-border/60">
                     {filteredPurchases.map((purchase) => (
-                      <tr key={purchase.id} className="hover:bg-muted/30 transition-colors">
+                      <tr key={purchase.id} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                         <td className="px-3 py-2.5 font-medium text-[hsl(var(--primary))]">{purchase.invoice_number}</td>
                         <td className="px-3 py-2.5 text-foreground">{purchase.supplier_name}</td>
                         <td className="px-3 py-2.5 text-muted-foreground">{purchase.purchase_date}</td>
@@ -430,8 +430,9 @@ export function Purchase() {
               </div>
 
               {filteredPurchases.length === 0 && (
-                <div className="py-12 text-center text-sm text-muted-foreground">
-                  No purchases found. Create a new purchase to add stock.
+                <div className="dh-empty-state py-10">
+                  <p className="dh-empty-state-title">No purchases found</p>
+                  <p className="dh-empty-state-desc">Create a new purchase to add stock.</p>
                 </div>
               )}
             </>
@@ -441,8 +442,8 @@ export function Purchase() {
 
       {/* Purchase Details Modal */}
       {selectedPurchase && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card border border-border rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-xl">
+        <div className="dh-modal-overlay">
+          <div className="dh-modal-panel w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div className="p-4 border-b border-border">
               <h2 className="text-lg font-semibold text-foreground">{selectedPurchase.invoice_number}</h2>
               <p className="text-sm text-muted-foreground">{selectedPurchase.supplier_name}</p>
@@ -461,8 +462,9 @@ export function Purchase() {
               </div>
 
               <h3 className="font-semibold text-foreground mb-2">Items</h3>
-              <table className="w-full mb-3 text-sm">
-                <thead className="bg-muted/40 border-b border-border">
+              <div className="dh-table-shell mb-3 border-0 shadow-none">
+              <table className="w-full text-sm">
+                <thead className="border-b border-border/80 bg-muted/35">
                   <tr>
                     <th className="text-left px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Product</th>
                     <th className="text-left px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Batch</th>
@@ -474,7 +476,7 @@ export function Purchase() {
                 </thead>
                 <tbody className="divide-y divide-border/60">
                     {selectedPurchase.items.map((item, index) => (
-                      <tr key={index} className="hover:bg-muted/30 transition-colors">
+                      <tr key={index} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                         <td className="px-3 py-2.5 text-foreground">{item.product_name}</td>
                         <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{item.batch_number}</td>
                         <td className="px-3 py-2.5 text-muted-foreground">{formatDate(item.expiry_date)}</td>
@@ -485,6 +487,7 @@ export function Purchase() {
                     ))}
                 </tbody>
               </table>
+              </div>
             </div>
 
             <div className="p-4 border-t border-border flex justify-end">
@@ -1136,8 +1139,8 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
   const RequiredMark = () => <span className="text-red-500 ml-0.5">*</span>;
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-[#F8FAFC] rounded-2xl w-full max-w-7xl max-h-[95vh] overflow-y-auto animate-fade-in shadow-2xl">
+    <div className="dh-modal-overlay">
+      <div className="dh-modal-panel w-full max-w-7xl max-h-[95vh] overflow-y-auto animate-fade-in bg-[#F8FAFC] shadow-2xl">
         <div className="p-4 bg-gradient-to-r from-blue-600 via-blue-500 to-indigo-600 border-b border-blue-400 flex items-center justify-between rounded-t-2xl">
           <h2 className="text-xl font-semibold text-white">New Purchase / Stock-In</h2>
           {errors.barcode && (
@@ -1676,8 +1679,8 @@ function AddPurchaseModal({ onClose, onSave }: { onClose: () => void; onSave: (p
 
         {/* Delete Confirmation Modal */}
         {showDeleteModal && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-white rounded-xl p-6 max-w-sm w-full mx-4 shadow-xl">
+          <div className="dh-modal-overlay">
+            <div className="dh-modal-panel mx-4 w-full max-w-sm p-6">
               <h3 className="text-lg font-semibold text-slate-900 mb-2">Remove Item</h3>
               <p className="text-sm text-slate-600 mb-6">
                 Are you sure you want to remove <span className="font-medium">{showDeleteModal.productName}</span> from the cart?

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { lazy, Suspense, useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PageShell } from '@/components/layout/PageShell';
 import { StatCard } from '@/components/ui/stat-card';
@@ -15,11 +15,9 @@ import {
   AlertTriangle,
   Filter,
   X,
-  ImagePlus,
   PackageMinus,
   Search,
   RefreshCw,
-  TrendingUp,
   CalendarDays,
   Activity,
   History,
@@ -48,9 +46,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { useTableControls } from '@/hooks/useTableControls';
 import { PaginationControls } from '@/components/ui/pagination-controls';
-// @ts-ignore - exceljs types may not be available in build
-import { Workbook } from 'exceljs';
-import { BarcodeScanButton } from '@/components/BarcodeScanner';
+import type { Product } from '@/pages/products/productTypes';
 import api, { deleteWithOfflineQueue, postWithOfflineQueue, putWithOfflineQueue } from '@/lib/api';
 import { logger } from '@/lib/logger';
 import {
@@ -61,26 +57,9 @@ import {
   type ProductRecord,
 } from '@/lib/offlineDb';
 
-interface Product {
-  id: string;
-  name: string;
-  sku: string;
-  barcode: string;
-  category: string;
-  unit: string;
-  pack_size: number;
-  pieces_per_carton: number;
-  purchase_price: number;
-  selling_price: number;
-  stock_quantity: number;
-  reorder_level: number;
-  batch_number: string;
-  expiry_date: string;
-  supplier: string;
-  vat_inclusive: boolean;
-  vat_rate: number;
-  image_url: string;
-}
+const ProductModalLazy = lazy(() =>
+  import('@/pages/products/ProductsProductModal').then((m) => ({ default: m.ProductModal }))
+);
 
 interface StockLedgerRow {
   id: string;
@@ -473,6 +452,7 @@ export function Products() {
     if (!file) return;
 
     try {
+      const { Workbook } = await import('exceljs');
       const workbook = new Workbook();
       const buffer = await file.arrayBuffer();
       await workbook.xlsx.load(buffer);
@@ -525,6 +505,7 @@ export function Products() {
 
   const handleExcelExport = async () => {
     try {
+      const { Workbook } = await import('exceljs');
       const workbook = new Workbook();
       const worksheet = workbook.addWorksheet('Products');
 
@@ -838,7 +819,7 @@ export function Products() {
                         <tr
                           key={product.id}
                           className={cn(
-                            'transition-colors hover:bg-muted/30',
+                            'transition-colors duration-150 ease-out hover:bg-muted/45',
                             isAlert && 'bg-[hsl(var(--dh-amber))]/5',
                             stockLevel === 'out' && 'bg-[hsl(var(--dh-red))]/5',
                             '[&>td]:border-b [&>td]:border-border/70 [&>td]:border-r [&>td]:border-r-border/50 [&>td:last-child]:border-r-0'
@@ -930,9 +911,9 @@ export function Products() {
                 </table>
 
               {filteredProducts.length === 0 && !loading && (
-                <div className="px-4 py-12 text-center">
+                <div className="dh-empty-state">
                   <Package className="mx-auto mb-3 h-12 w-12 text-muted-foreground/30" aria-hidden />
-                  <p className="font-medium text-muted-foreground">{t('products.no_products')}</p>
+                  <p className="dh-empty-state-title">{t('products.no_products')}</p>
                 </div>
               )}
             </>
@@ -951,8 +932,8 @@ export function Products() {
       </div>
 
       {detailProduct && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-5xl overflow-hidden rounded-2xl border border-border bg-card shadow-xl">
+        <div className="dh-modal-overlay">
+          <div className="dh-modal-panel max-h-[90vh] w-full max-w-5xl overflow-hidden">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div>
                 <h2 className="text-base font-semibold text-foreground">{detailProduct.name}</h2>
@@ -985,7 +966,7 @@ export function Products() {
                   </div>
                 </TabsContent>
                 <TabsContent value="ledger">
-                  <div className="rounded-lg border border-border">
+                  <div className="dh-table-shell border-0 shadow-none">
                     <div className="max-h-[55vh] overflow-auto">
                       <table className="w-full min-w-[900px] text-sm">
                         <thead className="bg-muted/40">
@@ -1003,7 +984,7 @@ export function Products() {
                           {detailLedgerLoading ? (
                             <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">Loading stock ledger…</td></tr>
                           ) : detailLedger.length === 0 ? (
-                            <tr><td colSpan={7} className="px-4 py-8 text-center text-muted-foreground">No stock ledger entries found.</td></tr>
+                            <tr><td colSpan={7} className="dh-empty-in-table border-b-0 text-muted-foreground">No stock ledger entries found.</td></tr>
                           ) : detailLedger.map((row) => (
                             <tr key={row.id} className="border-b border-border/60 hover:bg-muted/20">
                               <td className="px-3 py-2.5 text-muted-foreground">{new Date(row.created_at).toLocaleString()}</td>
@@ -1060,7 +1041,14 @@ export function Products() {
       </AlertDialog>
 
       {(showAddModal || editingProduct) && (
-        <ProductModal
+        <Suspense
+          fallback={
+            <div className="dh-modal-overlay flex items-center justify-center p-6">
+              <span className="text-sm text-muted-foreground">Loading…</span>
+            </div>
+          }
+        >
+        <ProductModalLazy
             product={editingProduct}
             categories={categories}
             suppliers={suppliers}
@@ -1191,692 +1179,8 @@ export function Products() {
               }
             }}
           />
+        </Suspense>
       )}
     </PageShell>
-  );
-}
-
-interface ProductModalProps {
-  product: Product | null;
-  onClose: () => void;
-  onSave: (product: Product, addAnother?: boolean) => void;
-  categories: string[];
-  suppliers: string[];
-  units: string[];
-  onRefreshCategories?: () => void;
-}
-
-interface ValidationErrors {
-  [key: string]: string;
-}
-
-function ProductModal({ product, onClose, onSave, categories, suppliers, units, onRefreshCategories }: ProductModalProps) {
-  const { t } = useLanguage();
-  // Refetch categories when modal opens to ensure latest data
-  useEffect(() => {
-    if (onRefreshCategories) {
-      onRefreshCategories();
-    }
-  }, []); // Run once when modal opens
-  const [formData, setFormData] = useState<Partial<Product>>(
-    product || {
-      name: '',
-      sku: '',
-      barcode: '',
-      category: '',
-      unit: 'Pack',
-      pack_size: 1,
-      pieces_per_carton: 24,
-      purchase_price: 0,
-      selling_price: 0,
-      stock_quantity: 0,
-      reorder_level: 10,
-      expiry_date: '',
-      supplier: '',
-      vat_inclusive: false,
-      vat_rate: 0,
-      image_url: '',
-      batch_number: '',
-    }
-  );
-  const [skuAutoGenerated, setSkuAutoGenerated] = useState(!product?.sku);
-  const [batchAutoGenerated, setBatchAutoGenerated] = useState(!product?.batch_number);
-  const [cartonCount, setCartonCount] = useState(0);
-  const [autoCalcStock, setAutoCalcStock] = useState(!product);
-  const [errors, setErrors] = useState<ValidationErrors>({});
-  const [imagePreview, setImagePreview] = useState<string>(product?.image_url || '');
-  const [activeTab, setActiveTab] = useState<'basic' | 'pricing' | 'inventory' | 'advanced'>('basic');
-  const [templateName, setTemplateName] = useState(product?.name || '');
-  const [variantName, setVariantName] = useState(product?.name || '');
-  const [variantSku, setVariantSku] = useState(product?.sku || '');
-  const [baseUom, setBaseUom] = useState(product?.unit || 'Pack');
-  const [uomFrom, setUomFrom] = useState('Carton');
-  const [uomTo, setUomTo] = useState(product?.unit || 'Pack');
-  const [uomFactor, setUomFactor] = useState<number>(1);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const unitOptions = useMemo(() => {
-    const fallbackUnits = ['Pack', 'Bag', 'Box', 'Piece', 'Carton'];
-    const baseUnits = units.length > 0 ? units : fallbackUnits;
-    const currentUnit = formData.unit;
-    if (currentUnit && !baseUnits.includes(currentUnit)) {
-      return [currentUnit, ...baseUnits];
-    }
-    return baseUnits;
-  }, [units, formData.unit]);
-
-  const generateBatchNumber = () => {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const rand = Math.random().toString(36).slice(2, 6).toUpperCase();
-    return `B${year}${month}-${rand}`;
-  };
-
-  const buildSku = () => {
-    if (!formData.name || !formData.category) return '';
-    const nameCode = formData.name.substring(0, 3).toUpperCase().replace(/\s/g, '');
-    const catCode = formData.category.substring(0, 3).toUpperCase().replace(/\s/g, '');
-    const randomNum = Math.floor(Math.random() * 900) + 100;
-    return `${nameCode}-${catCode}-${randomNum}`;
-  };
-
-  const buildFallbackSku = () => {
-    const randomNum = Math.floor(Math.random() * 900) + 100;
-    return `PRD-GEN-${randomNum}`;
-  };
-
-  const handleBarcodeScan = (barcode: string) => {
-    setFormData({ ...formData, barcode });
-  };
-
-  useEffect(() => {
-    const shouldAutoGenerate = !formData.sku || skuAutoGenerated;
-    if (!shouldAutoGenerate) return;
-    const nextSku = buildSku();
-    if (!nextSku) return;
-    setFormData((prev) => (prev.sku === nextSku ? prev : { ...prev, sku: nextSku }));
-    setSkuAutoGenerated(true);
-  }, [formData.name, formData.category]);
-
-  const validateField = (name: string, value: string | number) => {
-    const newErrors = { ...errors };
-
-    if (name === 'name' && !value) {
-      newErrors.name = 'Product name is required';
-    } else if (name === 'name') {
-      delete newErrors.name;
-    }
-
-    if (name === 'purchase_price' && (typeof value === 'number' && value < 0)) {
-      newErrors.purchase_price = 'Price cannot be negative';
-    } else if (name === 'purchase_price') {
-      delete newErrors.purchase_price;
-    }
-
-    if (name === 'selling_price' && (typeof value === 'number' && value < 0)) {
-      newErrors.selling_price = 'Price cannot be negative';
-    } else if (name === 'selling_price') {
-      delete newErrors.selling_price;
-    }
-
-    if (name === 'stock_quantity' && (typeof value === 'number' && value < 0)) {
-      newErrors.stock_quantity = 'Stock cannot be negative';
-    } else if (name === 'stock_quantity') {
-      delete newErrors.stock_quantity;
-    }
-
-    setErrors(newErrors);
-  };
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const base64 = reader.result as string;
-        setImagePreview(base64);
-        setFormData({ ...formData, image_url: base64 });
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const profitAmount = (formData.selling_price || 0) - (formData.purchase_price || 0);
-  const profitPercent = formData.purchase_price && formData.purchase_price > 0
-    ? ((profitAmount / formData.purchase_price) * 100).toFixed(1)
-    : '0';
-
-  const updateStockFromCartons = (nextCartonCount: number, nextPiecesPerCarton: number) => {
-    const cartons = Number(nextCartonCount) || 0;
-    const pieces = Number(nextPiecesPerCarton) || 0;
-    if (cartons <= 0 || pieces <= 0) {
-      return;
-    }
-    const nextStock = Math.max(0, cartons * pieces);
-    setFormData((prev) => (prev.stock_quantity === nextStock ? prev : { ...prev, stock_quantity: nextStock }));
-  };
-
-  useEffect(() => {
-    if (!autoCalcStock) return;
-    updateStockFromCartons(cartonCount, formData.pieces_per_carton || 0);
-  }, [autoCalcStock, cartonCount, formData.pieces_per_carton]);
-
-  useEffect(() => {
-    if (product) return;
-    if (!formData.sku) {
-      const nextSku = buildSku();
-      const skuToUse = nextSku || buildFallbackSku();
-      setFormData((prev) => ({ ...prev, sku: skuToUse }));
-      setSkuAutoGenerated(true);
-    }
-    if (!formData.batch_number) {
-      const nextBatch = generateBatchNumber();
-      setFormData((prev) => ({ ...prev, batch_number: nextBatch }));
-      setBatchAutoGenerated(true);
-    }
-  }, []);
-
-  const batchHasValue = !!(formData.batch_number && formData.batch_number.trim() !== '');
-  const expiryRequired = batchHasValue && !batchAutoGenerated;
-
-  const handleSubmit = (e: React.FormEvent, addAnother = false) => {
-    e.preventDefault();
-
-    let nextFormData = formData;
-    if (!batchHasValue && formData.expiry_date) {
-      const generatedBatch = generateBatchNumber();
-      nextFormData = { ...formData, batch_number: generatedBatch };
-      setFormData(nextFormData);
-    }
-
-    const hasBatch = !!(nextFormData.batch_number && nextFormData.batch_number.trim() !== '');
-    if (hasBatch && !nextFormData.expiry_date) {
-      setErrors({ ...errors, expiry_date: t('products.expiry_required') || 'Expiry date is required' });
-      return;
-    }
-
-    onSave(nextFormData as Product, addAnother);
-
-    if (addAnother) {
-      setFormData({
-        name: '',
-        sku: '',
-        barcode: '',
-        category: formData.category,
-        unit: formData.unit,
-        pack_size: 1,
-        pieces_per_carton: 24,
-        purchase_price: 0,
-        selling_price: 0,
-        stock_quantity: 0,
-        reorder_level: 10,
-        batch_number: generateBatchNumber(),
-        expiry_date: '',
-        supplier: formData.supplier,
-        vat_inclusive: formData.vat_inclusive,
-        vat_rate: formData.vat_rate,
-        image_url: '',
-      });
-      setCartonCount(0);
-      setAutoCalcStock(true);
-      setSkuAutoGenerated(true);
-      setBatchAutoGenerated(true);
-      setImagePreview('');
-      setErrors({});
-    }
-  };
-
-  const RequiredMark = () => <span className="text-red-500 ml-0.5">*</span>;
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-card border border-border rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-xl">
-        <div className="p-4 border-b border-border flex items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold text-foreground">
-            {product ? t('products.edit') : t('products.add_new')}
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-            aria-label="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        <form onSubmit={(e) => handleSubmit(e, false)} className="p-4 space-y-4">
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
-            <TabsList className="mb-2 grid h-auto w-full grid-cols-2 gap-1 md:grid-cols-4">
-              <TabsTrigger value="basic">Basic</TabsTrigger>
-              <TabsTrigger value="pricing">Pricing</TabsTrigger>
-              <TabsTrigger value="inventory">Inventory</TabsTrigger>
-              <TabsTrigger value="advanced">Advanced</TabsTrigger>
-            </TabsList>
-            <p className="mb-3 text-xs text-muted-foreground">
-              Quick entry flow with tabbed sections for faster product setup.
-            </p>
-
-            <TabsContent value="basic" className="space-y-4">
-          {/* Product Image */}
-          <div className="flex items-start gap-4">
-            <div className="flex-shrink-0">
-              <div
-                className="w-24 h-24 border-2 border-dashed border-slate-300 rounded-xl flex items-center justify-center cursor-pointer hover:border-primary-500 hover:bg-primary-50 transition-colors overflow-hidden"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {imagePreview ? (
-                  <img src={imagePreview} alt="Product" className="w-full h-full object-cover" />
-                ) : (
-                  <div className="text-center">
-                    <ImagePlus className="w-8 h-8 text-slate-400 mx-auto" />
-                    <span className="text-xs text-slate-500">{t('products.add_image')}</span>
-                  </div>
-                )}
-              </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleImageUpload}
-                className="hidden"
-              />
-            </div>
-
-            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  {t('products.name')}<RequiredMark />
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => {
-                    setFormData({ ...formData, name: e.target.value });
-                    validateField('name', e.target.value);
-                  }}
-                  className={`input-field w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all ${errors.name ? 'border-red-500 focus:ring-red-500' : ''}`}
-                  required
-                />
-                {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  {t('common.sku')}<RequiredMark />
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={formData.sku}
-                    onChange={(e) => {
-                      setFormData({ ...formData, sku: e.target.value });
-                      setSkuAutoGenerated(false);
-                    }}
-                    className="input-field flex-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Barcode */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">{t('products.barcode')}</label>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={formData.barcode}
-                  onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                  className="input-field flex-1 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                  placeholder={t('products.scan_barcode')}
-                />
-                <BarcodeScanButton onScan={handleBarcodeScan} />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                {t('common.category')}<RequiredMark />
-              </label>
-              <select
-                value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="input-field w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                required
-              >
-                <option value="">{t('products.select_category')}</option>
-                {categories.map((cat: string) => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Unit & Pack Size */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">{t('common.unit')}</label>
-              <select
-                value={formData.unit}
-                onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                className="input-field w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-              >
-                {unitOptions.map((unit) => (
-                  <option key={unit} value={unit}>
-                    {unit}
-                  </option>
-                ))}
-              </select>
-              <p className="text-xs text-slate-500 mt-1">{t('products.unit_hint')}</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">{t('products.pack_size')}</label>
-              <input
-                type="number"
-                value={formData.pack_size}
-                onChange={(e) => setFormData({ ...formData, pack_size: Number(e.target.value) })}
-                className="input-field w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                min="1"
-              />
-              <p className="text-xs text-slate-500 mt-1">{t('products.pack_size_hint')}</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">{t('common.pcs_ctn')}</label>
-              <input
-                type="number"
-                value={formData.pieces_per_carton}
-                onChange={(e) => setFormData({ ...formData, pieces_per_carton: Number(e.target.value) })}
-                className="input-field w-full focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
-                min="1"
-                placeholder="যেমন: ২৪"
-              />
-              <p className="text-xs text-slate-500 mt-1">{t('products.carton_hint')}</p>
-            </div>
-          </div>
-            </TabsContent>
-
-            <TabsContent value="pricing" className="space-y-4">
-          {/* Pricing with Profit Display */}
-          <div className="bg-muted/40 rounded-xl p-3">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  {t('products.purchase_price')} (৳)<RequiredMark />
-                </label>
-                <input
-                  type="number"
-                  value={formData.purchase_price}
-                  onChange={(e) => {
-                    setFormData({ ...formData, purchase_price: Number(e.target.value) });
-                    validateField('purchase_price', Number(e.target.value));
-                  }}
-                  className={`input-field w-full ${errors.purchase_price ? 'border-red-500' : ''}`}
-                  min="0"
-                  step="0.01"
-                  placeholder="কার্টন দাম ÷ পিস"
-                  required
-                />
-                {errors.purchase_price && <p className="text-red-500 text-xs mt-1">{errors.purchase_price}</p>}
-                {!errors.purchase_price && <p className="text-xs text-slate-500 mt-1">{t('products.purchase_hint')}</p>}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">
-                  {t('products.selling_price')} (৳)<RequiredMark />
-                </label>
-                <input
-                  type="number"
-                  value={formData.selling_price}
-                  onChange={(e) => {
-                    setFormData({ ...formData, selling_price: Number(e.target.value) });
-                    validateField('selling_price', Number(e.target.value));
-                  }}
-                  className={`input-field w-full ${errors.selling_price ? 'border-red-500' : ''}`}
-                  min="0"
-                  step="0.01"
-                  required
-                />
-                {errors.selling_price && <p className="text-red-500 text-xs mt-1">{errors.selling_price}</p>}
-                {!errors.selling_price && <p className="text-xs text-slate-500 mt-1">{t('products.selling_hint')}</p>}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">{t('products.profit_margin')}</label>
-                <div className={`input-field w-full flex items-center gap-2 ${profitAmount >= 0 ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
-                  <TrendingUp className={`w-4 h-4 ${profitAmount >= 0 ? 'text-green-600' : 'text-red-600'}`} />
-                  <span className={`font-medium ${profitAmount >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                    ৳{profitAmount} ({profitPercent}%)
-                  </span>
-                </div>
-                <p className="text-xs text-slate-500 mt-1">{t('products.profit_hint')}</p>
-              </div>
-            </div>
-
-            {/* VAT Toggle */}
-            <div className="flex items-center gap-4 mt-3 pt-3 border-t border-border">
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={formData.vat_inclusive}
-                  onChange={(e) => setFormData({ ...formData, vat_inclusive: e.target.checked })}
-                  className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
-                />
-                <span className="text-sm text-slate-700">{t('products.vat_inclusive')}</span>
-              </label>
-              {formData.vat_inclusive && (
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-slate-700">{t('products.vat_rate')}:</label>
-                  <input
-                    type="number"
-                    value={formData.vat_rate}
-                    onChange={(e) => setFormData({ ...formData, vat_rate: Number(e.target.value) })}
-                    className="input-field w-20"
-                    min="0"
-                    max="100"
-                  />
-                  <span className="text-sm text-slate-500">%</span>
-                </div>
-              )}
-            </div>
-          </div>
-            </TabsContent>
-
-            <TabsContent value="inventory" className="space-y-4">
-          {/* Stock & Reorder Level */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">{t('products.carton_count')}</label>
-              <input
-                type="number"
-                value={cartonCount}
-                onChange={(e) => {
-                  const nextCartons = Number(e.target.value);
-                  setCartonCount(Number.isNaN(nextCartons) ? 0 : nextCartons);
-                }}
-                className="input-field w-full"
-                min="0"
-                placeholder="যেমন: ১০"
-              />
-              <p className="text-xs text-slate-500 mt-1">{t('products.carton_count_hint')}</p>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                {t('products.stock_quantity')}<RequiredMark />
-              </label>
-              <input
-                type="number"
-                value={formData.stock_quantity}
-                onChange={(e) => {
-                  setFormData({ ...formData, stock_quantity: Number(e.target.value) });
-                  validateField('stock_quantity', Number(e.target.value));
-                }}
-                className={`input-field w-full ${errors.stock_quantity ? 'border-red-500' : ''}`}
-                min="0"
-                placeholder="১০ কার্টন = ২৪০"
-                readOnly={autoCalcStock && cartonCount > 0}
-                required
-              />
-              {errors.stock_quantity && <p className="text-red-500 text-xs mt-1">{errors.stock_quantity}</p>}
-              {!errors.stock_quantity && <p className="text-xs text-slate-500 mt-1">{t('products.stock_hint')}</p>}
-              <label className="flex items-center gap-2 mt-2 text-xs text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={autoCalcStock}
-                  onChange={(e) => setAutoCalcStock(e.target.checked)}
-                  className="w-4 h-4 text-primary-600 rounded focus:ring-primary-500"
-                />
-                {t('products.auto_calc')}
-              </label>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                {t('products.reorder_level')}
-              </label>
-              <input
-                type="number"
-                value={formData.reorder_level}
-                onChange={(e) => setFormData({ ...formData, reorder_level: Number(e.target.value) })}
-                className="input-field w-full"
-                min="0"
-                placeholder="কম হলে সতর্কতা"
-              />
-              <p className="text-xs text-slate-500 mt-1">{t('products.reorder_hint')}</p>
-            </div>
-          </div>
-
-          {/* Batch & Expiry */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">{t('products.batch_number')}</label>
-              <input
-                type="text"
-                value={formData.batch_number}
-                onChange={(e) => {
-                  setFormData({ ...formData, batch_number: e.target.value });
-                  setBatchAutoGenerated(false);
-                }}
-                className="input-field w-full"
-                placeholder="যেমন: BT-2024-001"
-              />
-              <p className="text-xs text-slate-500 mt-1">{t('products.batch_hint')}</p>
-              {!batchHasValue && (
-                <p className="text-xs text-slate-500 mt-1">
-                  {t('products.batch_auto_hint')}
-                </p>
-              )}
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1">
-                {t('products.expiry_date')}{expiryRequired && <RequiredMark />}
-              </label>
-              <input
-                type="date"
-                value={formData.expiry_date}
-                onChange={(e) => {
-                  setFormData({ ...formData, expiry_date: e.target.value });
-                  if (e.target.value) {
-                    const newErrors = { ...errors };
-                    delete newErrors.expiry_date;
-                    setErrors(newErrors);
-                  }
-                }}
-                className={`input-field w-full ${errors.expiry_date ? 'border-red-500' : ''}`}
-                required={expiryRequired}
-              />
-              {errors.expiry_date && <p className="text-red-500 text-xs mt-1">{errors.expiry_date}</p>}
-              {!errors.expiry_date && <p className="text-xs text-slate-500 mt-1">{t('products.expiry_hint')}</p>}
-            </div>
-          </div>
-
-          {/* Supplier */}
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">{t('products.supplier')}</label>
-            <select
-              value={formData.supplier}
-              onChange={(e) => setFormData({ ...formData, supplier: e.target.value })}
-              className="input-field w-full"
-            >
-              <option value="">{t('products.select_supplier')}</option>
-              {suppliers.map((sup: string) => (
-                <option key={sup} value={sup}>{sup}</option>
-              ))}
-            </select>
-          </div>
-            </TabsContent>
-
-            <TabsContent value="advanced" className="space-y-4">
-              <div className="rounded-xl border border-border bg-muted/30 p-3">
-                <h3 className="mb-2 text-sm font-semibold text-foreground">Variant Setup</h3>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Template Name</label>
-                    <input value={templateName} onChange={(e) => setTemplateName(e.target.value)} className="input-field w-full" />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Variant Name</label>
-                    <input value={variantName} onChange={(e) => setVariantName(e.target.value)} className="input-field w-full" />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Variant SKU</label>
-                    <input value={variantSku} onChange={(e) => setVariantSku(e.target.value)} className="input-field w-full" />
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-border bg-muted/30 p-3">
-                <h3 className="mb-2 text-sm font-semibold text-foreground">UOM Conversion</h3>
-                <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Base UOM</label>
-                    <input value={baseUom} onChange={(e) => setBaseUom(e.target.value)} className="input-field w-full" />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-muted-foreground">From</label>
-                    <input value={uomFrom} onChange={(e) => setUomFrom(e.target.value)} className="input-field w-full" />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-muted-foreground">To</label>
-                    <input value={uomTo} onChange={(e) => setUomTo(e.target.value)} className="input-field w-full" />
-                  </div>
-                  <div>
-                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Factor</label>
-                    <input
-                      type="number"
-                      min="0.000001"
-                      step="0.000001"
-                      value={uomFactor}
-                      onChange={(e) => setUomFactor(Number(e.target.value))}
-                      className="input-field w-full"
-                    />
-                  </div>
-                </div>
-                <p className="mt-2 text-xs text-muted-foreground">
-                  This section prepares variant/UOM metadata for ERP-style workflow.
-                </p>
-              </div>
-            </TabsContent>
-          </Tabs>
-
-          {/* Action Buttons */}
-          <div className="flex justify-end gap-2 pt-4 border-t border-border">
-            <button type="button" onClick={onClose} className="btn-secondary">
-              {t('products.cancel')}
-            </button>
-            {!product && (
-              <button
-                type="button"
-                onClick={(e) => handleSubmit(e as unknown as React.FormEvent, true)}
-                className="btn-secondary flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Add & Add Another
-              </button>
-            )}
-            <button type="submit" className="btn-primary">
-              {product ? t('products.update') : t('products.save')}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
   );
 }

@@ -316,9 +316,9 @@ export function Payments() {
           {loading ? (
             <div className="py-12 text-center text-sm text-muted-foreground">Loading payments, receivables, and payables…</div>
           ) : activeTab === 'receivables' ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 border-b border-border">
+            <div className="dh-table-shell border-0 shadow-none">
+              <table className="w-full border-collapse text-sm">
+                <thead className="border-b border-border/80 bg-muted/35">
                   <tr>
                     <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Retailer</th>
                     <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Total Due</th>
@@ -328,7 +328,7 @@ export function Payments() {
                 </thead>
                 <tbody className="divide-y divide-border/60">
                   {filteredReceivables.filter((r) => r.total_due > 0).sort((a, b) => b.total_due - a.total_due).map((receivable) => (
-                    <tr key={receivable.retailer_id} className="hover:bg-muted/30 transition-colors">
+                    <tr key={receivable.retailer_id} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                       <td className="px-3 py-2.5">
                         <div className="font-medium text-foreground">{receivable.shop_name || receivable.retailer_name}</div>
                         {receivable.shop_name && receivable.shop_name !== receivable.retailer_name && <div className="text-xs text-muted-foreground">{receivable.retailer_name}</div>}
@@ -347,9 +347,9 @@ export function Payments() {
               </table>
             </div>
           ) : activeTab === 'payables' ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 border-b border-border">
+            <div className="dh-table-shell border-0 shadow-none">
+              <table className="w-full border-collapse text-sm">
+                <thead className="border-b border-border/80 bg-muted/35">
                   <tr>
                     <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Supplier</th>
                     <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Total Due</th>
@@ -360,7 +360,7 @@ export function Payments() {
                 </thead>
                 <tbody className="divide-y divide-border/60">
                   {filteredPayables.filter((p) => p.total_due > 0).map((payable) => (
-                    <tr key={payable.supplier_name} className="hover:bg-muted/30 transition-colors">
+                    <tr key={payable.supplier_name} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                       <td className="px-3 py-2.5 font-medium text-foreground">{payable.supplier_name}</td>
                       <td className="px-3 py-2.5 text-right font-mono font-semibold text-[hsl(var(--dh-amber))]">৳ {payable.total_due.toLocaleString()}</td>
                       <td className="px-3 py-2.5 text-center text-muted-foreground">{payable.unpaid_purchases}</td>
@@ -373,13 +373,18 @@ export function Payments() {
                 </tbody>
               </table>
               {filteredPayables.filter((p) => p.total_due > 0).length === 0 && (
-                <div className="py-12 text-center text-sm text-muted-foreground">{searchTerm ? 'No payables found matching your search.' : 'No outstanding payables.'}</div>
+                <div className="dh-empty-state py-10">
+                  <p className="dh-empty-state-title">{searchTerm ? 'No matching payables' : 'No outstanding payables'}</p>
+                  <p className="dh-empty-state-desc">
+                    {searchTerm ? 'Try a different search term.' : 'Supplier dues will appear here when you have unpaid purchases.'}
+                  </p>
+                </div>
               )}
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 border-b border-border">
+            <div className="dh-table-shell border-0 shadow-none">
+              <table className="w-full border-collapse text-sm">
+                <thead className="border-b border-border/80 bg-muted/35">
                   <tr>
                     <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Date</th>
                     <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Retailer</th>
@@ -390,7 +395,7 @@ export function Payments() {
                 </thead>
                 <tbody className="divide-y divide-border/60">
                   {filteredPayments.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).map((payment) => (
-                    <tr key={payment.id} className="hover:bg-muted/30 transition-colors">
+                    <tr key={payment.id} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                       <td className="px-3 py-2.5 text-muted-foreground">{new Date(payment.created_at).toLocaleDateString()}</td>
                       <td className="px-3 py-2.5 font-medium text-foreground">{payment.retailer_name}</td>
                       <td className="px-3 py-2.5 text-right font-mono font-semibold text-[hsl(var(--dh-green))]">৳ {payment.amount.toLocaleString()}</td>
@@ -401,7 +406,12 @@ export function Payments() {
                 </tbody>
               </table>
               {filteredPayments.length === 0 && (
-                <div className="py-12 text-center text-sm text-muted-foreground">{searchTerm ? 'No payments found matching your search.' : 'No payments recorded yet.'}</div>
+                <div className="dh-empty-state py-10">
+                  <p className="dh-empty-state-title">{searchTerm ? 'No matching payments' : 'No payments yet'}</p>
+                  <p className="dh-empty-state-desc">
+                    {searchTerm ? 'Try a different search term.' : 'Recorded payments will show up in this list.'}
+                  </p>
+                </div>
               )}
             </div>
           )}

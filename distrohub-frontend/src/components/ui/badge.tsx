@@ -4,7 +4,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@/lib/utils"
 
 const badgeVariants = cva(
-  "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
+  "inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-semibold tracking-[0.01em] transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2",
   {
     variants: {
       variant: {
@@ -17,15 +17,15 @@ const badgeVariants = cva(
         outline:
           "border-border text-foreground",
         success:
-          "border-transparent bg-[hsl(var(--dh-green))]/15 text-[hsl(var(--dh-green))]",
+          "border-[hsl(var(--dh-green))]/25 bg-[hsl(var(--dh-green))]/16 text-[hsl(var(--dh-green))]",
         warning:
-          "border-transparent bg-[hsl(var(--dh-amber))]/15 text-[hsl(var(--dh-amber))]",
+          "border-[hsl(var(--dh-amber))]/30 bg-[hsl(var(--dh-amber))]/18 text-[hsl(var(--dh-amber))]",
         info:
-          "border-transparent bg-[hsl(var(--dh-blue))]/15 text-[hsl(var(--dh-blue))]",
+          "border-[hsl(var(--dh-blue))]/25 bg-[hsl(var(--dh-blue))]/16 text-[hsl(var(--dh-blue))]",
         danger:
-          "border-transparent bg-[hsl(var(--dh-red))]/15 text-[hsl(var(--dh-red))]",
+          "border-[hsl(var(--dh-red))]/25 bg-[hsl(var(--dh-red))]/16 text-[hsl(var(--dh-red))]",
         purple:
-          "border-transparent bg-[hsl(var(--dh-purple))]/15 text-[hsl(var(--dh-purple))]",
+          "border-[hsl(var(--dh-purple))]/25 bg-[hsl(var(--dh-purple))]/16 text-[hsl(var(--dh-purple))]",
         muted:
           "border-transparent bg-muted text-muted-foreground",
       },

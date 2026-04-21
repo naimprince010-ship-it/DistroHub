@@ -198,7 +198,7 @@ export function Expiry() {
           {loading ? (
             <div className="py-12 text-center text-sm text-muted-foreground">Loading expiry alerts…</div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="dh-table-shell border-0 shadow-none">
               <table className="w-full text-sm">
                 <thead className="bg-muted/40 border-b border-border">
                   <tr>
@@ -213,7 +213,7 @@ export function Expiry() {
                     const isExpiringSoon = item.status === 'critical' || (item.days_until_expiry >= 0 && item.days_until_expiry <= 30);
                     const statusDisplay = isExpired ? 'expired' : isExpiringSoon ? 'critical' : item.status;
                     return (
-                      <tr key={item.id} className={`transition-colors hover:bg-muted/30 ${isExpired ? 'bg-[hsl(var(--dh-red))]/5' : isExpiringSoon ? 'bg-[hsl(var(--dh-amber))]/5' : ''}`}>
+                      <tr key={item.id} className={`transition-colors duration-150 ease-out hover:bg-muted/45 ${isExpired ? 'bg-[hsl(var(--dh-red))]/5' : isExpiringSoon ? 'bg-[hsl(var(--dh-amber))]/5' : ''}`}>
                         <td className="px-3 py-2.5 font-medium text-foreground">{item.product_name}</td>
                         <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{item.sku || 'N/A'}</td>
                         <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">{item.batch_number}</td>
@@ -238,8 +238,13 @@ export function Expiry() {
             </div>
           )}
           {!loading && filteredItems.length === 0 && (
-            <div className="py-12 text-center text-sm text-muted-foreground">
-              {searchTerm || filter !== 'all' ? 'No items found for the selected filter.' : 'No expiry alerts. All products are safe!'}
+            <div className="dh-empty-state py-10">
+              <p className="dh-empty-state-title">
+                {searchTerm || filter !== 'all' ? 'No items found' : 'No expiry alerts'}
+              </p>
+              <p className="dh-empty-state-desc">
+                {searchTerm || filter !== 'all' ? 'Try a different filter or search term.' : 'All products are currently safe.'}
+              </p>
             </div>
           )}
         </CardContent>

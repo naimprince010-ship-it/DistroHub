@@ -244,7 +244,7 @@ export function Accountability() {
                     <div className="px-4 py-3 border-b border-border">
                       <h3 className="text-sm font-semibold text-foreground">Active Routes</h3>
                     </div>
-                    <div className="overflow-x-auto">
+                    <div className="dh-table-shell border-0 shadow-none">
                       <table className="w-full text-sm">
                         <thead className="bg-muted/40 border-b border-border">
                           <tr>
@@ -257,7 +257,7 @@ export function Accountability() {
                         </thead>
                         <tbody className="divide-y divide-border/60">
                           {accountability.routes.map((route: any) => (
-                            <tr key={route.id} className="hover:bg-muted/30 transition-colors">
+                            <tr key={route.id} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                               <td className="px-3 py-2.5 font-medium text-[hsl(var(--primary))]">{route.route_number}</td>
                               <td className="px-3 py-2.5 text-muted-foreground">{formatDateBD(route.route_date)}</td>
                               <td className="px-3 py-2.5 text-center text-muted-foreground">{route.total_orders}</td>
@@ -279,7 +279,7 @@ export function Accountability() {
                     <div className="px-4 py-3 border-b border-border">
                       <h3 className="text-sm font-semibold text-foreground">Reconciliation History</h3>
                     </div>
-                    <div className="overflow-x-auto">
+                    <div className="dh-table-shell border-0 shadow-none">
                       <table className="w-full text-sm">
                         <thead className="bg-muted/40 border-b border-border">
                           <tr>
@@ -292,7 +292,7 @@ export function Accountability() {
                         </thead>
                         <tbody className="divide-y divide-border/60">
                           {accountability.reconciliations.map((rec: any) => (
-                            <tr key={rec.id} className="hover:bg-muted/30 transition-colors">
+                            <tr key={rec.id} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                               <td className="px-3 py-2.5 text-muted-foreground">{formatDateBD(rec.reconciled_at)}</td>
                               <td className="px-3 py-2.5 text-right font-mono font-bold text-foreground">৳{rec.total_expected_cash.toLocaleString()}</td>
                               <td className="px-3 py-2.5 text-right font-mono font-bold text-[hsl(var(--dh-green))]">৳{rec.total_collected_cash.toLocaleString()}</td>
@@ -309,13 +309,16 @@ export function Accountability() {
                 )}
 
                 {accountability.routes.length === 0 && accountability.reconciliations.length === 0 && (
-                  <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-                    No routes or reconciliations found for this SR.
+                  <div className="dh-empty-state rounded-xl border border-dashed border-border/70 bg-card py-10">
+                    <p className="dh-empty-state-title">No routes or reconciliations found</p>
+                    <p className="dh-empty-state-desc">This SR has no accountability activity yet.</p>
                   </div>
                 )}
               </>
             ) : (
-              <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">No accountability data found.</div>
+              <div className="dh-empty-state rounded-xl border border-dashed border-border/70 bg-card py-10">
+                <p className="dh-empty-state-title">No accountability data found</p>
+              </div>
             )}
           </>
         )}
@@ -329,8 +332,8 @@ export function Accountability() {
 
       {/* Payment History Modal */}
       {showPaymentHistory && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-card border border-border rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-xl">
+        <div className="dh-modal-overlay">
+          <div className="dh-modal-panel w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             <div className="px-4 py-3 border-b border-border flex items-center justify-between">
               <div>
                 <h2 className="text-base font-semibold text-foreground">Payment History</h2>
@@ -346,9 +349,11 @@ export function Accountability() {
               {loadingPayments ? (
                 <div className="text-center text-sm text-muted-foreground py-8">Loading payment history…</div>
               ) : paymentHistory.length === 0 ? (
-                <div className="text-center text-sm text-muted-foreground py-8">No payment records found.</div>
+                <div className="dh-empty-state py-8">
+                  <p className="dh-empty-state-title">No payment records found</p>
+                </div>
               ) : (
-                <div className="overflow-x-auto rounded-lg border border-border">
+                <div className="dh-table-shell">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/40 border-b border-border">
                       <tr>
@@ -362,7 +367,7 @@ export function Accountability() {
                     </thead>
                     <tbody className="divide-y divide-border/60">
                       {paymentHistory.map((payment: any) => (
-                        <tr key={payment.id} className="hover:bg-muted/30 transition-colors">
+                        <tr key={payment.id} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                           <td className="px-3 py-2.5 text-muted-foreground">{formatDateBD(payment.created_at)}</td>
                           <td className="px-3 py-2.5 font-medium text-foreground">{payment.invoice_number || '–'}</td>
                           <td className="px-3 py-2.5 text-muted-foreground">{payment.retailer_name}</td>

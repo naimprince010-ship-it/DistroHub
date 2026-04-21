@@ -430,7 +430,7 @@ export function Retailers() {
             ))}
           </div>
           ) : (
-          <div className="overflow-x-auto border-t border-border">
+          <div className="dh-table-shell rounded-none border-x-0 border-b-0 border-t border-border shadow-none">
             <table className="w-full min-w-[800px] text-left text-sm">
               <thead className="bg-muted/40 border-b border-border">
                 <tr>
@@ -460,7 +460,7 @@ export function Retailers() {
                   const overLimit = cl > 0 && due > cl;
                   const nearLimit = cl > 0 && !overLimit && due >= cl * 0.8;
                   return (
-                    <tr key={retailer.id} className="hover:bg-muted/30 transition-colors">
+                    <tr key={retailer.id} className="transition-colors duration-150 ease-out hover:bg-muted/45">
                       <td className="max-w-[140px] truncate px-3 py-2.5 font-medium text-foreground">{retailer.shop_name}</td>
                       <td className="hidden max-w-[120px] truncate px-3 py-2.5 text-muted-foreground md:table-cell">{retailer.name}</td>
                       <td className="hidden px-3 py-2.5 md:table-cell">
@@ -505,10 +505,10 @@ export function Retailers() {
         </div>
 
         {!loading && filteredRetailers.length === 0 && (
-          <div className="rounded-xl border border-dashed border-border bg-card px-6 py-12 text-center">
+          <div className="dh-empty-state rounded-xl border border-dashed border-border/70 bg-card">
             <User className="mx-auto mb-3 h-12 w-12 text-muted-foreground/40" />
-            <p className="font-medium text-foreground">{t('retailers.empty')}</p>
-            <p className="mt-1 text-sm text-muted-foreground">{t('retailers.empty_hint')}</p>
+            <p className="dh-empty-state-title">{t('retailers.empty')}</p>
+            <p className="dh-empty-state-desc">{t('retailers.empty_hint')}</p>
             <button type="button" onClick={() => setShowAddModal(true)} className="btn-primary mt-4 inline-flex items-center gap-2">
               <Plus className="h-4 w-4" />
               {t('retailers.add')}
@@ -639,8 +639,8 @@ function RetailerModal({ retailer, marketRoutes, onClose, onSave }: RetailerModa
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-2" role="presentation" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-card shadow-xl" role="dialog" aria-modal="true" aria-labelledby="retailer-modal-title" onClick={(e) => e.stopPropagation()}>
+    <div className="dh-modal-overlay" role="presentation" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="dh-modal-panel max-h-[90vh] w-full max-w-lg overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="retailer-modal-title" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h2 id="retailer-modal-title" className="text-base font-semibold text-foreground">
             {retailer ? t('retailers.modal_edit') : t('retailers.modal_add')}

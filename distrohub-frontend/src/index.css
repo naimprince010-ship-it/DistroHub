@@ -115,17 +115,23 @@
 
   * { @apply border-border; }
 
-  html { font-size: 13px; }
+  html {
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'Sora', 'Hind Siliguri', system-ui, -apple-system, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', system-ui, 'Segoe UI', sans-serif;
     line-height: 1.5;
+    letter-spacing: -0.01em;
   }
 
   :root[lang='bn'] body,
   html[lang='bn'] body {
-    font-family: 'Hind Siliguri', 'Sora', sans-serif;
+    font-family: 'Hind Siliguri', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', system-ui, 'Segoe UI', sans-serif;
   }
 
   .currency-symbol {
@@ -160,21 +166,21 @@
 
   /* Button variants */
   .btn-primary {
-    @apply bg-primary text-primary-foreground font-medium px-4 py-2 rounded-lg transition-all duration-200 ease-out hover:opacity-90 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2;
+    @apply inline-flex min-h-10 items-center justify-center whitespace-nowrap bg-primary px-4 py-2 font-medium text-primary-foreground rounded-xl border border-primary/20 shadow-[0_8px_18px_-12px_hsl(var(--primary)/0.65)] transition-all duration-200 ease-out hover:brightness-[1.03] hover:-translate-y-px active:translate-y-0 active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-2;
   }
 
   .btn-secondary {
-    @apply bg-secondary text-secondary-foreground font-medium px-4 py-2 rounded-lg transition-all duration-200 ease-out hover:bg-secondary/80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2;
+    @apply inline-flex min-h-10 items-center justify-center whitespace-nowrap bg-card px-4 py-2 font-medium text-secondary-foreground rounded-xl border border-border/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)] transition-all duration-200 ease-out hover:bg-secondary/55 hover:-translate-y-px active:translate-y-0 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-offset-2;
   }
 
   /* Card hover effect */
   .card-hover {
-    @apply transition-all duration-200 ease-out hover:shadow-lg hover:-translate-y-0.5;
+    @apply transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_14px_26px_-20px_rgba(15,23,42,0.45)];
   }
 
   /* Input field styling — explicit text color so <select> shows selected label (Windows/appearance-none) */
   .input-field {
-    @apply w-full px-3 py-2 bg-background text-foreground placeholder:text-muted-foreground border border-input rounded-lg focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all duration-200;
+    @apply w-full px-3 py-2 bg-background text-foreground placeholder:text-muted-foreground border border-input/90 rounded-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.35)] focus:outline-none focus:ring-2 focus:ring-ring/40 focus:border-ring/50 transition-all duration-200;
   }
 
   select.input-field {
@@ -232,6 +238,89 @@
   /* Focus visible ring */
   .focus-ring {
     @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+
+  /* ── Apple-like data table + modal shells (use across pages) ── */
+  .dh-table-shell {
+    @apply overflow-x-auto rounded-xl border border-border/80 bg-card shadow-[0_1px_2px_rgba(15,23,42,0.05)];
+  }
+
+  .dh-data-table {
+    @apply w-full border-collapse text-sm text-foreground;
+  }
+
+  .dh-data-table thead tr {
+    @apply border-b border-border/80 bg-muted/35;
+  }
+
+  .dh-data-table thead th {
+    @apply px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground;
+  }
+
+  .dh-data-table thead th.text-right,
+  .dh-data-table tbody td.text-right {
+    text-align: right;
+  }
+
+  .dh-data-table tbody tr {
+    @apply border-b border-border/60 transition-colors duration-150 ease-out hover:bg-muted/40;
+  }
+
+  .dh-data-table tbody tr:last-child {
+    @apply border-b-0;
+  }
+
+  .dh-data-table tbody td {
+    @apply px-3 py-2.5 align-middle;
+  }
+
+  @media (max-width: 768px) {
+    .dh-data-table thead th {
+      @apply px-2.5 py-2 text-[10px] tracking-[0.06em];
+    }
+
+    .dh-data-table tbody td {
+      @apply px-2.5 py-2 text-[13px];
+    }
+  }
+
+  .dh-empty-in-table {
+    @apply px-6 py-12 text-center text-sm leading-relaxed text-muted-foreground;
+  }
+
+  .dh-modal-overlay {
+    @apply fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-[2px];
+  }
+
+  .dark .dh-modal-overlay {
+    @apply bg-black/55;
+  }
+
+  .dh-modal-panel {
+    @apply w-full rounded-2xl border border-border/80 bg-card text-card-foreground shadow-[0_24px_55px_-26px_rgba(15,23,42,0.62)];
+  }
+
+  .dh-empty-state {
+    @apply mx-auto max-w-md px-6 py-14 text-center;
+  }
+
+  .dh-empty-state-title {
+    @apply text-sm font-semibold tracking-tight text-foreground;
+  }
+
+  .dh-empty-state-desc {
+    @apply mt-1 text-sm leading-relaxed text-muted-foreground;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 
