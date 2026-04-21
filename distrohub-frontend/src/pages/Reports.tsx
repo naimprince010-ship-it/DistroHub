@@ -83,7 +83,28 @@ interface Category {
   name: string;
 }
 
-type ReportType = 'sales' | 'purchases' | 'stock' | 'sales-returns' | 'collection';
+interface MarginRow {
+  sale_id: string;
+  invoice_number?: string;
+  product_id: string;
+  product_name?: string;
+  quantity: number;
+  net_sales: number;
+  cogs_total: number;
+  margin_amount: number;
+  margin_percent: number;
+  created_at: string;
+}
+
+interface MarginSummary {
+  total_net_sales: number;
+  total_cogs: number;
+  total_margin: number;
+  margin_percent: number;
+  rows: MarginRow[];
+}
+
+type ReportType = 'sales' | 'purchases' | 'stock' | 'sales-returns' | 'collection' | 'margins';
 
 export function Reports() {
   const [activeReport, setActiveReport] = useState<ReportType>('sales');
@@ -113,6 +134,7 @@ export function Reports() {
   const [products, setProducts] = useState<Array<{ id: string; name: string; category: string }>>([]);
   const [collectionPayments, setCollectionPayments] = useState<any[]>([]);
   const [collectionSummary, setCollectionSummary] = useState<any | null>(null);
+  const [marginSummary, setMarginSummary] = useState<MarginSummary | null>(null);
   const [srFilter, setSrFilter] = useState<string>('all');
   const [salesReps, setSalesReps] = useState<Array<{ id: string; name: string }>>([]);
   
@@ -223,6 +245,15 @@ export function Reports() {
           setCollectionPayments(response.data.payments || []);
           setCollectionSummary(response.data.summary || null);
           console.log('[Reports] Collection report fetched:', response.data.payments?.length || 0);
+        }
+      } else if (activeReport === 'margins') {
+        const params = new URLSearchParams();
+        if (startDate) params.append('from_date', startDate);
+        if (endDate) params.append('to_date', endDate);
+        const url = `/api/reports/margins${params.toString() ? '?' + params.toString() : ''}`;
+        const response = await api.get(url);
+        if (response.data) {
+          setMarginSummary(response.data);
         }
       }
     } catch (error: any) {
@@ -369,6 +400,7 @@ export function Reports() {
 
   const stockTotal = filteredInventory.reduce((sum, i) => sum + i.total_stock, 0);
   const stockProducts = filteredInventory.length;
+  const marginRows = marginSummary?.rows || [];
 
   // Export to PDF
   const exportToPDF = () => {
@@ -525,6 +557,7 @@ export function Reports() {
               { id: 'stock', label: 'Stock Summary' },
               { id: 'sales-returns', label: 'Sales Returns' },
               { id: 'collection', label: 'Collection' },
+              { id: 'margins', label: 'Margins' },
             ].map(tab => (
               <button key={tab.id} onClick={() => setActiveReport(tab.id as any)}
                 className={`px-3 py-2.5 text-sm font-medium transition-colors border-b-2 -mb-px whitespace-nowrap ${activeReport === tab.id ? 'text-[hsl(var(--primary))] border-[hsl(var(--primary))]' : 'text-muted-foreground border-transparent hover:text-foreground'}`}>
@@ -708,6 +741,27 @@ export function Reports() {
             <div className="bg-white rounded-xl p-3 shadow-sm">
               <p className="text-slate-500 text-sm">Total Stock</p>
               <p className="text-2xl font-bold text-blue-600">{stockTotal.toLocaleString()}</p>
+            </div>
+          </div>
+        )}
+
+        {activeReport === 'margins' && marginSummary && (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-2">
+            <div className="bg-white rounded-xl p-3 shadow-sm">
+              <p className="text-slate-500 text-sm">Net Sales</p>
+              <p className="text-2xl font-bold text-blue-600">৳ {marginSummary.total_net_sales.toLocaleString()}</p>
+            </div>
+            <div className="bg-white rounded-xl p-3 shadow-sm">
+              <p className="text-slate-500 text-sm">COGS</p>
+              <p className="text-2xl font-bold text-slate-900">৳ {marginSummary.total_cogs.toLocaleString()}</p>
+            </div>
+            <div className="bg-white rounded-xl p-3 shadow-sm">
+              <p className="text-slate-500 text-sm">Total Margin</p>
+              <p className="text-2xl font-bold text-green-600">৳ {marginSummary.total_margin.toLocaleString()}</p>
+            </div>
+            <div className="bg-white rounded-xl p-3 shadow-sm">
+              <p className="text-slate-500 text-sm">Margin %</p>
+              <p className="text-2xl font-bold text-purple-600">{marginSummary.margin_percent.toFixed(2)}%</p>
             </div>
           </div>
         )}
@@ -946,6 +1000,40 @@ export function Reports() {
                   </tfoot>
                 </table>
               </div>
+            )}
+          </div>
+        ) : activeReport === 'margins' ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/40 border-b border-border">
+                <tr>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Date</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Invoice</th>
+                  <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Product</th>
+                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Qty</th>
+                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Net Sales</th>
+                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">COGS</th>
+                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Margin</th>
+                  <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Margin %</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {marginRows.map((row, idx) => (
+                  <tr key={`${row.sale_id}-${row.product_id}-${idx}`} className="hover:bg-muted/30 transition-colors">
+                    <td className="px-3 py-2.5 text-muted-foreground">{formatDate(row.created_at)}</td>
+                    <td className="px-3 py-2.5 font-medium text-[hsl(var(--primary))]">{row.invoice_number || '—'}</td>
+                    <td className="px-3 py-2.5 text-foreground">{row.product_name || row.product_id}</td>
+                    <td className="px-3 py-2.5 text-right font-mono">{row.quantity}</td>
+                    <td className="px-3 py-2.5 text-right font-mono">৳ {row.net_sales.toLocaleString()}</td>
+                    <td className="px-3 py-2.5 text-right font-mono">৳ {row.cogs_total.toLocaleString()}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-green-600">৳ {row.margin_amount.toLocaleString()}</td>
+                    <td className="px-3 py-2.5 text-right font-mono">{row.margin_percent.toFixed(2)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {marginRows.length === 0 && (
+              <div className="py-12 text-center text-sm text-muted-foreground">No margin rows found for the selected filters.</div>
             )}
           </div>
         ) : null}

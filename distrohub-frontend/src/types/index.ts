@@ -13,6 +13,11 @@ export interface Product {
   sku: string;
   category: string;
   unit: string;
+  unit_id?: string;
+  base_uom?: string;
+  template_id?: string;
+  variant_id?: string;
+  variant_attributes?: Record<string, string>;
   pack_size: number;
   purchase_price: number;
   selling_price: number;
@@ -81,6 +86,13 @@ export interface SalesOrderItem {
   id: string;
   product_id: string;
   product_name: string;
+  variant_id?: string;
+  uom?: string;
+  uom_quantity?: number;
+  price_list_id?: string;
+  base_price?: number;
+  resolved_price?: number;
+  price_source?: string;
   quantity: number;
   unit_price: number;
   total: number;
@@ -191,4 +203,115 @@ export interface CollectionReportSummary {
   total_srs: number;
   total_pending: number;
   reports: CollectionReport[];
+}
+
+export interface ProductTemplate {
+  id: string;
+  product_id: string;
+  name: string;
+  base_uom?: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ProductVariant {
+  id: string;
+  template_id: string;
+  product_id: string;
+  sku: string;
+  name: string;
+  is_default: boolean;
+  attributes: Record<string, string>;
+  created_at: string;
+}
+
+export interface UomConversion {
+  id: string;
+  product_id: string;
+  from_uom: string;
+  to_uom: string;
+  factor: number;
+  rounding_mode: string;
+  created_at: string;
+}
+
+export interface PriceList {
+  id: string;
+  name: string;
+  currency: string;
+  priority: number;
+  is_active: boolean;
+  valid_from?: string;
+  valid_to?: string;
+  created_at: string;
+}
+
+export interface PriceListItem {
+  id: string;
+  price_list_id: string;
+  product_id: string;
+  variant_id?: string;
+  uom?: string;
+  min_qty: number;
+  unit_price: number;
+  discount_percent: number;
+  created_at: string;
+}
+
+export interface ReorderSuggestion {
+  id: string;
+  product_id: string;
+  product_name?: string;
+  suggested_qty: number;
+  trigger_reason?: string;
+  stock_on_hand: number;
+  reorder_level: number;
+  avg_daily_sales: number;
+  coverage_days: number;
+  created_at: string;
+}
+
+export interface ReceivableAgingRow {
+  retailer_id: string;
+  retailer_name: string;
+  total_due: number;
+  current: number;
+  bucket_8_15: number;
+  bucket_16_30: number;
+  bucket_31_60: number;
+  bucket_60_plus: number;
+}
+
+export interface CreditCheckResponse {
+  retailer_id: string;
+  retailer_name?: string;
+  credit_limit: number;
+  current_due: number;
+  new_order_amount: number;
+  projected_due: number;
+  over_limit_amount: number;
+  enforcement_mode: string;
+  can_submit: boolean;
+  reason?: string;
+}
+
+export interface MarginReportRow {
+  sale_id: string;
+  invoice_number?: string;
+  product_id: string;
+  product_name?: string;
+  quantity: number;
+  net_sales: number;
+  cogs_total: number;
+  margin_amount: number;
+  margin_percent: number;
+  created_at: string;
+}
+
+export interface MarginReportSummary {
+  total_net_sales: number;
+  total_cogs: number;
+  total_margin: number;
+  margin_percent: number;
+  rows: MarginReportRow[];
 }

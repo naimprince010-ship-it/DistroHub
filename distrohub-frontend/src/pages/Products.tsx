@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PageShell } from '@/components/layout/PageShell';
 import { StatCard } from '@/components/ui/stat-card';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
   Plus,
@@ -22,7 +22,6 @@ import {
   TrendingUp,
   CalendarDays,
   Activity,
-  Settings2,
   History,
 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -45,16 +44,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { useTableControls } from '@/hooks/useTableControls';
+import { PaginationControls } from '@/components/ui/pagination-controls';
 // @ts-ignore - exceljs types may not be available in build
 import { Workbook } from 'exceljs';
 import { BarcodeScanButton } from '@/components/BarcodeScanner';
@@ -175,7 +168,8 @@ export function Products() {
   const [categories, setCategories] = useState<string[]>([]);
   const [suppliers, setSuppliers] = useState<string[]>([]);
   const [units, setUnits] = useState<string[]>([]);
-  const [visibleColumns, setVisibleColumns] = useState<Record<ProductColumnKey, boolean>>({
+  const [reorderSuggestions, setReorderSuggestions] = useState<Record<string, number>>({});
+  const visibleColumns: Record<ProductColumnKey, boolean> = {
     sku: true,
     category: true,
     unit: true,
@@ -185,18 +179,6 @@ export function Products() {
     pcsCtn: true,
     batch: true,
     expiry: true,
-  });
-
-  const columnLabels: Record<ProductColumnKey, string> = {
-    sku: t('common.sku'),
-    category: t('common.category'),
-    unit: t('common.unit'),
-    purchase: t('common.purchase'),
-    selling: t('common.selling'),
-    stock: t('common.stock'),
-    pcsCtn: t('common.pcs_ctn'),
-    batch: t('common.batch'),
-    expiry: t('common.expiry'),
   };
 
   const mapApiProductToRecord = (p: any, synced: boolean): ProductRecord => ({
@@ -308,8 +290,18 @@ export function Products() {
       if (silent) setRefreshing(true);
       else setLoading(true);
       logger.log('[Products] Fetching products from API...');
-      const response = await api.get('/api/products');
+      const [response, suggestionsRes] = await Promise.all([
+        api.get('/api/products'),
+        api.get('/api/reorder-suggestions').catch(() => ({ data: [] })),
+      ]);
       logger.log('[Products] Products fetched successfully:', response.data?.length || 0);
+      if (Array.isArray(suggestionsRes.data)) {
+        const nextMap: Record<string, number> = {};
+        suggestionsRes.data.forEach((row: any) => {
+          if (row?.product_id) nextMap[row.product_id] = Number(row.suggested_qty || 0);
+        });
+        setReorderSuggestions(nextMap);
+      }
 
       if (response.data) {
         // Map backend Product to frontend Product interface
@@ -459,6 +451,7 @@ export function Products() {
       return matchesSearch && matchesCategory && matchesStock && matchesExpiry;
     });
   }, [products, searchTerm, categoryFilter, stockFilter, expiryFilter]);
+  const productsTable = useTableControls(filteredProducts, { initialSortKey: 'name', pageSize: 10 });
 
   const activeFiltersCount =
     [categoryFilter, stockFilter, expiryFilter].filter((f) => f !== 'all').length + (searchTerm ? 1 : 0);
@@ -636,10 +629,6 @@ export function Products() {
     setSearchParams(next, { replace: true });
   };
 
-  const toggleColumn = (key: ProductColumnKey, checked: boolean) => {
-    setVisibleColumns((prev) => ({ ...prev, [key]: checked }));
-  };
-
   const ledgerLabel = (kind: StockLedgerRow['voucher_type']) => {
     if (kind === 'sale_return') return 'Sale Return';
     if (kind === 'purchase') return 'Purchase';
@@ -696,36 +685,32 @@ export function Products() {
           <StatCard label={t('products.stat_expiring')} value={productStats.expiring} icon={CalendarDays}  color="purple" />
         </div>
 
-        {/* Filters card */}
-        <Card>
-          <CardHeader className="px-4 py-3 pb-2">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <CardTitle className="text-base">{t('products.filter_section')}</CardTitle>
-              <div className="flex flex-wrap items-center gap-2">
-                {/* Mobile search */}
-                <div className="relative sm:hidden">
-                  <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
-                  <input type="search" value={searchTerm} onChange={(e) => updateSearchQuery(e.target.value)}
-                    placeholder={t('products.search_mobile')} className="input-field h-9 w-full pl-9" autoComplete="off" />
+        <Card className="overflow-hidden">
+          <div className="border-b border-border p-4">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-12 xl:items-end">
+              <div className="min-w-0 md:col-span-2 xl:col-span-4">
+                <p className="mb-1 text-[11px] text-muted-foreground">
+              {t('products.toolbar_count')
+                    .replace('{{f}}', String(productsTable.totalRows))
+                    .replace('{{t}}', String(products.length))}
+                </p>
+                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="product-search">
+                  {t('products.search_chip_label')}
+                </label>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                  <input
+                    id="product-search"
+                    type="search"
+                    value={searchTerm}
+                    onChange={(e) => updateSearchQuery(e.target.value)}
+                    placeholder={t('products.search_mobile')}
+                    className="input-field h-9 w-full pl-10"
+                    autoComplete="off"
+                  />
                 </div>
               </div>
-            </div>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 pt-0">
-            {searchTerm && (
-              <div className="mb-3 flex flex-wrap items-center gap-2">
-                <span className="text-xs font-medium text-muted-foreground">{t('products.search_chip_label')}:</span>
-                <div className="inline-flex items-center gap-1 rounded-full border border-[hsl(var(--primary))]/25 bg-[hsl(var(--primary))]/10 px-2.5 py-1 text-sm text-foreground">
-                  <span className="max-w-[220px] truncate font-medium">{searchTerm}</span>
-                  <button type="button" onClick={() => updateSearchQuery('')}
-                    className="rounded-full p-0.5 text-muted-foreground hover:text-foreground" aria-label={t('products.search_clear')}>
-                    <X className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            )}
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 xl:grid-cols-12 xl:items-end">
-              <div className="min-w-0 xl:col-span-4">
+              <div className="min-w-0 xl:col-span-2">
                 <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="product-category">
                   {t('products.filter_label_category')}
                 </label>
@@ -744,7 +729,7 @@ export function Products() {
                   </Select>
                 </div>
               </div>
-              <div className="min-w-0 xl:col-span-4">
+              <div className="min-w-0 xl:col-span-2">
                 <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="product-stock">
                   {t('products.filter_label_stock')}
                 </label>
@@ -787,9 +772,7 @@ export function Products() {
                 </div>
               </div>
               <div className="min-w-0 xl:col-span-2">
-                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-transparent select-none" aria-hidden>
-                  spacer
-                </span>
+                <span className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-transparent select-none" aria-hidden>spacer</span>
                 <button type="button" onClick={clearFilters} disabled={activeFiltersCount === 0}
                   className="inline-flex h-9 w-full items-center justify-center gap-1 rounded-lg border border-border bg-card px-2 text-sm font-medium text-muted-foreground transition-colors enabled:border-[hsl(var(--dh-red))]/30 enabled:bg-[hsl(var(--dh-red))]/5 enabled:text-[hsl(var(--dh-red))] disabled:cursor-not-allowed disabled:opacity-50">
                   <X className="h-4 w-4 shrink-0" aria-hidden />
@@ -798,58 +781,8 @@ export function Products() {
                 </button>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* Products table card */}
-        <Card>
-          <CardHeader className="pb-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <CardTitle className="text-base">{t('products.title')}</CardTitle>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-xs text-muted-foreground">
-                  {t('products.toolbar_count')
-                    .replace('{{f}}', String(filteredProducts.length))
-                    .replace('{{t}}', String(products.length))}
-                </span>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button
-                      type="button"
-                      className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted/40"
-                    >
-                      <Settings2 className="h-3.5 w-3.5" aria-hidden />
-                      Edit columns
-                    </button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-48">
-                    <DropdownMenuLabel>Edit columns</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {(Object.keys(columnLabels) as ProductColumnKey[]).map((key) => (
-                      <DropdownMenuCheckboxItem
-                        key={key}
-                        checked={visibleColumns[key]}
-                        onCheckedChange={(checked) => toggleColumn(key, checked === true)}
-                      >
-                        {columnLabels[key]}
-                      </DropdownMenuCheckboxItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-                <button
-                  type="button"
-                  onClick={() => {
-                    fetchCategoriesAndSuppliers();
-                    setShowAddModal(true);
-                  }}
-                  className="inline-flex h-8 items-center gap-1 rounded-md border border-border bg-card px-2.5 text-xs font-medium text-muted-foreground hover:bg-muted/40"
-                >
-                  <Plus className="h-3.5 w-3.5" aria-hidden />
-                  Add product
-                </button>
-              </div>
-            </div>
-          </CardHeader>
           <CardContent className="p-0">
           <div className="relative isolate max-h-[min(70vh,calc(100vh-14rem))] overflow-auto overscroll-contain">
           {loading ? (
@@ -869,22 +802,34 @@ export function Products() {
                 <table className="w-full min-w-[1100px] border-separate border-spacing-0 text-sm">
                   <thead>
                     <tr className="[&>th]:border-r [&>th]:border-border/50 [&>th:last-child]:border-r-0">
-                      <th className="sticky top-0 z-30 w-12 border-b border-border bg-muted/40 px-2.5 py-3 text-center text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">#</th>
-                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-left text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.products')}</th>
-                      {visibleColumns.sku && <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-left text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.sku')}</th>}
-                      {visibleColumns.category && <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-left text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.category')}</th>}
-                      {visibleColumns.unit && <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-right text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.unit')}</th>}
-                      {visibleColumns.purchase && <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-right text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.purchase')}</th>}
-                      {visibleColumns.selling && <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-right text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.selling')}</th>}
-                      {visibleColumns.stock && <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-right text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.stock')}</th>}
-                      {visibleColumns.pcsCtn && <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-right text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.pcs_ctn')}</th>}
-                      {visibleColumns.batch && <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-left text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.batch')}</th>}
-                      {visibleColumns.expiry && <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-left text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.expiry')}</th>}
-                      <th className="sticky top-0 z-30 border-b border-border bg-muted/40 px-2.5 py-3 text-center text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.actions')}</th>
+                      <th className="sticky top-0 z-30 w-12 border-b border-border bg-card px-2.5 py-3 text-center text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">#</th>
+                      <th className="sticky top-0 z-30 border-b border-border bg-card px-2.5 py-3 text-left text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">
+                        <button type="button" onClick={() => productsTable.toggleSort('name')} className="inline-flex items-center gap-1">
+                          {t('common.products')}
+                          <span className="text-[10px]">{productsTable.sortKey === 'name' ? (productsTable.sortDirection === 'asc' ? '▲' : '▼') : '↕'}</span>
+                        </button>
+                      </th>
+                      {visibleColumns.sku && <th className="sticky top-0 z-30 hidden border-b border-border bg-card px-2.5 py-3 text-left text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground md:table-cell">{t('common.sku')}</th>}
+                      {visibleColumns.category && <th className="sticky top-0 z-30 hidden border-b border-border bg-card px-2.5 py-3 text-left text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground lg:table-cell">{t('common.category')}</th>}
+                      {visibleColumns.unit && <th className="sticky top-0 z-30 hidden border-b border-border bg-card px-2.5 py-3 text-right text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground md:table-cell">{t('common.unit')}</th>}
+                      {visibleColumns.purchase && <th className="sticky top-0 z-30 hidden border-b border-border bg-card px-2.5 py-3 text-right text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground lg:table-cell">{t('common.purchase')}</th>}
+                      {visibleColumns.selling && <th className="sticky top-0 z-30 hidden border-b border-border bg-card px-2.5 py-3 text-right text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground lg:table-cell">{t('common.selling')}</th>}
+                      {visibleColumns.stock && (
+                        <th className="sticky top-0 z-30 border-b border-border bg-card px-2.5 py-3 text-right text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">
+                          <button type="button" onClick={() => productsTable.toggleSort('stock_quantity')} className="ml-auto inline-flex items-center gap-1">
+                            {t('common.stock')}
+                            <span className="text-[10px]">{productsTable.sortKey === 'stock_quantity' ? (productsTable.sortDirection === 'asc' ? '▲' : '▼') : '↕'}</span>
+                          </button>
+                        </th>
+                      )}
+                      {visibleColumns.pcsCtn && <th className="sticky top-0 z-30 hidden border-b border-border bg-card px-2.5 py-3 text-right text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground md:table-cell">{t('common.pcs_ctn')}</th>}
+                      {visibleColumns.batch && <th className="sticky top-0 z-30 hidden border-b border-border bg-card px-2.5 py-3 text-left text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground lg:table-cell">{t('common.batch')}</th>}
+                      {visibleColumns.expiry && <th className="sticky top-0 z-30 hidden border-b border-border bg-card px-2.5 py-3 text-left text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground md:table-cell">{t('common.expiry')}</th>}
+                      <th className="sticky top-0 z-30 border-b border-border bg-card px-2.5 py-3 text-center text-sm font-semibold uppercase tracking-[0.04em] text-muted-foreground">{t('common.actions')}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredProducts.map((product, index) => {
+                    {productsTable.paginatedRows.map((product, index) => {
                       const stockLevel = product.stock_quantity === 0 ? 'out' : product.stock_quantity < LOW_STOCK_THRESHOLD ? 'low' : 'ok';
                       const expiryStatus = isExpiredDate(product.expiry_date) ? 'expired' : isExpiringSoonDate(product.expiry_date) ? 'soon' : 'ok';
                       const isAlert = stockLevel === 'out' || stockLevel === 'low' || expiryStatus === 'expired' || expiryStatus === 'soon';
@@ -898,7 +843,7 @@ export function Products() {
                             stockLevel === 'out' && 'bg-[hsl(var(--dh-red))]/5',
                             '[&>td]:border-b [&>td]:border-border/70 [&>td]:border-r [&>td]:border-r-border/50 [&>td:last-child]:border-r-0'
                           )}>
-                          <td className="p-2.5 text-center text-xs tabular-nums text-muted-foreground">{index + 1}</td>
+                          <td className="p-2.5 text-center text-xs tabular-nums text-muted-foreground">{(productsTable.page - 1) * productsTable.pageSize + index + 1}</td>
                           <td className="p-2.5">
                             <div className="flex max-w-[220px] items-center gap-2.5">
                               <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--primary))]/10">
@@ -914,15 +859,15 @@ export function Products() {
                               </button>
                             </div>
                           </td>
-                          {visibleColumns.sku && <td className="p-2.5 font-mono text-xs text-muted-foreground">{product.sku}</td>}
+                          {visibleColumns.sku && <td className="hidden p-2.5 font-mono text-xs text-muted-foreground md:table-cell">{product.sku}</td>}
                           {visibleColumns.category && (
-                            <td className="p-2.5">
+                            <td className="hidden p-2.5 lg:table-cell">
                               <Badge variant="muted" className="max-w-[140px] truncate">{product.category}</Badge>
                             </td>
                           )}
-                          {visibleColumns.unit && <td className="p-2.5 text-right text-sm text-muted-foreground">{product.unit}</td>}
-                          {visibleColumns.purchase && <td className="p-2.5 text-right tabular-nums text-sm text-foreground">{formatMoney(product.purchase_price)}</td>}
-                          {visibleColumns.selling && <td className="p-2.5 text-right font-semibold tabular-nums text-sm text-foreground">{formatMoney(product.selling_price)}</td>}
+                          {visibleColumns.unit && <td className="hidden p-2.5 text-right text-sm text-muted-foreground md:table-cell">{product.unit}</td>}
+                          {visibleColumns.purchase && <td className="hidden p-2.5 text-right tabular-nums text-sm text-foreground lg:table-cell">{formatMoney(product.purchase_price)}</td>}
+                          {visibleColumns.selling && <td className="hidden p-2.5 text-right font-semibold tabular-nums text-sm text-foreground lg:table-cell">{formatMoney(product.selling_price)}</td>}
                           {visibleColumns.stock && (
                             <td className="p-2.5 text-right">
                               <span className={cn('tabular-nums font-medium text-sm',
@@ -932,14 +877,19 @@ export function Products() {
                               )}>
                                 {product.stock_quantity}
                               </span>
+                              {reorderSuggestions[product.id] ? (
+                                <div className="mt-1 text-[10px] text-[hsl(var(--dh-blue))]">
+                                  +{reorderSuggestions[product.id]} suggested
+                                </div>
+                              ) : null}
                             </td>
                           )}
                           {visibleColumns.pcsCtn && (
-                            <td className="p-2.5 text-right text-xs tabular-nums text-muted-foreground">{product.pieces_per_carton || product.pack_size || '—'}</td>
+                            <td className="hidden p-2.5 text-right text-xs tabular-nums text-muted-foreground md:table-cell">{product.pieces_per_carton || product.pack_size || '—'}</td>
                           )}
-                          {visibleColumns.batch && <td className="p-2.5 font-mono text-xs text-muted-foreground">{product.batch_number || '—'}</td>}
+                          {visibleColumns.batch && <td className="hidden p-2.5 font-mono text-xs text-muted-foreground lg:table-cell">{product.batch_number || '—'}</td>}
                           {visibleColumns.expiry && (
-                            <td className="p-2.5">
+                            <td className="hidden p-2.5 md:table-cell">
                               <div className="flex items-center gap-1">
                                 {isExpiredDate(product.expiry_date) ? (
                                   <span className="text-xs font-medium text-[hsl(var(--dh-red))]">{product.expiry_date || '—'}</span>
@@ -988,6 +938,14 @@ export function Products() {
             </>
           )}
           </div>
+          {!loading && filteredProducts.length > 0 ? (
+            <PaginationControls
+              page={productsTable.page}
+              totalPages={productsTable.totalPages}
+              totalRows={productsTable.totalRows}
+              onPageChange={productsTable.setPage}
+            />
+          ) : null}
           </CardContent>
         </Card>
       </div>
@@ -1287,6 +1245,14 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
   const [autoCalcStock, setAutoCalcStock] = useState(!product);
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [imagePreview, setImagePreview] = useState<string>(product?.image_url || '');
+  const [activeTab, setActiveTab] = useState<'basic' | 'pricing' | 'inventory' | 'advanced'>('basic');
+  const [templateName, setTemplateName] = useState(product?.name || '');
+  const [variantName, setVariantName] = useState(product?.name || '');
+  const [variantSku, setVariantSku] = useState(product?.sku || '');
+  const [baseUom, setBaseUom] = useState(product?.unit || 'Pack');
+  const [uomFrom, setUomFrom] = useState('Carton');
+  const [uomTo, setUomTo] = useState(product?.unit || 'Pack');
+  const [uomFactor, setUomFactor] = useState<number>(1);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const unitOptions = useMemo(() => {
     const fallbackUnits = ['Pack', 'Bag', 'Box', 'Piece', 'Carton'];
@@ -1480,6 +1446,18 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
         </div>
 
         <form onSubmit={(e) => handleSubmit(e, false)} className="p-4 space-y-4">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as typeof activeTab)}>
+            <TabsList className="mb-2 grid h-auto w-full grid-cols-2 gap-1 md:grid-cols-4">
+              <TabsTrigger value="basic">Basic</TabsTrigger>
+              <TabsTrigger value="pricing">Pricing</TabsTrigger>
+              <TabsTrigger value="inventory">Inventory</TabsTrigger>
+              <TabsTrigger value="advanced">Advanced</TabsTrigger>
+            </TabsList>
+            <p className="mb-3 text-xs text-muted-foreground">
+              Quick entry flow with tabbed sections for faster product setup.
+            </p>
+
+            <TabsContent value="basic" className="space-y-4">
           {/* Product Image */}
           <div className="flex items-start gap-4">
             <div className="flex-shrink-0">
@@ -1616,7 +1594,9 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
               <p className="text-xs text-slate-500 mt-1">{t('products.carton_hint')}</p>
             </div>
           </div>
+            </TabsContent>
 
+            <TabsContent value="pricing" className="space-y-4">
           {/* Pricing with Profit Display */}
           <div className="bg-muted/40 rounded-xl p-3">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1698,7 +1678,9 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
               )}
             </div>
           </div>
+            </TabsContent>
 
+            <TabsContent value="inventory" className="space-y-4">
           {/* Stock & Reorder Level */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
@@ -1819,6 +1801,60 @@ function ProductModal({ product, onClose, onSave, categories, suppliers, units, 
               ))}
             </select>
           </div>
+            </TabsContent>
+
+            <TabsContent value="advanced" className="space-y-4">
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <h3 className="mb-2 text-sm font-semibold text-foreground">Variant Setup</h3>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Template Name</label>
+                    <input value={templateName} onChange={(e) => setTemplateName(e.target.value)} className="input-field w-full" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Variant Name</label>
+                    <input value={variantName} onChange={(e) => setVariantName(e.target.value)} className="input-field w-full" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Variant SKU</label>
+                    <input value={variantSku} onChange={(e) => setVariantSku(e.target.value)} className="input-field w-full" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border bg-muted/30 p-3">
+                <h3 className="mb-2 text-sm font-semibold text-foreground">UOM Conversion</h3>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Base UOM</label>
+                    <input value={baseUom} onChange={(e) => setBaseUom(e.target.value)} className="input-field w-full" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">From</label>
+                    <input value={uomFrom} onChange={(e) => setUomFrom(e.target.value)} className="input-field w-full" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">To</label>
+                    <input value={uomTo} onChange={(e) => setUomTo(e.target.value)} className="input-field w-full" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-xs font-medium text-muted-foreground">Factor</label>
+                    <input
+                      type="number"
+                      min="0.000001"
+                      step="0.000001"
+                      value={uomFactor}
+                      onChange={(e) => setUomFactor(Number(e.target.value))}
+                      className="input-field w-full"
+                    />
+                  </div>
+                </div>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  This section prepares variant/UOM metadata for ERP-style workflow.
+                </p>
+              </div>
+            </TabsContent>
+          </Tabs>
 
           {/* Action Buttons */}
           <div className="flex justify-end gap-2 pt-4 border-t border-border">

@@ -24,6 +24,15 @@ from app.models import (
     CategoryCreate, Category,
     SupplierCreate, Supplier,
     UnitCreate, Unit,
+    ProductTemplateCreate, ProductTemplate,
+    ProductVariantCreate, ProductVariant,
+    UomConversionCreate, UomConversion,
+    PriceListCreate, PriceList,
+    PriceListItemCreate, PriceListItem,
+    RetailerPriceListAssignmentCreate,
+    ReorderPolicyCreate, ReorderPolicy, ReorderSuggestion,
+    ReceivableAgingRow, CreditCheckResponse,
+    MarginReportSummary,
     SmsSettings, SmsSettingsCreate, SmsSettingsUpdate,
     SmsTemplate, SmsTemplateCreate, SmsTemplateUpdate,
     SmsLog, SmsSendRequest, SmsBulkSendRequest,
@@ -1860,13 +1869,47 @@ async def create_sale(sale_data: SaleCreate, request: Request, current_user: dic
         print(f"[API] User: {current_user.get('email', 'unknown')}")
         
         items = [item.model_dump() for item in sale_data.items]
+        estimated_total = 0.0
+        for item in items:
+            resolved = db.resolve_price(
+                retailer_id=sale_data.retailer_id,
+                product_id=item["product_id"],
+                variant_id=item.get("variant_id"),
+                quantity=float(item.get("quantity", 0) or 0),
+                uom=item.get("uom"),
+            ) if hasattr(db, "resolve_price") else {
+                "price_list_id": item.get("price_list_id"),
+                "price_source": "manual",
+                "base_price": item.get("unit_price", 0),
+                "resolved_price": item.get("unit_price", 0),
+            }
+            item["price_list_id"] = resolved.get("price_list_id")
+            item["price_source"] = resolved.get("price_source")
+            item["base_price"] = resolved.get("base_price", item.get("unit_price"))
+            item["resolved_price"] = resolved.get("resolved_price", item.get("unit_price"))
+            if not item.get("unit_price"):
+                item["unit_price"] = item["resolved_price"]
+            estimated_total += float(item.get("quantity", 0) or 0) * float(item.get("unit_price", 0) or 0)
+
+        if hasattr(db, "check_credit_limit"):
+            credit_check = db.check_credit_limit(sale_data.retailer_id, estimated_total)
+            if not credit_check.get("can_submit") and not sale_data.credit_override:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Credit limit exceeded: {credit_check.get('reason')}. Use credit override to proceed."
+                )
+
         sale = db.create_sale(
             {
                 "retailer_id": sale_data.retailer_id,
                 "payment_type": sale_data.payment_type,
                 "paid_amount": sale_data.paid_amount,
                 "notes": sale_data.notes,
-                "assigned_to": sale_data.assigned_to
+                "assigned_to": sale_data.assigned_to,
+                "terms_days": sale_data.terms_days,
+                "due_date": sale_data.due_date.isoformat() if sale_data.due_date else None,
+                "credit_override": sale_data.credit_override,
+                "credit_override_reason": sale_data.credit_override_reason,
             },
             items
         )
@@ -2767,6 +2810,148 @@ async def delete_unit(unit_id: str, current_user: dict = Depends(get_current_use
     if not db.delete_unit(unit_id):
         raise HTTPException(status_code=404, detail="Unit not found")
     return {"message": "Unit deleted"}
+
+# ERP upgrade endpoints: variants + UOM
+@app.get("/api/product-templates", response_model=List[ProductTemplate])
+async def get_product_templates(current_user: dict = Depends(get_current_user)):
+    templates = db.get_product_templates() if hasattr(db, "get_product_templates") else []
+    return [ProductTemplate(**t) for t in templates]
+
+@app.post("/api/product-templates", response_model=ProductTemplate)
+async def create_product_template(template_data: ProductTemplateCreate, current_user: dict = Depends(get_current_user)):
+    if not hasattr(db, "create_product_template"):
+        raise HTTPException(status_code=400, detail="Product template feature not available")
+    template = db.create_product_template(template_data.model_dump())
+    return ProductTemplate(**template)
+
+@app.get("/api/product-variants", response_model=List[ProductVariant])
+async def get_product_variants(
+    template_id: Optional[str] = None,
+    product_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    variants = db.get_product_variants(template_id=template_id, product_id=product_id) if hasattr(db, "get_product_variants") else []
+    return [ProductVariant(**v) for v in variants]
+
+@app.post("/api/product-variants", response_model=ProductVariant)
+async def create_product_variant(variant_data: ProductVariantCreate, current_user: dict = Depends(get_current_user)):
+    if not hasattr(db, "create_product_variant"):
+        raise HTTPException(status_code=400, detail="Product variant feature not available")
+    variant = db.create_product_variant(variant_data.model_dump())
+    return ProductVariant(**variant)
+
+@app.get("/api/uom-conversions", response_model=List[UomConversion])
+async def get_uom_conversions(product_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    rows = db.get_uom_conversions(product_id=product_id) if hasattr(db, "get_uom_conversions") else []
+    return [UomConversion(**row) for row in rows]
+
+@app.post("/api/uom-conversions", response_model=UomConversion)
+async def upsert_uom_conversion(conversion_data: UomConversionCreate, current_user: dict = Depends(get_current_user)):
+    if not hasattr(db, "upsert_uom_conversion"):
+        raise HTTPException(status_code=400, detail="UOM conversion feature not available")
+    row = db.upsert_uom_conversion(conversion_data.model_dump())
+    return UomConversion(**row)
+
+# ERP upgrade endpoints: price lists
+@app.get("/api/price-lists", response_model=List[PriceList])
+async def get_price_lists(current_user: dict = Depends(get_current_user)):
+    rows = db.get_price_lists() if hasattr(db, "get_price_lists") else []
+    return [PriceList(**row) for row in rows]
+
+@app.post("/api/price-lists", response_model=PriceList)
+async def create_price_list(price_list_data: PriceListCreate, current_user: dict = Depends(get_current_user)):
+    if not hasattr(db, "create_price_list"):
+        raise HTTPException(status_code=400, detail="Price list feature not available")
+    row = db.create_price_list(price_list_data.model_dump())
+    return PriceList(**row)
+
+@app.get("/api/price-list-items", response_model=List[PriceListItem])
+async def get_price_list_items(price_list_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    rows = db.get_price_list_items(price_list_id=price_list_id) if hasattr(db, "get_price_list_items") else []
+    return [PriceListItem(**row) for row in rows]
+
+@app.post("/api/price-list-items", response_model=PriceListItem)
+async def upsert_price_list_item(item_data: PriceListItemCreate, current_user: dict = Depends(get_current_user)):
+    if not hasattr(db, "upsert_price_list_item"):
+        raise HTTPException(status_code=400, detail="Price list item feature not available")
+    row = db.upsert_price_list_item(item_data.model_dump())
+    return PriceListItem(**row)
+
+@app.post("/api/price-lists/assign")
+async def assign_price_list(assignment_data: RetailerPriceListAssignmentCreate, current_user: dict = Depends(get_current_user)):
+    if not hasattr(db, "assign_price_list_to_retailer"):
+        raise HTTPException(status_code=400, detail="Price list assignment feature not available")
+    assignment = db.assign_price_list_to_retailer(
+        assignment_data.retailer_id,
+        assignment_data.price_list_id,
+    )
+    return assignment
+
+@app.get("/api/price-lists/resolve")
+async def resolve_price_for_sale(
+    retailer_id: str,
+    product_id: str,
+    quantity: float = 1,
+    variant_id: Optional[str] = None,
+    uom: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    if not hasattr(db, "resolve_price"):
+        raise HTTPException(status_code=400, detail="Price resolution feature not available")
+    return db.resolve_price(retailer_id, product_id, variant_id, quantity, uom)
+
+# ERP upgrade endpoints: reorder
+@app.get("/api/reorder-policies", response_model=List[ReorderPolicy])
+async def get_reorder_policies(current_user: dict = Depends(get_current_user)):
+    rows = db.get_reorder_policies() if hasattr(db, "get_reorder_policies") else []
+    return [ReorderPolicy(**row) for row in rows]
+
+@app.post("/api/reorder-policies", response_model=ReorderPolicy)
+async def upsert_reorder_policy(policy_data: ReorderPolicyCreate, current_user: dict = Depends(get_current_user)):
+    if not hasattr(db, "upsert_reorder_policy"):
+        raise HTTPException(status_code=400, detail="Reorder policy feature not available")
+    row = db.upsert_reorder_policy(policy_data.model_dump())
+    return ReorderPolicy(**row)
+
+@app.post("/api/reorder-suggestions/generate", response_model=List[ReorderSuggestion])
+async def generate_reorder_suggestions(current_user: dict = Depends(get_current_user)):
+    if not hasattr(db, "generate_reorder_suggestions"):
+        raise HTTPException(status_code=400, detail="Reorder suggestion feature not available")
+    rows = db.generate_reorder_suggestions()
+    return [ReorderSuggestion(**row) for row in rows]
+
+@app.get("/api/reorder-suggestions", response_model=List[ReorderSuggestion])
+async def get_reorder_suggestions(current_user: dict = Depends(get_current_user)):
+    rows = db.get_reorder_suggestions() if hasattr(db, "get_reorder_suggestions") else []
+    return [ReorderSuggestion(**row) for row in rows]
+
+# ERP upgrade endpoints: AR aging + credit
+@app.get("/api/receivables/aging", response_model=List[ReceivableAgingRow])
+async def get_receivables_aging(current_user: dict = Depends(get_current_user)):
+    rows = db.get_receivable_aging() if hasattr(db, "get_receivable_aging") else []
+    return [ReceivableAgingRow(**row) for row in rows]
+
+@app.get("/api/credit/check", response_model=CreditCheckResponse)
+async def check_credit(
+    retailer_id: str,
+    new_order_amount: float,
+    current_user: dict = Depends(get_current_user),
+):
+    if not hasattr(db, "check_credit_limit"):
+        raise HTTPException(status_code=400, detail="Credit check feature not available")
+    result = db.check_credit_limit(retailer_id, new_order_amount)
+    return CreditCheckResponse(**result)
+
+# ERP upgrade endpoints: margin report
+@app.get("/api/reports/margins", response_model=MarginReportSummary)
+async def get_margin_report(
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    if not hasattr(db, "get_margin_report"):
+        raise HTTPException(status_code=400, detail="Margin report feature not available")
+    return MarginReportSummary(**db.get_margin_report(from_date=from_date, to_date=to_date))
 
 # SMS Notification endpoints
 sms_service = SmsService()

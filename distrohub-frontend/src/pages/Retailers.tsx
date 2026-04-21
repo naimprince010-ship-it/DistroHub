@@ -6,8 +6,6 @@ import {
   Plus,
   Edit,
   Trash2,
-  Phone,
-  MapPin,
   CreditCard,
   User,
   Filter,
@@ -15,8 +13,6 @@ import {
   Search,
   RefreshCw,
   AlertTriangle,
-  LayoutGrid,
-  Table2,
   Download,
 } from 'lucide-react';
 import api, { deleteWithOfflineQueue, postWithOfflineQueue, putWithOfflineQueue } from '@/lib/api';
@@ -41,6 +37,8 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { buttonVariants } from '@/components/ui/button';
+import { useTableControls } from '@/hooks/useTableControls';
+import { PaginationControls } from '@/components/ui/pagination-controls';
 
 interface Retailer {
   id: string;
@@ -62,8 +60,6 @@ interface MarketRoute {
   market_day?: string | null;
   notes?: string | null;
 }
-
-const RETAILERS_VIEW_KEY = 'distrohub-retailers-view';
 
 function escapeCsvCell(value: string): string {
   if (/[",\n\r]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
@@ -99,13 +95,6 @@ function downloadRetailersCsv(
   URL.revokeObjectURL(url);
 }
 
-function initialsFromShop(name: string): string {
-  const w = name.trim().split(/\s+/).filter(Boolean);
-  if (w.length === 0) return '?';
-  if (w.length === 1) return w[0].slice(0, 2).toUpperCase();
-  return (w[0][0] + w[w.length - 1][0]).toUpperCase();
-}
-
 export function Retailers() {
   const { t, language } = useLanguage();
   const locale = language === 'bn' ? 'bn-BD' : 'en-GB';
@@ -120,19 +109,8 @@ export function Retailers() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingRetailer, setEditingRetailer] = useState<Retailer | null>(null);
   const [marketRoutes, setMarketRoutes] = useState<MarketRoute[]>([]);
-  const [viewMode, setViewMode] = useState<'cards' | 'table'>(() => {
-    try {
-      return localStorage.getItem(RETAILERS_VIEW_KEY) === 'table' ? 'table' : 'cards';
-    } catch {
-      return 'cards';
-    }
-  });
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
-
-  useEffect(() => {
-    try { localStorage.setItem(RETAILERS_VIEW_KEY, viewMode); } catch { /* ignore */ }
-  }, [viewMode]);
 
   const formatMoney = useCallback(
     (n: number) => `৳\u00A0${(n ?? 0).toLocaleString(locale)}`,
@@ -268,6 +246,11 @@ export function Retailers() {
     });
   }, [retailers, searchTerm, areaFilter, dueFilter]);
 
+  const retailersTable = useTableControls(filteredRetailers, {
+    initialSortKey: 'shop_name',
+    pageSize: 10,
+  });
+
   const handleExportCsv = useCallback(() => {
     const headers: [string, keyof Retailer][] = [
       [t('retailers.csv_col_shop'), 'shop_name'],
@@ -321,7 +304,26 @@ export function Retailers() {
   const totalCredit = retailers.reduce((sum, r) => sum + r.credit_limit, 0);
 
   return (
-    <PageShell title={t('retailers.title')} subtitle={t('retailers.subtitle')}>
+    <PageShell
+      title={t('retailers.title')}
+      subtitle={t('retailers.subtitle')}
+      actions={
+        <>
+          <button type="button" onClick={handleExportCsv} disabled={loading || filteredRetailers.length === 0} className="btn-secondary inline-flex h-9 shrink-0 items-center gap-2 px-3 disabled:opacity-50">
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">{t('retailers.export_csv')}</span>
+          </button>
+          <button type="button" onClick={() => fetchRetailers(true)} disabled={refreshing || loading} className="btn-secondary inline-flex h-9 shrink-0 items-center gap-2 px-3 disabled:opacity-50">
+            <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
+            <span className="hidden sm:inline">{t('retailers.refresh')}</span>
+          </button>
+          <button type="button" onClick={() => setShowAddModal(true)} className="btn-primary inline-flex h-9 shrink-0 items-center gap-2 px-4 font-medium">
+            <Plus className="h-4 w-4" />
+            {t('retailers.add')}
+          </button>
+        </>
+      }
+    >
       <div className="space-y-4">
         {loadError && (
           <div
@@ -351,42 +353,7 @@ export function Retailers() {
 
         {/* Toolbar */}
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-          <div className="border-b border-border bg-muted/30 px-4 py-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{t('retailers.filter_section')}</h2>
-          </div>
-
-          {/* Mobile search */}
-          <div className="p-4 border-b border-border sm:hidden">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <input
-                type="search"
-                value={searchTerm}
-                onChange={(e) => updateSearchQuery(e.target.value)}
-                placeholder={t('retailers.search_mobile')}
-                className="input-field h-10 w-full pl-10"
-                autoComplete="off"
-              />
-            </div>
-          </div>
-
-          {searchTerm ? (
-            <div className="px-4 py-2 border-b border-border flex flex-wrap items-center gap-2">
-              <span className="text-xs font-medium text-muted-foreground">{t('retailers.search_chip_label')}:</span>
-              <div className="inline-flex max-w-full items-center gap-1 rounded-full border border-[hsl(var(--primary))]/25 bg-[hsl(var(--primary))]/10 px-2.5 py-1 text-sm text-foreground">
-                <span className="max-w-[min(100%,220px)] truncate font-medium">{searchTerm}</span>
-                <button
-                  type="button"
-                  onClick={() => updateSearchQuery('')}
-                  className="rounded-full p-0.5 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="flex flex-col gap-3 border-b border-border bg-muted/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="border-b border-border bg-muted/20 px-4 py-2.5">
             <div>
               <p className="text-xs text-muted-foreground">
                 <span className="font-medium text-foreground">{filteredRetailers.length}</span>
@@ -394,52 +361,29 @@ export function Retailers() {
                 <span>{retailers.length}</span>
               </p>
             </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              {/* View mode toggle */}
-              <div className="inline-flex shrink-0 rounded-lg border border-border bg-card p-0.5" role="group">
-                <button
-                  type="button"
-                  onClick={() => setViewMode('cards')}
-                  className={cn(
-                    'inline-flex items-center gap-1 rounded-md px-2.5 py-2 text-sm font-medium transition-colors',
-                    viewMode === 'cards' ? 'bg-[hsl(var(--primary))] text-white shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                  )}
-                >
-                  <LayoutGrid className="h-4 w-4" />
-                  <span className="hidden sm:inline">{t('retailers.view_cards')}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setViewMode('table')}
-                  className={cn(
-                    'inline-flex items-center gap-1 rounded-md px-2.5 py-2 text-sm font-medium transition-colors',
-                    viewMode === 'table' ? 'bg-[hsl(var(--primary))] text-white shadow-sm' : 'text-muted-foreground hover:text-foreground hover:bg-muted'
-                  )}
-                >
-                  <Table2 className="h-4 w-4" />
-                  <span className="hidden sm:inline">{t('retailers.view_table')}</span>
-                </button>
-              </div>
-
-              <button type="button" onClick={handleExportCsv} disabled={loading || filteredRetailers.length === 0} className="btn-secondary inline-flex h-9 shrink-0 items-center gap-2 px-3 disabled:opacity-50">
-                <Download className="h-4 w-4" />
-                <span className="hidden sm:inline">{t('retailers.export_csv')}</span>
-              </button>
-              <button type="button" onClick={() => fetchRetailers(true)} disabled={refreshing || loading} className="btn-secondary inline-flex h-9 shrink-0 items-center gap-2 px-3 disabled:opacity-50">
-                <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
-                <span className="hidden sm:inline">{t('retailers.refresh')}</span>
-              </button>
-              <button type="button" onClick={() => setShowAddModal(true)} className="btn-primary inline-flex h-9 shrink-0 items-center gap-2 px-4 font-medium">
-                <Plus className="h-4 w-4" />
-                {t('retailers.add')}
-              </button>
-            </div>
           </div>
 
           {/* Filters */}
           <div className="p-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-12 xl:items-end">
-              <div className="min-w-0 xl:col-span-5">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-12 xl:items-end">
+              <div className="min-w-0 md:col-span-2 xl:col-span-4">
+                <label className="mb-1.5 block text-xs font-medium text-muted-foreground" htmlFor="retailer-search">
+                  {t('retailers.search_chip_label')}
+                </label>
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <input
+                    id="retailer-search"
+                    type="search"
+                    value={searchTerm}
+                    onChange={(e) => updateSearchQuery(e.target.value)}
+                    placeholder={t('retailers.search_mobile')}
+                    className="input-field h-10 w-full pl-10"
+                    autoComplete="off"
+                  />
+                </div>
+              </div>
+              <div className="min-w-0 xl:col-span-3">
                 <label className="mb-1.5 block text-xs font-medium text-muted-foreground" htmlFor="retailer-area">{t('retailers.filter_area_all')}</label>
                 <div className="relative">
                   <Filter className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -449,7 +393,7 @@ export function Retailers() {
                   </select>
                 </div>
               </div>
-              <div className="min-w-0 xl:col-span-5">
+              <div className="min-w-0 xl:col-span-3">
                 <label className="mb-1.5 block text-xs font-medium text-muted-foreground" htmlFor="retailer-due">{t('retailers.filter_due_all')}</label>
                 <select id="retailer-due" value={dueFilter} onChange={(e) => setDueFilter(e.target.value)} className="input-field h-10 w-full appearance-none pr-8">
                   <option value="all">{t('retailers.filter_due_all')}</option>
@@ -473,11 +417,9 @@ export function Retailers() {
               </div>
             </div>
           </div>
-        </div>
-
-        {/* List: cards or table */}
-        {loading ? (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {/* List: table */}
+          {loading ? (
+          <div className="grid grid-cols-1 gap-3 border-t border-border p-4 md:grid-cols-2 lg:grid-cols-3">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div key={i} className="rounded-xl border border-border bg-card p-4 shadow-sm">
                 <Skeleton className="mb-3 h-5 w-3/4" />
@@ -487,22 +429,32 @@ export function Retailers() {
               </div>
             ))}
           </div>
-        ) : viewMode === 'table' ? (
-          <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
+          ) : (
+          <div className="overflow-x-auto border-t border-border">
             <table className="w-full min-w-[800px] text-left text-sm">
               <thead className="bg-muted/40 border-b border-border">
                 <tr>
-                  <th className="whitespace-nowrap px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t('retailers.csv_col_shop')}</th>
-                  <th className="whitespace-nowrap px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t('retailers.csv_col_owner')}</th>
-                  <th className="whitespace-nowrap px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t('retailers.csv_col_phone')}</th>
-                  <th className="whitespace-nowrap px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t('retailers.csv_col_area')}</th>
-                  <th className="whitespace-nowrap px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t('retailers.credit_limit')}</th>
-                  <th className="whitespace-nowrap px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t('retailers.current_due')}</th>
+                  <th className="whitespace-nowrap px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <button type="button" onClick={() => retailersTable.toggleSort('shop_name')} className="inline-flex items-center gap-1">
+                      {t('retailers.csv_col_shop')}
+                      <span className="text-[10px]">{retailersTable.sortKey === 'shop_name' ? (retailersTable.sortDirection === 'asc' ? '▲' : '▼') : '↕'}</span>
+                    </button>
+                  </th>
+                  <th className="hidden whitespace-nowrap px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground md:table-cell">{t('retailers.csv_col_owner')}</th>
+                  <th className="hidden whitespace-nowrap px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground md:table-cell">{t('retailers.csv_col_phone')}</th>
+                  <th className="hidden whitespace-nowrap px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground lg:table-cell">{t('retailers.csv_col_area')}</th>
+                  <th className="hidden whitespace-nowrap px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground md:table-cell">{t('retailers.credit_limit')}</th>
+                  <th className="whitespace-nowrap px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <button type="button" onClick={() => retailersTable.toggleSort('current_due')} className="ml-auto inline-flex items-center gap-1">
+                      {t('retailers.current_due')}
+                      <span className="text-[10px]">{retailersTable.sortKey === 'current_due' ? (retailersTable.sortDirection === 'asc' ? '▲' : '▼') : '↕'}</span>
+                    </button>
+                  </th>
                   <th className="whitespace-nowrap px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t('retailers.table_col_actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {filteredRetailers.map((retailer) => {
+                {retailersTable.paginatedRows.map((retailer) => {
                   const cl = retailer.credit_limit;
                   const due = retailer.current_due;
                   const overLimit = cl > 0 && due > cl;
@@ -510,14 +462,14 @@ export function Retailers() {
                   return (
                     <tr key={retailer.id} className="hover:bg-muted/30 transition-colors">
                       <td className="max-w-[140px] truncate px-3 py-2.5 font-medium text-foreground">{retailer.shop_name}</td>
-                      <td className="max-w-[120px] truncate px-3 py-2.5 text-muted-foreground">{retailer.name}</td>
-                      <td className="px-3 py-2.5">
+                      <td className="hidden max-w-[120px] truncate px-3 py-2.5 text-muted-foreground md:table-cell">{retailer.name}</td>
+                      <td className="hidden px-3 py-2.5 md:table-cell">
                         <a href={telHref(retailer.phone)} className="text-[hsl(var(--primary))] hover:underline" onClick={(e) => { if (telHref(retailer.phone) === '#') e.preventDefault(); }}>
                           {retailer.phone}
                         </a>
                       </td>
-                      <td className="max-w-[100px] truncate px-3 py-2.5 text-muted-foreground">{retailer.area || '—'}</td>
-                      <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">{formatMoney(cl)}</td>
+                      <td className="hidden max-w-[100px] truncate px-3 py-2.5 text-muted-foreground lg:table-cell">{retailer.area || '—'}</td>
+                      <td className="hidden px-3 py-2.5 text-right font-mono text-muted-foreground md:table-cell">{formatMoney(cl)}</td>
                       <td className="px-3 py-2.5 text-right">
                         <span className={cn(
                           'font-mono font-medium',
@@ -542,99 +494,15 @@ export function Retailers() {
                 })}
               </tbody>
             </table>
+            <PaginationControls
+              page={retailersTable.page}
+              totalPages={retailersTable.totalPages}
+              totalRows={retailersTable.totalRows}
+              onPageChange={retailersTable.setPage}
+            />
           </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {filteredRetailers.map((retailer) => {
-              const cl = retailer.credit_limit;
-              const due = retailer.current_due;
-              const overLimit = cl > 0 && due > cl;
-              const nearLimit = cl > 0 && !overLimit && due >= cl * 0.8;
-              return (
-                <article key={retailer.id} className="flex flex-col rounded-xl border border-border bg-card p-3.5 shadow-sm transition-shadow hover:shadow-md">
-                  <div className="mb-3 flex items-start justify-between gap-2">
-                    <div className="flex min-w-0 gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[hsl(var(--primary))]/10 text-sm font-semibold text-[hsl(var(--primary))] ring-1 ring-[hsl(var(--primary))]/20">
-                        {initialsFromShop(retailer.shop_name)}
-                      </div>
-                      <div className="min-w-0">
-                        <h3 className="truncate text-base font-semibold leading-snug text-foreground">{retailer.shop_name}</h3>
-                        <p className="truncate text-sm text-muted-foreground">{retailer.name}</p>
-                      </div>
-                    </div>
-                    <div className="flex shrink-0 gap-0.5">
-                      <button type="button" onClick={() => setEditingRetailer(retailer)} className="rounded p-2 text-muted-foreground hover:bg-[hsl(var(--primary))]/10 hover:text-[hsl(var(--primary))] transition-colors">
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      <button type="button" onClick={() => setDeleteId(retailer.id)} className="rounded p-2 text-muted-foreground hover:bg-[hsl(var(--dh-red))]/10 hover:text-[hsl(var(--dh-red))] transition-colors">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="mb-2.5 space-y-1.5 text-sm text-muted-foreground">
-                    <div className="flex items-start gap-2">
-                      <Phone className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground/60" />
-                      <a href={telHref(retailer.phone)} className="break-all text-[hsl(var(--primary))] hover:underline" onClick={(e) => { if (telHref(retailer.phone) === '#') e.preventDefault(); }}>
-                        {retailer.phone}
-                      </a>
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground/60" />
-                      <span className="line-clamp-2">{retailer.address || '—'}</span>
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {retailer.area ? <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{retailer.area}</span> : null}
-                      {retailer.district && retailer.district !== 'N/A' ? <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{retailer.district}</span> : null}
-                    </div>
-                  </div>
-
-                  <div className="mt-auto flex justify-between border-t border-border pt-2.5">
-                    <div>
-                      <p className="text-xs text-muted-foreground">{t('retailers.credit_limit')}</p>
-                      <p className="font-mono font-semibold text-foreground">{formatMoney(retailer.credit_limit)}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground">{t('retailers.current_due')}</p>
-                      <p className={cn(
-                        'font-mono font-semibold',
-                        overLimit && 'text-[hsl(var(--dh-red))]',
-                        !overLimit && nearLimit && 'text-[hsl(var(--dh-amber))]',
-                        !overLimit && !nearLimit && due > 0 && 'text-[hsl(var(--dh-red))]',
-                        !overLimit && !nearLimit && due === 0 && 'text-[hsl(var(--dh-green))]'
-                      )}>
-                        {formatMoney(due)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {overLimit && (
-                    <div className="mt-2 rounded-lg bg-[hsl(var(--dh-red))]/5 border border-[hsl(var(--dh-red))]/20 px-2 py-1.5 text-center text-xs font-medium text-[hsl(var(--dh-red))]">
-                      {t('retailers.over_limit_banner')}
-                    </div>
-                  )}
-                  {!overLimit && nearLimit && (
-                    <div className="mt-2 rounded-lg bg-[hsl(var(--dh-amber))]/5 border border-[hsl(var(--dh-amber))]/20 px-2 py-1.5 text-center text-xs font-medium text-[hsl(var(--dh-amber))]">
-                      {t('retailers.near_limit_banner')}
-                    </div>
-                  )}
-                </article>
-              );
-            })}
-            {filteredRetailers.length > 0 ? (
-              <button
-                type="button"
-                onClick={() => setShowAddModal(true)}
-                className="flex min-h-[220px] flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-muted/20 p-4 text-center text-muted-foreground transition-colors hover:border-[hsl(var(--primary))]/35 hover:bg-[hsl(var(--primary))]/5 hover:text-foreground"
-              >
-                <span className="flex h-12 w-12 items-center justify-center rounded-full bg-card text-[hsl(var(--primary))] shadow-sm ring-1 ring-border">
-                  <Plus className="h-6 w-6" />
-                </span>
-                <span className="text-sm font-medium">{t('retailers.add_new_card')}</span>
-              </button>
-            ) : null}
-          </div>
-        )}
+          )}
+        </div>
 
         {!loading && filteredRetailers.length === 0 && (
           <div className="rounded-xl border border-dashed border-border bg-card px-6 py-12 text-center">

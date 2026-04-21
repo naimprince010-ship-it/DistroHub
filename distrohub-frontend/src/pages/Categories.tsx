@@ -1,17 +1,18 @@
 import { useState, useEffect, useMemo } from 'react';
 import { PageShell } from '@/components/layout/PageShell';
 import {
-  Tags,
   Plus,
   Edit,
   Trash2,
-  Search,
   X,
   AlertTriangle,
 } from 'lucide-react';
 import api from '@/lib/api';
 import { logger } from '@/lib/logger';
 import { useLanguage } from '@/contexts/LanguageContext';
+import { toast } from '@/hooks/use-toast';
+import { useTableControls } from '@/hooks/useTableControls';
+import { PaginationControls } from '@/components/ui/pagination-controls';
 
 interface Category {
   id: string;
@@ -32,6 +33,7 @@ export function Categories() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [formData, setFormData] = useState({ name: '', description: '', color: '#4F46E5' });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     logger.log('[Categories] Component mounted, fetching categories...');
@@ -41,6 +43,7 @@ export function Categories() {
   const fetchCategories = async () => {
     try {
       setLoading(true);
+      setLoadError(null);
       logger.log('[Categories] Fetching categories from API...');
       const response = await api.get('/api/categories');
       logger.log('[Categories] Categories fetched successfully:', response.data);
@@ -48,12 +51,17 @@ export function Categories() {
     } catch (error: any) {
       console.error('[Categories] Failed to fetch categories:', error);
       if (error.isTimeout || error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
-        alert(t('dashboard.error_cold_start'));
+        toast({ title: t('settings.load_failed'), description: t('dashboard.error_cold_start'), variant: 'destructive' });
       } else if (error.isNetworkError || error.code === 'ERR_NETWORK') {
-        alert(t('dashboard.error_network'));
+        toast({ title: t('settings.load_failed'), description: t('dashboard.error_network'), variant: 'destructive' });
       } else {
-        alert(`${t('settings.load_failed')}: ${error.response?.data?.detail || error.message || ''}`);
+        toast({
+          title: t('settings.load_failed'),
+          description: error.response?.data?.detail || error.message || '',
+          variant: 'destructive',
+        });
       }
+      setLoadError(t('settings.load_failed'));
     } finally {
       setLoading(false);
     }
@@ -66,11 +74,16 @@ export function Categories() {
     );
   }, [categories, searchTerm]);
 
+  const categoriesTable = useTableControls(filteredCategories, {
+    initialSortKey: 'name',
+    pageSize: 10,
+  });
+
   const handleSubmit = async () => {
     if (isSubmitting) return;
 
     if (!formData.name || !formData.name.trim()) {
-      alert(t('settings.required_category_name'));
+      toast({ title: t('settings.required_category_name'), variant: 'destructive' });
       return;
     }
 
@@ -105,7 +118,11 @@ export function Categories() {
       } else if (error?.message) {
         errorMessage = error.message;
       }
-      alert(`${t('settings.save_failed')}: ${errorMessage}`);
+      toast({
+        title: t('settings.save_failed'),
+        description: errorMessage,
+        variant: 'destructive',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -135,16 +152,21 @@ export function Categories() {
     <PageShell title={t('settings.category_title')} subtitle="Manage your product categories">
       <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
         <div className="p-4 md:p-6">
+          {loadError ? (
+            <div className="mb-4 flex items-center justify-between rounded-lg border border-[hsl(var(--dh-red))]/30 bg-[hsl(var(--dh-red))]/5 px-3 py-2 text-sm text-[hsl(var(--dh-red))]">
+              <span>{loadError}</span>
+              <button type="button" onClick={() => void fetchCategories()} className="btn-secondary h-8 px-3 text-xs">Retry</button>
+            </div>
+          ) : null}
           {/* Header */}
           <div className="flex items-center justify-between mb-5">
-            <div className="relative max-w-sm w-full">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <div className="max-w-sm w-full">
               <input
                 type="text"
                 placeholder={t('settings.category_search_ph')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="input-field pl-10"
+                className="input-field"
               />
             </div>
             <button
@@ -165,47 +187,81 @@ export function Categories() {
             <div className="text-center py-12 text-muted-foreground">{t('settings.category_loading')}</div>
           ) : (
             <>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                {filteredCategories.map((category) => (
-                  <div
-                    key={category.id}
-                    className="bg-muted/40 rounded-lg p-4 hover:shadow-md transition-shadow border border-border"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-3">
-                        <div
-                          className="w-10 h-10 rounded-lg flex items-center justify-center"
-                          style={{ backgroundColor: `${category.color}20` }}
-                        >
-                          <Tags className="w-5 h-5" style={{ color: category.color }} />
-                        </div>
-                        <div>
-                          <h4 className="font-medium text-foreground">{category.name}</h4>
-                          <p className="text-xs text-muted-foreground">
-                            {category.product_count} {t('settings.products_suffix')}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => handleEdit(category)}
-                          className="p-1.5 hover:bg-accent rounded text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          <Edit className="w-4 h-4" />
+              <div className="overflow-x-auto rounded-lg border border-border">
+                <table className="w-full min-w-[780px] text-sm">
+                  <thead className="bg-muted/40 border-b border-border">
+                    <tr>
+                      <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">#</th>
+                      <th className="px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        <button type="button" onClick={() => categoriesTable.toggleSort('name')} className="inline-flex items-center gap-1">
+                          Category
+                          <span className="text-[10px]">{categoriesTable.sortKey === 'name' ? (categoriesTable.sortDirection === 'asc' ? '▲' : '▼') : '↕'}</span>
                         </button>
-                        <button
-                          onClick={() => setDeleteConfirm(category.id)}
-                          className="p-1.5 hover:bg-red-100 rounded text-muted-foreground hover:text-red-500 transition-colors"
-                        >
-                          <Trash2 className="w-4 h-4" />
+                      </th>
+                      <th className="hidden px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground lg:table-cell">Description</th>
+                      <th className="px-3 py-2.5 text-right text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                        <button type="button" onClick={() => categoriesTable.toggleSort('product_count')} className="ml-auto inline-flex items-center gap-1">
+                          Products
+                          <span className="text-[10px]">{categoriesTable.sortKey === 'product_count' ? (categoriesTable.sortDirection === 'asc' ? '▲' : '▼') : '↕'}</span>
                         </button>
-                      </div>
-                    </div>
-                    {category.description && (
-                      <p className="text-sm text-muted-foreground mt-2">{category.description}</p>
-                    )}
-                  </div>
-                ))}
+                      </th>
+                      <th className="hidden px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground md:table-cell">Created</th>
+                      <th className="px-3 py-2.5 text-center text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/70">
+                    {categoriesTable.paginatedRows.map((category, idx) => (
+                      <tr key={category.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="px-3 py-2.5 text-xs text-muted-foreground">{(categoriesTable.page - 1) * categoriesTable.pageSize + idx + 1}</td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="h-3 w-3 rounded-full border border-black/10"
+                              style={{ backgroundColor: category.color }}
+                              aria-hidden
+                            />
+                            <span className="font-medium text-foreground">{category.name}</span>
+                          </div>
+                        </td>
+                        <td className="hidden px-3 py-2.5 text-muted-foreground lg:table-cell">
+                          {category.description || <span className="text-xs text-muted-foreground/60">No description</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-right font-mono text-foreground">
+                          {category.product_count}
+                        </td>
+                        <td className="hidden px-3 py-2.5 text-muted-foreground md:table-cell">
+                          {new Date(category.created_at).toLocaleDateString('en-BD')}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center justify-center gap-1">
+                            <button
+                              onClick={() => handleEdit(category)}
+                              className="p-1.5 hover:bg-accent rounded text-muted-foreground hover:text-foreground transition-colors"
+                              title="Edit category"
+                              aria-label="Edit category"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => setDeleteConfirm(category.id)}
+                              className="p-1.5 hover:bg-red-100 rounded text-muted-foreground hover:text-red-500 transition-colors"
+                              title="Delete category"
+                              aria-label="Delete category"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <PaginationControls
+                  page={categoriesTable.page}
+                  totalPages={categoriesTable.totalPages}
+                  totalRows={categoriesTable.totalRows}
+                  onPageChange={categoriesTable.setPage}
+                />
               </div>
 
               {filteredCategories.length === 0 && !loading && (
@@ -233,6 +289,7 @@ export function Categories() {
                   setFormData({ name: '', description: '', color: '#4F46E5' });
                 }}
                 className="p-1 hover:bg-accent rounded transition-colors"
+                aria-label="Close category modal"
               >
                 <X className="w-5 h-5" />
               </button>

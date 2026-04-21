@@ -670,6 +670,9 @@ class SupabaseDatabase:
             "notes": data.get("notes"),
             "assigned_to": data.get("assigned_to"),
             "assigned_to_name": assigned_to_name,
+            "terms_days": int(data.get("terms_days", 0) or 0),
+            "due_date": data.get("due_date"),
+            "credit_status": "open" if due_amount > 0 else "settled",
             "created_at": datetime.now().isoformat()
         }
         
@@ -736,10 +739,19 @@ class SupabaseDatabase:
                 "product_id": item["product_id"],
                 "product_name": product["name"],
                 "batch_number": batch["batch_number"],
+                "batch_id": item.get("batch_id"),
                 "quantity": item["quantity"],
                 "unit_price": item["unit_price"],
                 "discount": validated["item_discount"],
-                "total": validated["item_total"]
+                "total": validated["item_total"],
+                "variant_id": item.get("variant_id"),
+                "uom": item.get("uom"),
+                "uom_quantity": item.get("uom_quantity"),
+                "price_list_id": item.get("price_list_id"),
+                "base_price": item.get("base_price", item.get("unit_price")),
+                "resolved_price": item.get("resolved_price", item.get("unit_price")),
+                "discount_applied": validated["item_discount"],
+                "price_source": item.get("price_source", "manual"),
             }
             try:
                 item_result = self.client.table("sale_items").insert(sale_item_data).execute()
@@ -750,6 +762,24 @@ class SupabaseDatabase:
                 sale_item = item_result.data[0]
                 sale_item["batch_id"] = item.get("batch_id")
                 sale_items.append(sale_item)
+                cost_unit = float(batch.get("purchase_price", product.get("purchase_price", 0)) or 0)
+                quantity = int(item.get("quantity", 0) or 0)
+                cogs_total = cost_unit * quantity
+                net_sales = float(validated["item_total"] or 0)
+                margin_amount = net_sales - cogs_total
+                margin_percent = (margin_amount / net_sales * 100) if net_sales > 0 else 0
+                if hasattr(self, "record_sale_item_cost_snapshot"):
+                    self.record_sale_item_cost_snapshot({
+                        "sale_item_id": sale_item.get("id"),
+                        "product_id": item.get("product_id"),
+                        "batch_id": item.get("batch_id"),
+                        "cost_method": "moving_avg",
+                        "cogs_unit": cost_unit,
+                        "cogs_total": cogs_total,
+                        "margin_amount": margin_amount,
+                        "margin_percent": margin_percent,
+                        "created_at": datetime.now().isoformat(),
+                    })
             except Exception as e:
                 error_msg = str(e)
                 error_type = type(e).__name__
@@ -760,6 +790,17 @@ class SupabaseDatabase:
                 raise ValueError(f"Failed to create sale_item for product {item['product_id']}: {error_type}: {error_msg}")
         
         sale["items"] = sale_items
+        if due_amount > 0:
+            self.add_receivable_ledger_entry({
+                "retailer_id": data["retailer_id"],
+                "sale_id": actual_sale_id,
+                "entry_type": "sale",
+                "amount": due_amount,
+                "reference_type": "sale",
+                "reference_id": actual_sale_id,
+                "remarks": "sale_due_created",
+                "created_at": datetime.now().isoformat(),
+            })
         return sale
     
     def get_sale(self, sale_id: str) -> Optional[dict]:
@@ -1461,6 +1502,16 @@ class SupabaseDatabase:
             if refund_type == "adjust_due":
                 retailer_id = sale.get("retailer_id")
                 self.update_retailer_due(retailer_id, -total_return_amount)
+                self.add_receivable_ledger_entry({
+                    "retailer_id": retailer_id,
+                    "sale_id": sale_id,
+                    "entry_type": "sale_return",
+                    "amount": -float(total_return_amount or 0),
+                    "reference_type": "sales_return",
+                    "reference_id": return_id,
+                    "remarks": "sale_return_adjust_due",
+                    "created_at": datetime.now().isoformat(),
+                })
             
             # CRITICAL: Recalculate original sale payment status after return
             # This ensures invoice reflects actual delivered amount and payment status
@@ -1672,6 +1723,17 @@ class SupabaseDatabase:
         
         # #region agent log
         inserted_payment = result.data[0] if result.data else payment_data
+        self.add_receivable_ledger_entry({
+            "retailer_id": data["retailer_id"],
+            "sale_id": data.get("sale_id"),
+            "payment_id": inserted_payment.get("id"),
+            "entry_type": "payment",
+            "amount": -float(data.get("amount", 0) or 0),
+            "reference_type": "payment",
+            "reference_id": inserted_payment.get("id"),
+            "remarks": "payment_collected",
+            "created_at": datetime.now().isoformat(),
+        })
         log_data = {
             "location": "supabase_db.py:create_payment:after_insert",
             "message": "Payment created",
@@ -2464,6 +2526,285 @@ class SupabaseDatabase:
     def delete_unit(self, unit_id: str) -> bool:
         self.client.table("units").delete().eq("id", unit_id).execute()
         return True
+
+    # ERP upgrade: variants + UOM
+    def get_product_templates(self) -> List[dict]:
+        result = self.client.table("product_templates").select("*").order("created_at", desc=True).execute()
+        return result.data or []
+
+    def create_product_template(self, data: dict) -> dict:
+        result = self.client.table("product_templates").insert(data).execute()
+        return result.data[0] if result.data else data
+
+    def get_product_variants(self, template_id: Optional[str] = None, product_id: Optional[str] = None) -> List[dict]:
+        query = self.client.table("product_variants").select("*")
+        if template_id:
+            query = query.eq("template_id", template_id)
+        if product_id:
+            query = query.eq("product_id", product_id)
+        result = query.order("created_at", desc=True).execute()
+        return result.data or []
+
+    def create_product_variant(self, data: dict) -> dict:
+        result = self.client.table("product_variants").insert(data).execute()
+        return result.data[0] if result.data else data
+
+    def get_uom_conversions(self, product_id: Optional[str] = None) -> List[dict]:
+        query = self.client.table("uom_conversions").select("*")
+        if product_id:
+            query = query.eq("product_id", product_id)
+        result = query.order("created_at", desc=True).execute()
+        return result.data or []
+
+    def upsert_uom_conversion(self, data: dict) -> dict:
+        existing = self.client.table("uom_conversions").select("*").eq("product_id", data["product_id"]).eq("from_uom", data["from_uom"]).eq("to_uom", data["to_uom"]).limit(1).execute()
+        if existing.data:
+            result = self.client.table("uom_conversions").update(data).eq("id", existing.data[0]["id"]).execute()
+        else:
+            result = self.client.table("uom_conversions").insert(data).execute()
+        return result.data[0] if result.data else data
+
+    # ERP upgrade: price list
+    def get_price_lists(self) -> List[dict]:
+        result = self.client.table("price_lists").select("*").order("priority").execute()
+        return result.data or []
+
+    def create_price_list(self, data: dict) -> dict:
+        result = self.client.table("price_lists").insert(data).execute()
+        return result.data[0] if result.data else data
+
+    def get_price_list_items(self, price_list_id: Optional[str] = None) -> List[dict]:
+        query = self.client.table("price_list_items").select("*")
+        if price_list_id:
+            query = query.eq("price_list_id", price_list_id)
+        result = query.execute()
+        return result.data or []
+
+    def upsert_price_list_item(self, data: dict) -> dict:
+        query = self.client.table("price_list_items").select("*").eq("price_list_id", data["price_list_id"]).eq("product_id", data["product_id"])
+        if data.get("variant_id"):
+            query = query.eq("variant_id", data["variant_id"])
+        if data.get("uom"):
+            query = query.eq("uom", data["uom"])
+        existing = query.limit(1).execute()
+        if existing.data:
+            result = self.client.table("price_list_items").update(data).eq("id", existing.data[0]["id"]).execute()
+        else:
+            result = self.client.table("price_list_items").insert(data).execute()
+        return result.data[0] if result.data else data
+
+    def assign_price_list_to_retailer(self, retailer_id: str, price_list_id: str) -> dict:
+        existing = self.client.table("retailer_price_list_assignments").select("*").eq("retailer_id", retailer_id).eq("price_list_id", price_list_id).limit(1).execute()
+        if existing.data:
+            return existing.data[0]
+        result = self.client.table("retailer_price_list_assignments").insert({"retailer_id": retailer_id, "price_list_id": price_list_id}).execute()
+        return result.data[0] if result.data else {"retailer_id": retailer_id, "price_list_id": price_list_id}
+
+    def resolve_price(self, retailer_id: str, product_id: str, variant_id: Optional[str], quantity: float, uom: Optional[str]) -> dict:
+        assignments = self.client.table("retailer_price_list_assignments").select("price_list_id").eq("retailer_id", retailer_id).execute().data or []
+        price_list_ids = [a.get("price_list_id") for a in assignments if a.get("price_list_id")]
+        if price_list_ids:
+            lists = self.client.table("price_lists").select("*").in_("id", price_list_ids).eq("is_active", True).order("priority").execute().data or []
+            for pl in lists:
+                items = self.client.table("price_list_items").select("*").eq("price_list_id", pl["id"]).eq("product_id", product_id).execute().data or []
+                items = [
+                    i for i in items
+                    if (not i.get("variant_id") or i.get("variant_id") == variant_id)
+                    and (not i.get("uom") or i.get("uom") == uom)
+                    and float(quantity) >= float(i.get("min_qty", 0) or 0)
+                ]
+                if items:
+                    item = sorted(items, key=lambda x: float(x.get("min_qty", 0) or 0), reverse=True)[0]
+                    base_price = float(item.get("unit_price", 0) or 0)
+                    discount_percent = float(item.get("discount_percent", 0) or 0)
+                    resolved_price = round(base_price * (1 - discount_percent / 100), 2)
+                    return {
+                        "price_list_id": pl["id"],
+                        "price_source": "price_list",
+                        "base_price": base_price,
+                        "resolved_price": resolved_price,
+                        "discount_percent": discount_percent,
+                    }
+        product = self.get_product(product_id) or {}
+        fallback = float(product.get("selling_price", 0) or 0)
+        return {
+            "price_list_id": None,
+            "price_source": "product_default",
+            "base_price": fallback,
+            "resolved_price": fallback,
+            "discount_percent": 0,
+        }
+
+    # ERP upgrade: reorder
+    def upsert_reorder_policy(self, data: dict) -> dict:
+        existing = self.client.table("reorder_policies").select("*").eq("product_id", data["product_id"]).limit(1).execute()
+        payload = {**data, "updated_at": datetime.now().isoformat()}
+        if existing.data:
+            result = self.client.table("reorder_policies").update(payload).eq("id", existing.data[0]["id"]).execute()
+        else:
+            result = self.client.table("reorder_policies").insert(payload).execute()
+        return result.data[0] if result.data else payload
+
+    def get_reorder_policies(self) -> List[dict]:
+        result = self.client.table("reorder_policies").select("*").execute()
+        return result.data or []
+
+    def generate_reorder_suggestions(self) -> List[dict]:
+        self.client.table("reorder_suggestions").delete().neq("id", "00000000-0000-0000-0000-000000000000").execute()
+        products = self.get_products()
+        policies = {p["product_id"]: p for p in self.get_reorder_policies() if p.get("product_id")}
+        created = []
+        for product in products:
+            stock = int(product.get("stock_quantity", 0) or 0)
+            reorder_level = int(product.get("reorder_level", 0) or 0)
+            policy = policies.get(product.get("id"), {})
+            min_qty = int(policy.get("min_qty", reorder_level) or reorder_level)
+            if stock >= min_qty:
+                continue
+            suggested_qty = max(min_qty - stock, int(policy.get("moq", 1) or 1))
+            payload = {
+                "product_id": product.get("id"),
+                "suggested_qty": suggested_qty,
+                "trigger_reason": "below_min_qty",
+                "stock_on_hand": stock,
+                "reorder_level": reorder_level,
+                "avg_daily_sales": 0,
+                "coverage_days": 0,
+                "created_at": datetime.now().isoformat(),
+            }
+            result = self.client.table("reorder_suggestions").insert(payload).execute()
+            if result.data:
+                row = result.data[0]
+                row["product_name"] = product.get("name")
+                created.append(row)
+        return created
+
+    def get_reorder_suggestions(self) -> List[dict]:
+        suggestions = self.client.table("reorder_suggestions").select("*").order("created_at", desc=True).execute().data or []
+        products = {p["id"]: p for p in self.get_products()}
+        for s in suggestions:
+            product = products.get(s.get("product_id"), {})
+            s["product_name"] = product.get("name")
+        return suggestions
+
+    # ERP upgrade: receivable aging + credit
+    def add_receivable_ledger_entry(self, data: dict) -> dict:
+        result = self.client.table("receivable_ledger").insert(data).execute()
+        return result.data[0] if result.data else data
+
+    def get_receivable_aging(self) -> List[dict]:
+        rows = []
+        retailers = self.get_retailers()
+        now = datetime.now().date()
+        for retailer in retailers:
+            sales = self.client.table("sales").select("id,due_amount,due_date,created_at").eq("retailer_id", retailer["id"]).execute().data or []
+            bucket = {"current": 0.0, "bucket_8_15": 0.0, "bucket_16_30": 0.0, "bucket_31_60": 0.0, "bucket_60_plus": 0.0}
+            for sale in sales:
+                due = float(sale.get("due_amount", 0) or 0)
+                if due <= 0:
+                    continue
+                due_date = sale.get("due_date")
+                days = 0
+                if due_date:
+                    try:
+                        days = (now - datetime.fromisoformat(str(due_date)).date()).days
+                    except Exception:
+                        days = 0
+                if days <= 7:
+                    bucket["current"] += due
+                elif days <= 15:
+                    bucket["bucket_8_15"] += due
+                elif days <= 30:
+                    bucket["bucket_16_30"] += due
+                elif days <= 60:
+                    bucket["bucket_31_60"] += due
+                else:
+                    bucket["bucket_60_plus"] += due
+            rows.append({
+                "retailer_id": retailer["id"],
+                "retailer_name": retailer.get("shop_name") or retailer.get("name"),
+                "total_due": sum(bucket.values()),
+                **bucket,
+            })
+        return rows
+
+    def check_credit_limit(self, retailer_id: str, new_order_amount: float) -> dict:
+        retailer = self.get_retailer(retailer_id)
+        if not retailer:
+            raise ValueError("Retailer not found")
+        credit_limit = float(retailer.get("credit_limit", 0) or 0)
+        current_due = float(retailer.get("total_due", 0) or 0)
+        projected_due = current_due + float(new_order_amount or 0)
+        over_limit_amount = max(0.0, projected_due - credit_limit)
+        can_submit = credit_limit <= 0 or projected_due <= credit_limit
+        return {
+            "retailer_id": retailer_id,
+            "retailer_name": retailer.get("shop_name") or retailer.get("name"),
+            "credit_limit": credit_limit,
+            "current_due": current_due,
+            "new_order_amount": float(new_order_amount or 0),
+            "projected_due": projected_due,
+            "over_limit_amount": over_limit_amount,
+            "enforcement_mode": "warn",
+            "can_submit": can_submit,
+            "reason": None if can_submit else "Projected due exceeds credit limit",
+        }
+
+    # ERP upgrade: margin analytics
+    def record_sale_item_cost_snapshot(self, data: dict) -> dict:
+        result = self.client.table("sale_item_cost_snapshot").insert(data).execute()
+        return result.data[0] if result.data else data
+
+    def get_margin_report(self, from_date: Optional[str] = None, to_date: Optional[str] = None) -> dict:
+        query = self.client.table("sale_item_cost_snapshot").select("*")
+        if from_date:
+            query = query.gte("created_at", from_date)
+        if to_date:
+            query = query.lte("created_at", to_date)
+        snapshots = query.execute().data or []
+        rows = []
+        total_net_sales = 0.0
+        total_cogs = 0.0
+        for snap in snapshots:
+            sale_item = {}
+            sale = {}
+            sale_item_id = snap.get("sale_item_id")
+            if sale_item_id:
+                si_res = self.client.table("sale_items").select("*").eq("id", sale_item_id).limit(1).execute()
+                if si_res.data:
+                    sale_item = si_res.data[0]
+            sale_id = sale_item.get("sale_id")
+            if sale_id:
+                s_res = self.client.table("sales").select("id,invoice_number,created_at").eq("id", sale_id).limit(1).execute()
+                if s_res.data:
+                    sale = s_res.data[0]
+            quantity = int(sale_item.get("quantity", 0) or 0)
+            net_sales = float(sale_item.get("total", 0) or 0)
+            cogs_total = float(snap.get("cogs_total", 0) or 0)
+            margin_amount = net_sales - cogs_total
+            margin_percent = (margin_amount / net_sales * 100) if net_sales > 0 else 0
+            total_net_sales += net_sales
+            total_cogs += cogs_total
+            rows.append({
+                "sale_id": sale.get("id") or sale_item.get("sale_id"),
+                "invoice_number": sale.get("invoice_number"),
+                "product_id": sale_item.get("product_id"),
+                "product_name": sale_item.get("product_name"),
+                "quantity": quantity,
+                "net_sales": net_sales,
+                "cogs_total": cogs_total,
+                "margin_amount": margin_amount,
+                "margin_percent": margin_percent,
+                "created_at": sale.get("created_at") or snap.get("created_at"),
+            })
+        total_margin = total_net_sales - total_cogs
+        return {
+            "total_net_sales": total_net_sales,
+            "total_cogs": total_cogs,
+            "total_margin": total_margin,
+            "margin_percent": (total_margin / total_net_sales * 100) if total_net_sales > 0 else 0,
+            "rows": rows,
+        }
     
     # SMS Settings methods
     def get_sms_settings(self, user_id: Optional[str] = None, role: Optional[str] = None) -> List[dict]:

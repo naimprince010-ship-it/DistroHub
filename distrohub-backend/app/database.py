@@ -30,6 +30,18 @@ class InMemoryDatabase:
         self.suppliers: Dict[str, dict] = {}
         self.units: Dict[str, dict] = {}
         self.warehouses: Dict[str, dict] = {}
+        self.product_templates: Dict[str, dict] = {}
+        self.product_variants: Dict[str, dict] = {}
+        self.uom_conversions: Dict[str, dict] = {}
+        self.price_lists: Dict[str, dict] = {}
+        self.price_list_items: Dict[str, dict] = {}
+        self.retailer_price_list_assignments: Dict[str, dict] = {}
+        self.reorder_policies: Dict[str, dict] = {}
+        self.reorder_suggestions: Dict[str, dict] = {}
+        self.receivable_ledger: List[dict] = []
+        self.credit_policies: Dict[str, dict] = {}
+        self.credit_overrides: Dict[str, dict] = {}
+        self.sale_item_cost_snapshots: Dict[str, dict] = {}
         self.sms_queue: Dict[str, dict] = {}
         self.sms_logs: List[dict] = []
         self.audit_logs: List[dict] = []
@@ -454,7 +466,14 @@ class InMemoryDatabase:
                 "quantity": item["quantity"],
                 "unit_price": item["unit_price"],
                 "discount": item_discount,
-                "total": item_total
+                "total": item_total,
+                "variant_id": item.get("variant_id"),
+                "uom": item.get("uom"),
+                "uom_quantity": item.get("uom_quantity"),
+                "price_list_id": item.get("price_list_id"),
+                "base_price": item.get("base_price", item.get("unit_price")),
+                "resolved_price": item.get("resolved_price", item.get("unit_price")),
+                "price_source": item.get("price_source", "manual")
             })
         
         total_amount = subtotal - total_discount
@@ -485,9 +504,43 @@ class InMemoryDatabase:
             "payment_status": payment_status,
             "status": OrderStatus.CONFIRMED,
             "notes": data.get("notes"),
+            "terms_days": int(data.get("terms_days", 0) or 0),
+            "due_date": data.get("due_date"),
+            "credit_status": "open" if due_amount > 0 else "settled",
             "created_at": datetime.now()
         }
         self.sales[sale_id] = sale
+        if due_amount > 0:
+            self.add_receivable_ledger_entry({
+                "retailer_id": data["retailer_id"],
+                "sale_id": sale_id,
+                "entry_type": "sale",
+                "amount": due_amount,
+                "reference_type": "sale",
+                "reference_id": sale_id,
+                "remarks": "sale_due_created",
+            })
+        for line in sale_items:
+            quantity = int(line.get("quantity", 0) or 0)
+            cogs_unit = float(self.get_product(line.get("product_id") or "").get("purchase_price", 0) if self.get_product(line.get("product_id") or "") else 0)
+            net_sales = float(line.get("total", 0) or 0)
+            cogs_total = cogs_unit * quantity
+            margin_amount = net_sales - cogs_total
+            margin_percent = (margin_amount / net_sales * 100) if net_sales > 0 else 0
+            self.record_sale_item_cost_snapshot({
+                "sale_id": sale_id,
+                "sale_item_id": line.get("id"),
+                "product_id": line.get("product_id"),
+                "product_name": line.get("product_name"),
+                "batch_id": line.get("batch_id"),
+                "quantity": quantity,
+                "cost_method": "moving_avg",
+                "cogs_unit": cogs_unit,
+                "cogs_total": cogs_total,
+                "net_sales": net_sales,
+                "margin_amount": margin_amount,
+                "margin_percent": margin_percent,
+            })
         return sale
     
     def get_payments(self, sale_id: Optional[str] = None, user_id: Optional[str] = None, route_id: Optional[str] = None, from_date: Optional[str] = None, to_date: Optional[str] = None) -> List[dict]:
@@ -538,6 +591,16 @@ class InMemoryDatabase:
             "created_at": datetime.now()
         }
         self.payments[payment_id] = payment
+        self.add_receivable_ledger_entry({
+            "retailer_id": data["retailer_id"],
+            "sale_id": data.get("sale_id"),
+            "payment_id": payment_id,
+            "entry_type": "payment",
+            "amount": -float(data.get("amount", 0) or 0),
+            "reference_type": "payment",
+            "reference_id": payment_id,
+            "remarks": "payment_collected",
+        })
         return payment
     
     def get_inventory(self) -> List[InventoryItem]:
@@ -897,6 +960,292 @@ class InMemoryDatabase:
             if qty > 0:
                 summary.append({"product_id": pid, "product_name": product["name"], "total_quantity": qty})
         return summary
+
+    # ERP upgrade: variants + UOM
+    def get_product_templates(self) -> List[dict]:
+        return list(self.product_templates.values())
+
+    def create_product_template(self, data: dict) -> dict:
+        template_id = generate_id()
+        row = {"id": template_id, **data, "created_at": datetime.now()}
+        self.product_templates[template_id] = row
+        return row
+
+    def get_product_variants(self, template_id: Optional[str] = None, product_id: Optional[str] = None) -> List[dict]:
+        variants = list(self.product_variants.values())
+        if template_id:
+            variants = [v for v in variants if v.get("template_id") == template_id]
+        if product_id:
+            variants = [v for v in variants if v.get("product_id") == product_id]
+        return variants
+
+    def create_product_variant(self, data: dict) -> dict:
+        variant_id = generate_id()
+        row = {"id": variant_id, **data, "created_at": datetime.now()}
+        self.product_variants[variant_id] = row
+        return row
+
+    def get_uom_conversions(self, product_id: Optional[str] = None) -> List[dict]:
+        rows = list(self.uom_conversions.values())
+        if product_id:
+            rows = [r for r in rows if r.get("product_id") == product_id]
+        return rows
+
+    def upsert_uom_conversion(self, data: dict) -> dict:
+        existing = next(
+            (
+                row for row in self.uom_conversions.values()
+                if row.get("product_id") == data.get("product_id")
+                and row.get("from_uom") == data.get("from_uom")
+                and row.get("to_uom") == data.get("to_uom")
+            ),
+            None,
+        )
+        if existing:
+            existing.update(data)
+            return existing
+        conversion_id = generate_id()
+        row = {"id": conversion_id, **data, "created_at": datetime.now()}
+        self.uom_conversions[conversion_id] = row
+        return row
+
+    # ERP upgrade: price list
+    def get_price_lists(self) -> List[dict]:
+        return list(self.price_lists.values())
+
+    def create_price_list(self, data: dict) -> dict:
+        price_list_id = generate_id()
+        row = {"id": price_list_id, **data, "created_at": datetime.now()}
+        self.price_lists[price_list_id] = row
+        return row
+
+    def get_price_list_items(self, price_list_id: Optional[str] = None) -> List[dict]:
+        rows = list(self.price_list_items.values())
+        if price_list_id:
+            rows = [r for r in rows if r.get("price_list_id") == price_list_id]
+        return rows
+
+    def upsert_price_list_item(self, data: dict) -> dict:
+        for item in self.price_list_items.values():
+            if (
+                item.get("price_list_id") == data.get("price_list_id")
+                and item.get("product_id") == data.get("product_id")
+                and item.get("variant_id") == data.get("variant_id")
+                and item.get("uom") == data.get("uom")
+            ):
+                item.update(data)
+                return item
+        item_id = generate_id()
+        row = {"id": item_id, **data, "created_at": datetime.now()}
+        self.price_list_items[item_id] = row
+        return row
+
+    def assign_price_list_to_retailer(self, retailer_id: str, price_list_id: str) -> dict:
+        for assignment in self.retailer_price_list_assignments.values():
+            if assignment.get("retailer_id") == retailer_id and assignment.get("price_list_id") == price_list_id:
+                return assignment
+        assignment_id = generate_id()
+        row = {
+            "id": assignment_id,
+            "retailer_id": retailer_id,
+            "price_list_id": price_list_id,
+            "created_at": datetime.now(),
+        }
+        self.retailer_price_list_assignments[assignment_id] = row
+        return row
+
+    def resolve_price(self, retailer_id: str, product_id: str, variant_id: Optional[str], quantity: float, uom: Optional[str]) -> dict:
+        assignments = [
+            a for a in self.retailer_price_list_assignments.values()
+            if a.get("retailer_id") == retailer_id
+        ]
+        price_lists = [self.price_lists.get(a.get("price_list_id")) for a in assignments]
+        price_lists = [pl for pl in price_lists if pl and pl.get("is_active", True)]
+        price_lists = sorted(price_lists, key=lambda pl: pl.get("priority", 100))
+        for pl in price_lists:
+            items = [
+                i for i in self.price_list_items.values()
+                if i.get("price_list_id") == pl.get("id")
+                and i.get("product_id") == product_id
+                and (not i.get("variant_id") or i.get("variant_id") == variant_id)
+                and (not i.get("uom") or i.get("uom") == uom)
+                and float(quantity) >= float(i.get("min_qty", 0) or 0)
+            ]
+            if items:
+                item = sorted(items, key=lambda i: float(i.get("min_qty", 0) or 0), reverse=True)[0]
+                base_price = float(item.get("unit_price", 0) or 0)
+                discount_percent = float(item.get("discount_percent", 0) or 0)
+                resolved_price = base_price * (1 - (discount_percent / 100))
+                return {
+                    "price_list_id": pl.get("id"),
+                    "price_source": "price_list",
+                    "base_price": base_price,
+                    "resolved_price": round(resolved_price, 2),
+                    "discount_percent": discount_percent,
+                }
+        product = self.get_product(product_id) or {}
+        fallback = float(product.get("selling_price", 0) or 0)
+        return {
+            "price_list_id": None,
+            "price_source": "product_default",
+            "base_price": fallback,
+            "resolved_price": fallback,
+            "discount_percent": 0,
+        }
+
+    # ERP upgrade: reorder
+    def upsert_reorder_policy(self, data: dict) -> dict:
+        product_id = data.get("product_id")
+        existing = next((p for p in self.reorder_policies.values() if p.get("product_id") == product_id), None)
+        if existing:
+            existing.update(data)
+            existing["updated_at"] = datetime.now()
+            return existing
+        policy_id = generate_id()
+        row = {"id": policy_id, **data, "created_at": datetime.now(), "updated_at": datetime.now()}
+        self.reorder_policies[policy_id] = row
+        return row
+
+    def get_reorder_policies(self) -> List[dict]:
+        return list(self.reorder_policies.values())
+
+    def generate_reorder_suggestions(self) -> List[dict]:
+        self.reorder_suggestions = {}
+        now = datetime.now()
+        for product in self.get_products():
+            stock = int(product.get("stock_quantity", 0) or 0)
+            reorder_level = int(product.get("reorder_level", 0) or 0)
+            policy = next((p for p in self.reorder_policies.values() if p.get("product_id") == product.get("id")), None) or {}
+            min_qty = int(policy.get("min_qty", reorder_level) or reorder_level)
+            if stock >= min_qty:
+                continue
+            suggested = max(min_qty - stock, int(policy.get("moq", 1) or 1))
+            rid = generate_id()
+            self.reorder_suggestions[rid] = {
+                "id": rid,
+                "product_id": product.get("id"),
+                "product_name": product.get("name"),
+                "suggested_qty": suggested,
+                "trigger_reason": "below_min_qty",
+                "stock_on_hand": stock,
+                "reorder_level": reorder_level,
+                "avg_daily_sales": 0,
+                "coverage_days": 0,
+                "created_at": now,
+            }
+        return list(self.reorder_suggestions.values())
+
+    def get_reorder_suggestions(self) -> List[dict]:
+        return list(self.reorder_suggestions.values())
+
+    # ERP upgrade: AR aging + credit
+    def add_receivable_ledger_entry(self, data: dict) -> dict:
+        row = {"id": generate_id(), **data, "created_at": data.get("created_at") or datetime.now()}
+        self.receivable_ledger.append(row)
+        return row
+
+    def get_receivable_aging(self) -> List[dict]:
+        now = datetime.now()
+        rows = []
+        for retailer in self.retailers.values():
+            dues = [s for s in self.sales.values() if s.get("retailer_id") == retailer.get("id") and float(s.get("due_amount", 0) or 0) > 0]
+            bucket = {"current": 0.0, "bucket_8_15": 0.0, "bucket_16_30": 0.0, "bucket_31_60": 0.0, "bucket_60_plus": 0.0}
+            for sale in dues:
+                due = float(sale.get("due_amount", 0) or 0)
+                due_date = sale.get("due_date")
+                if isinstance(due_date, str):
+                    try:
+                        due_date = datetime.fromisoformat(due_date).date()
+                    except Exception:
+                        due_date = None
+                days = 0
+                if due_date:
+                    days = (now.date() - due_date).days
+                if days <= 7:
+                    bucket["current"] += due
+                elif days <= 15:
+                    bucket["bucket_8_15"] += due
+                elif days <= 30:
+                    bucket["bucket_16_30"] += due
+                elif days <= 60:
+                    bucket["bucket_31_60"] += due
+                else:
+                    bucket["bucket_60_plus"] += due
+            total_due = sum(bucket.values())
+            rows.append({
+                "retailer_id": retailer.get("id"),
+                "retailer_name": retailer.get("shop_name") or retailer.get("name"),
+                "total_due": total_due,
+                **bucket,
+            })
+        return rows
+
+    def check_credit_limit(self, retailer_id: str, new_order_amount: float) -> dict:
+        retailer = self.get_retailer(retailer_id)
+        if not retailer:
+            raise ValueError("Retailer not found")
+        credit_limit = float(retailer.get("credit_limit", 0) or 0)
+        current_due = float(retailer.get("total_due", 0) or 0)
+        projected_due = current_due + float(new_order_amount or 0)
+        over_limit = max(0.0, projected_due - credit_limit)
+        can_submit = credit_limit <= 0 or projected_due <= credit_limit
+        return {
+            "retailer_id": retailer_id,
+            "retailer_name": retailer.get("shop_name") or retailer.get("name"),
+            "credit_limit": credit_limit,
+            "current_due": current_due,
+            "new_order_amount": float(new_order_amount or 0),
+            "projected_due": projected_due,
+            "over_limit_amount": over_limit,
+            "enforcement_mode": "warn",
+            "can_submit": can_submit,
+            "reason": None if can_submit else "Projected due exceeds credit limit",
+        }
+
+    # ERP upgrade: margin analytics
+    def record_sale_item_cost_snapshot(self, data: dict) -> dict:
+        row_id = generate_id()
+        row = {"id": row_id, **data, "created_at": datetime.now()}
+        self.sale_item_cost_snapshots[row_id] = row
+        return row
+
+    def get_margin_report(self, from_date: Optional[str] = None, to_date: Optional[str] = None) -> dict:
+        rows = []
+        total_net_sales = 0.0
+        total_cogs = 0.0
+        for sale in self.sales.values():
+            created_at = sale.get("created_at")
+            if from_date and isinstance(created_at, datetime) and created_at.isoformat() < from_date:
+                continue
+            if to_date and isinstance(created_at, datetime) and created_at.isoformat() > to_date:
+                continue
+            for item in [si for si in self.sale_item_cost_snapshots.values() if si.get("sale_id") == sale.get("id")]:
+                net_sales = float(item.get("net_sales", 0) or 0)
+                cogs_total = float(item.get("cogs_total", 0) or 0)
+                margin_amount = net_sales - cogs_total
+                margin_percent = (margin_amount / net_sales * 100) if net_sales > 0 else 0
+                rows.append({
+                    "sale_id": sale.get("id"),
+                    "invoice_number": sale.get("invoice_number"),
+                    "product_id": item.get("product_id"),
+                    "product_name": item.get("product_name"),
+                    "quantity": int(item.get("quantity", 0) or 0),
+                    "net_sales": net_sales,
+                    "cogs_total": cogs_total,
+                    "margin_amount": margin_amount,
+                    "margin_percent": margin_percent,
+                    "created_at": sale.get("created_at") or datetime.now(),
+                })
+                total_net_sales += net_sales
+                total_cogs += cogs_total
+        total_margin = total_net_sales - total_cogs
+        return {
+            "total_net_sales": total_net_sales,
+            "total_cogs": total_cogs,
+            "total_margin": total_margin,
+            "margin_percent": (total_margin / total_net_sales * 100) if total_net_sales > 0 else 0,
+            "rows": rows,
+        }
     
     # SMS methods
     def add_to_sms_queue(self, recipient_phone: str, message: str, event_type: str, scheduled_at: datetime) -> str:

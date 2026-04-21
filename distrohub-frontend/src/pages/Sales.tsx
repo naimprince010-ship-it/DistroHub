@@ -33,6 +33,19 @@ import { StatCard } from '@/components/ui/stat-card';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { useTableControls } from '@/hooks/useTableControls';
+import { PaginationControls } from '@/components/ui/pagination-controls';
+import { toast } from '@/hooks/use-toast';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Table,
   TableBody,
@@ -122,6 +135,11 @@ const paymentConfig: Record<string, { variant: StatusVariant; label: string }> =
   paid:    { variant: 'success', label: 'Paid' },
 };
 
+const notifyError = (message: string) =>
+  toast({ title: 'Error', description: message, variant: 'destructive' });
+const notifySuccess = (message: string) =>
+  toast({ title: 'Success', description: message });
+
 export function Sales() {
   const [searchParams] = useSearchParams();
   const [orders, setOrders] = useState<SalesOrder[]>([]);
@@ -133,6 +151,8 @@ export function Sales() {
   const [editOrder, setEditOrder] = useState<SalesOrder | null>(null);
   const [printChallanOrder, setPrintChallanOrder] = useState<SalesOrder | null>(null);
   const [collectionOrder, setCollectionOrder] = useState<SalesOrder | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<SalesOrder | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const fetchSales = async () => {
     const token = localStorage.getItem('token');
@@ -144,6 +164,7 @@ export function Sales() {
 
     try {
       setLoading(true);
+      setLoadError(null);
       const response = await api.get('/api/sales');
       if (response.data) {
         const mappedOrders: SalesOrder[] = response.data.map((sale: any) => {
@@ -191,6 +212,7 @@ export function Sales() {
         setOrders(offlineSales.map(mapRecordToOrder));
       } else {
         setOrders([]);
+        setLoadError('Failed to load sales orders. Please retry.');
       }
     } finally {
       setLoading(false);
@@ -204,16 +226,16 @@ export function Sales() {
   }, [searchParams]);
 
   const handleDelete = async (order: SalesOrder) => {
-    if (!confirm(`Are you sure you want to delete order ${order.order_number}? This action cannot be undone.`)) return;
     try {
       await deleteWithOfflineQueue('sales', `/api/sales/${order.id}`, { id: order.id }, {
         onOfflineDelete: async () => deleteRecord('sales', order.id),
         onOnlineDelete: async () => deleteRecord('sales', order.id),
       });
       await fetchSales();
+      setDeleteCandidate(null);
     } catch (error: any) {
       const errorMessage = error?.response?.data?.detail || error?.message || 'Failed to delete order';
-      alert(`Failed to delete order: ${errorMessage}`);
+      notifyError(`Failed to delete order: ${errorMessage}`);
     }
   };
 
@@ -228,6 +250,7 @@ export function Sales() {
   const totalSales = orders.reduce((sum, o) => sum + o.total_amount, 0);
   const totalDue = orders.reduce((sum, o) => sum + (o.total_amount - o.paid_amount), 0);
   const pendingCount = orders.filter((o) => o.status === 'pending' || o.status === 'confirmed').length;
+  const salesTable = useTableControls(filteredOrders, { initialSortKey: 'order_number', pageSize: 10 });
 
   return (
     <PageShell
@@ -247,6 +270,14 @@ export function Sales() {
         <StatCard label="Total Due"       value={`৳ ${totalDue.toLocaleString()}`}      icon={Receipt} color="red" />
         <StatCard label="Pending Delivery" value={pendingCount}                         icon={Truck}   color="amber" />
       </div>
+      {loadError ? (
+        <div className="mb-4 flex items-center justify-between rounded-lg border border-[hsl(var(--dh-red))]/30 bg-[hsl(var(--dh-red))]/5 px-3 py-2 text-sm text-[hsl(var(--dh-red))]">
+          <span>{loadError}</span>
+          <Button type="button" variant="outline" size="sm" onClick={() => void fetchSales()}>
+            Retry
+          </Button>
+        </div>
+      ) : null}
 
       {/* Table card */}
       <Card>
@@ -291,19 +322,29 @@ export function Sales() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Order #</TableHead>
+                  <TableHead>
+                    <button type="button" onClick={() => salesTable.toggleSort('order_number')} className="inline-flex items-center gap-1">
+                      Order #
+                      <span className="text-[10px]">{salesTable.sortKey === 'order_number' ? (salesTable.sortDirection === 'asc' ? '▲' : '▼') : '↕'}</span>
+                    </button>
+                  </TableHead>
                   <TableHead>Retailer</TableHead>
-                  <TableHead>Order Date</TableHead>
-                  <TableHead>Delivery</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Payment</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="hidden md:table-cell">Order Date</TableHead>
+                  <TableHead className="hidden lg:table-cell">Delivery</TableHead>
+                  <TableHead className="hidden md:table-cell">Status</TableHead>
+                  <TableHead className="hidden md:table-cell">Payment</TableHead>
+                  <TableHead className="text-right">
+                    <button type="button" onClick={() => salesTable.toggleSort('total_amount')} className="ml-auto inline-flex items-center gap-1">
+                      Amount
+                      <span className="text-[10px]">{salesTable.sortKey === 'total_amount' ? (salesTable.sortDirection === 'asc' ? '▲' : '▼') : '↕'}</span>
+                    </button>
+                  </TableHead>
                   <TableHead className="text-right">Due</TableHead>
                   <TableHead className="text-center">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredOrders.map((order) => {
+                {salesTable.paginatedRows.map((order) => {
                   const StatusIcon = statusConfig[order.status].icon;
                   return (
                     <TableRow key={order.id}>
@@ -311,15 +352,15 @@ export function Sales() {
                         {order.order_number}
                       </TableCell>
                       <TableCell className="text-foreground">{order.retailer_name}</TableCell>
-                      <TableCell className="text-muted-foreground">{order.order_date}</TableCell>
-                      <TableCell className="text-muted-foreground">{order.delivery_date}</TableCell>
-                      <TableCell>
+                      <TableCell className="hidden text-muted-foreground md:table-cell">{order.order_date}</TableCell>
+                      <TableCell className="hidden text-muted-foreground lg:table-cell">{order.delivery_date}</TableCell>
+                      <TableCell className="hidden md:table-cell">
                         <Badge variant={statusConfig[order.status].variant} className="gap-1">
                           <StatusIcon className="w-3 h-3" />
                           {statusConfig[order.status].label}
                         </Badge>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell">
                         <Badge variant={paymentConfig[order.payment_status].variant}>
                           {paymentConfig[order.payment_status].label}
                         </Badge>
@@ -336,6 +377,7 @@ export function Sales() {
                             onClick={() => setSelectedOrder(order)}
                             className="p-1.5 rounded text-muted-foreground hover:text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary))]/10 transition-colors"
                             title="View Details"
+                            aria-label="View order details"
                           >
                             <Eye className="w-4 h-4" />
                           </button>
@@ -343,13 +385,15 @@ export function Sales() {
                             onClick={() => setEditOrder(order)}
                             className="p-1.5 rounded text-muted-foreground hover:text-[hsl(var(--dh-blue))] hover:bg-[hsl(var(--dh-blue))]/10 transition-colors"
                             title="Edit Order"
+                            aria-label="Edit order"
                           >
                             <Edit className="w-4 h-4" />
                           </button>
                           <button
-                            onClick={() => handleDelete(order)}
+                            onClick={() => setDeleteCandidate(order)}
                             className="p-1.5 rounded text-muted-foreground hover:text-[hsl(var(--dh-red))] hover:bg-[hsl(var(--dh-red))]/10 transition-colors"
                             title="Delete Order"
+                            aria-label="Delete order"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -366,6 +410,7 @@ export function Sales() {
                             onClick={() => setPrintChallanOrder(order)}
                             className="p-1.5 rounded text-muted-foreground hover:text-[hsl(var(--dh-green))] hover:bg-[hsl(var(--dh-green))]/10 transition-colors"
                             title="Print Challan"
+                            aria-label="Print challan"
                           >
                             <Printer className="w-4 h-4" />
                           </button>
@@ -377,8 +422,40 @@ export function Sales() {
               </TableBody>
             </Table>
           )}
+          {!loading && filteredOrders.length > 0 ? (
+            <PaginationControls
+              page={salesTable.page}
+              totalPages={salesTable.totalPages}
+              totalRows={salesTable.totalRows}
+              onPageChange={salesTable.setPage}
+            />
+          ) : null}
         </CardContent>
       </Card>
+      <AlertDialog open={deleteCandidate !== null} onOpenChange={(open) => { if (!open) setDeleteCandidate(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete order?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteCandidate
+                ? `Are you sure you want to delete order ${deleteCandidate.order_number}? This action cannot be undone.`
+                : 'This action cannot be undone.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                if (deleteCandidate) void handleDelete(deleteCandidate);
+              }}
+              className="bg-[hsl(var(--dh-red))] text-white hover:bg-[hsl(var(--dh-red))]/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {selectedOrder && (
         <OrderDetailsModal
@@ -409,7 +486,7 @@ export function Sales() {
             try {
               if (!navigator.onLine) {
                 if (!order.retailer_id) {
-                  alert('Retailer ID not found. Please select a retailer from the list.');
+                  notifyError('Retailer ID not found. Please select a retailer from the list.');
                   return;
                 }
                 const tempId = `offline-sale-${Date.now()}`;
@@ -458,7 +535,7 @@ export function Sales() {
                 (r: any) => r.shop_name === order.retailer_name || r.name === order.retailer_name
               );
               if (!retailer) {
-                alert(`Retailer "${order.retailer_name}" not found. Please select a valid retailer.`);
+                notifyError(`Retailer "${order.retailer_name}" not found. Please select a valid retailer.`);
                 return;
               }
 
@@ -492,7 +569,7 @@ export function Sales() {
                     ? `No batches found for the following products. Please add stock first:\n\n${productsWithoutBatches.join('\n')}`
                     : `Warning: The following products don't have stock and were skipped:\n\n${productsWithoutBatches.join('\n')}\n\nDo you want to continue?`;
                 if (productsWithoutBatches.length === order.items.length) {
-                  alert(message);
+                  notifyError(message);
                   return;
                 } else {
                   if (!confirm(message)) return;
@@ -500,8 +577,30 @@ export function Sales() {
               }
 
               if (saleItems.length === 0) {
-                alert('No valid items to create sale. Please add stock first via a purchase order.');
+                notifyError('No valid items to create sale. Please add stock first via a purchase order.');
                 return;
+              }
+
+              try {
+                const creditRes = await api.get('/api/credit/check', {
+                  params: {
+                    retailer_id: retailer.id,
+                    new_order_amount: order.total_amount || 0,
+                  },
+                });
+                const credit = creditRes.data;
+                if (credit && credit.can_submit === false) {
+                  const proceed = confirm(
+                    `Credit warning for ${credit.retailer_name || order.retailer_name}:\n` +
+                    `Current Due: ${Number(credit.current_due || 0).toLocaleString()}\n` +
+                    `Projected Due: ${Number(credit.projected_due || 0).toLocaleString()}\n` +
+                    `Limit: ${Number(credit.credit_limit || 0).toLocaleString()}\n\n` +
+                    `Proceed with override?`
+                  );
+                  if (!proceed) return;
+                }
+              } catch (creditError) {
+                console.warn('[Sales] Credit check unavailable, proceeding without block', creditError);
               }
 
               const salePayload: any = {
@@ -510,6 +609,7 @@ export function Sales() {
                 payment_type: 'cash',
                 paid_amount: order.paid_amount || 0,
                 notes: `Delivery date: ${order.delivery_date}`,
+                terms_days: 0,
               };
               if ('assigned_to' in order && order.assigned_to) {
                 salePayload.assigned_to = order.assigned_to;
@@ -520,7 +620,7 @@ export function Sales() {
               await fetchSales();
               setShowAddModal(false);
             } catch (error: any) {
-              alert(`Failed to create sale: ${error.response?.data?.detail || error.message}`);
+              notifyError(`Failed to create sale: ${error.response?.data?.detail || error.message}`);
             }
           }}
         />
@@ -834,10 +934,10 @@ function EditSaleModal({ order, onClose, onSave }: {
         onOfflineSave: async (record) => saveSale(record as SaleRecord),
         onOnlineSave: async (data) => saveSale(mapApiSaleToRecord(data, true)),
       });
-      alert('Order updated successfully!');
+      notifySuccess('Order updated successfully.');
       onSave();
     } catch (error: any) {
-      alert(`Failed to update order: ${error.response?.data?.detail || error.message}`);
+      notifyError(`Failed to update order: ${error.response?.data?.detail || error.message}`);
     } finally {
       setLoading(false);
     }
@@ -969,7 +1069,7 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
           setProducts(offlineProducts.map((p) => ({ id: p.id, name: p.name, selling_price: p.unit_price })));
           setSalesReps([]);
         } else {
-          alert(`Error loading data: ${error?.response?.data?.detail || error?.message}`);
+          notifyError(`Error loading data: ${error?.response?.data?.detail || error?.message}`);
         }
       } finally {
         setLoadingRetailers(false);
@@ -1045,7 +1145,7 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
         }
       }
     } else {
-      alert(`Product not found for barcode: ${barcode}`);
+      notifyError(`Product not found for barcode: ${barcode}`);
     }
   };
 
@@ -1255,8 +1355,14 @@ function CollectionModal({ order, onClose, onSuccess }: {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const paymentAmount = parseFloat(amount);
-    if (isNaN(paymentAmount) || paymentAmount <= 0) { alert('Please enter a valid payment amount'); return; }
-    if (paymentAmount > dueAmount) { alert(`Payment cannot exceed due amount of ৳${dueAmount.toLocaleString()}`); return; }
+    if (isNaN(paymentAmount) || paymentAmount <= 0) {
+      toast({ title: 'Error', description: 'Please enter a valid payment amount', variant: 'destructive' });
+      return;
+    }
+    if (paymentAmount > dueAmount) {
+      toast({ title: 'Error', description: `Payment cannot exceed due amount of ৳${dueAmount.toLocaleString()}`, variant: 'destructive' });
+      return;
+    }
 
     let finalCollectedBy = collectedBy;
     if (!finalCollectedBy) {
@@ -1268,8 +1374,14 @@ function CollectionModal({ order, onClose, onSuccess }: {
       }
       if (!finalCollectedBy && order.assigned_to) finalCollectedBy = order.assigned_to;
     }
-    if (!finalCollectedBy) { alert('Please select who collected this payment'); return; }
-    if (!order.retailer_id) { alert('Order retailer information is missing. Please refresh and try again.'); return; }
+    if (!finalCollectedBy) {
+      toast({ title: 'Error', description: 'Please select who collected this payment', variant: 'destructive' });
+      return;
+    }
+    if (!order.retailer_id) {
+      toast({ title: 'Error', description: 'Order retailer information is missing. Please refresh and try again.', variant: 'destructive' });
+      return;
+    }
 
     setLoading(true);
     try {
@@ -1280,17 +1392,19 @@ function CollectionModal({ order, onClose, onSuccess }: {
       await api.put(`/api/sales/${order.id}`, { paid_amount: order.paid_amount + paymentAmount });
       const remaining = dueAmount - paymentAmount;
       const collectorName = salesReps.find((r) => r.id === collectedBy)?.name || 'SR';
-      alert(remaining > 0
-        ? `Payment of ৳${paymentAmount.toLocaleString()} recorded. বাকি ৳${remaining.toLocaleString()} ${collectorName} এর কাছে পেন্ডিং।`
-        : `Payment of ৳${paymentAmount.toLocaleString()} recorded. Invoice is fully paid.`
-      );
+      toast({
+        title: 'Payment recorded',
+        description: remaining > 0
+          ? `Payment of ৳${paymentAmount.toLocaleString()} recorded. বাকি ৳${remaining.toLocaleString()} ${collectorName} এর কাছে পেন্ডিং।`
+          : `Payment of ৳${paymentAmount.toLocaleString()} recorded. Invoice is fully paid.`,
+      });
       onSuccess();
     } catch (error: any) {
       const errorData = error?.response?.data;
       const msg = typeof errorData === 'string' ? errorData
         : errorData?.detail ? String(errorData.detail)
         : error?.message || 'Failed to record payment';
-      alert(`Failed to record payment: ${msg}`);
+      toast({ title: 'Error', description: `Failed to record payment: ${msg}`, variant: 'destructive' });
     } finally {
       setLoading(false);
     }

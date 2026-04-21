@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, type FormEvent } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { PageShell } from '@/components/layout/PageShell';
 import {
@@ -35,6 +35,12 @@ import type {
   SmsDeliveryMode,
 } from '@/types';
 
+// Replace blocking browser alerts with app toasts in this module.
+const alert = (message?: unknown) => {
+  const text = typeof message === 'string' ? message : String(message ?? '');
+  toast({ title: 'Notice', description: text, variant: 'destructive' });
+};
+
 interface Category {
   id: string;
   name: string;
@@ -63,6 +69,7 @@ export function Settings() {
       { id: 'suppliers', label: t('common.suppliers'), icon: Truck },
       { id: 'categories', label: t('common.categories'), icon: Tags },
       { id: 'units', label: t('common.units'), icon: Ruler },
+      { id: 'price-lists', label: 'Price Lists', icon: Tags },
       { id: 'market-routes', label: t('common.routes'), icon: MapPin },
       { id: 'sales-reps', label: t('common.sales_reps'), icon: User },
       { id: 'profile', label: t('common.profile'), icon: UserCircle },
@@ -114,6 +121,7 @@ export function Settings() {
           {activeTab === 'suppliers' && <SupplierManagement />}
           {activeTab === 'categories' && <CategoryManagement />}
           {activeTab === 'units' && <UnitManagement />}
+          {activeTab === 'price-lists' && <PriceListManagement />}
           {activeTab === 'market-routes' && <MarketRouteManagement />}
           {activeTab === 'sales-reps' && <SalesRepManagement />}
           {activeTab === 'profile' && <ProfileSettings />}
@@ -2530,3 +2538,112 @@ function AppearanceSettings() {
 
 // Categories Settings Component (unused - using CategoryManagement instead)
 // This commented code was causing syntax errors - removed duplicate/orphaned code
+
+interface PriceList {
+  id: string;
+  name: string;
+  currency: string;
+  priority: number;
+  is_active: boolean;
+  valid_from?: string | null;
+  valid_to?: string | null;
+}
+
+function PriceListManagement() {
+  const [priceLists, setPriceLists] = useState<PriceList[]>([]);
+  const [name, setName] = useState('');
+  const [priority, setPriority] = useState(100);
+  const [loading, setLoading] = useState(false);
+
+  const fetchPriceLists = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get('/api/price-lists');
+      setPriceLists(Array.isArray(res.data) ? res.data : []);
+    } catch (error) {
+      console.error('[Settings][PriceList] Failed to load price lists', error);
+      toast({ title: 'Failed to load price lists', variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchPriceLists();
+  }, [fetchPriceLists]);
+
+  const handleCreate = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+    try {
+      await api.post('/api/price-lists', {
+        name: name.trim(),
+        currency: 'BDT',
+        priority,
+        is_active: true,
+      });
+      setName('');
+      setPriority(100);
+      await fetchPriceLists();
+      toast({ title: 'Price list created' });
+    } catch (error) {
+      console.error('[Settings][PriceList] Failed to create', error);
+      toast({ title: 'Failed to create price list', variant: 'destructive' });
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-lg font-semibold text-foreground">Price Lists</h3>
+        <p className="text-sm text-muted-foreground">Create prioritized price lists for retailer-specific pricing.</p>
+      </div>
+
+      <form onSubmit={handleCreate} className="grid gap-3 md:grid-cols-3">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          className="input-field"
+          placeholder="Price list name"
+        />
+        <input
+          type="number"
+          value={priority}
+          onChange={(e) => setPriority(Number(e.target.value))}
+          className="input-field"
+          min={1}
+        />
+        <button type="submit" className="btn-primary">Add Price List</button>
+      </form>
+
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <table className="min-w-full text-sm">
+          <thead className="bg-muted/40">
+            <tr>
+              <th className="px-3 py-2 text-left">Name</th>
+              <th className="px-3 py-2 text-left">Currency</th>
+              <th className="px-3 py-2 text-right">Priority</th>
+              <th className="px-3 py-2 text-left">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr><td className="px-3 py-4 text-muted-foreground" colSpan={4}>Loading...</td></tr>
+            ) : priceLists.length === 0 ? (
+              <tr><td className="px-3 py-4 text-muted-foreground" colSpan={4}>No price lists yet.</td></tr>
+            ) : (
+              priceLists.map((pl) => (
+                <tr key={pl.id} className="border-t border-border">
+                  <td className="px-3 py-2">{pl.name}</td>
+                  <td className="px-3 py-2">{pl.currency}</td>
+                  <td className="px-3 py-2 text-right">{pl.priority}</td>
+                  <td className="px-3 py-2">{pl.is_active ? 'Active' : 'Inactive'}</td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

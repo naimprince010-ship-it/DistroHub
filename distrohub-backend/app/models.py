@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, field_validator, model_validator
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime, date
 from enum import Enum
 
@@ -70,6 +70,11 @@ class ProductBase(BaseModel):
     image_url: Optional[str] = None
     batch_number: Optional[str] = None
     expiry_date: Optional[date] = None
+    unit_id: Optional[str] = None
+    base_uom: Optional[str] = None
+    template_id: Optional[str] = None
+    variant_id: Optional[str] = None
+    variant_attributes: Dict[str, str] = {}
 
 class ProductCreate(ProductBase):
     pass
@@ -170,6 +175,10 @@ class SaleItemCreate(BaseModel):
     quantity: int
     unit_price: float
     discount: float = 0
+    variant_id: Optional[str] = None
+    uom: Optional[str] = None
+    uom_quantity: Optional[float] = None
+    price_list_id: Optional[str] = None
 
 class SaleCreate(BaseModel):
     retailer_id: str
@@ -178,6 +187,10 @@ class SaleCreate(BaseModel):
     paid_amount: float = 0
     notes: Optional[str] = None
     assigned_to: Optional[str] = None  # User ID of SR/delivery man assigned to collect payment
+    terms_days: int = 0
+    due_date: Optional[date] = None
+    credit_override: bool = False
+    credit_override_reason: Optional[str] = None
 
 class SaleItem(BaseModel):
     id: str
@@ -189,6 +202,13 @@ class SaleItem(BaseModel):
     unit_price: float
     discount: float
     total: float
+    variant_id: Optional[str] = None
+    uom: Optional[str] = None
+    uom_quantity: Optional[float] = None
+    price_list_id: Optional[str] = None
+    base_price: Optional[float] = None
+    resolved_price: Optional[float] = None
+    price_source: Optional[str] = None
 
 class Sale(BaseModel):
     id: str
@@ -206,6 +226,9 @@ class Sale(BaseModel):
     notes: Optional[str] = None
     assigned_to: Optional[str] = None  # User ID of SR/delivery man assigned to collect payment
     assigned_to_name: Optional[str] = None  # Name of assigned SR/delivery man
+    terms_days: int = 0
+    due_date: Optional[date] = None
+    credit_status: Optional[str] = "open"
     created_at: datetime
 
 class SaleUpdate(BaseModel):
@@ -511,6 +534,179 @@ class UnitCreate(UnitBase):
 class Unit(UnitBase):
     id: str
     created_at: datetime
+
+
+class ProductTemplateBase(BaseModel):
+    name: str
+    base_uom: Optional[str] = None
+    is_active: bool = True
+
+
+class ProductTemplateCreate(ProductTemplateBase):
+    product_id: str
+
+
+class ProductTemplate(ProductTemplateBase):
+    id: str
+    product_id: str
+    created_at: datetime
+
+
+class ProductVariantBase(BaseModel):
+    sku: str
+    name: str
+    is_default: bool = False
+    attributes: Dict[str, str] = {}
+
+
+class ProductVariantCreate(ProductVariantBase):
+    template_id: str
+    product_id: str
+
+
+class ProductVariant(ProductVariantBase):
+    id: str
+    template_id: str
+    product_id: str
+    created_at: datetime
+
+
+class UomConversionBase(BaseModel):
+    product_id: str
+    from_uom: str
+    to_uom: str
+    factor: float = Field(gt=0)
+    rounding_mode: str = "round"
+
+
+class UomConversionCreate(UomConversionBase):
+    pass
+
+
+class UomConversion(UomConversionBase):
+    id: str
+    created_at: datetime
+
+
+class PriceListBase(BaseModel):
+    name: str
+    currency: str = "BDT"
+    priority: int = 100
+    is_active: bool = True
+    valid_from: Optional[date] = None
+    valid_to: Optional[date] = None
+
+
+class PriceListCreate(PriceListBase):
+    pass
+
+
+class PriceList(PriceListBase):
+    id: str
+    created_at: datetime
+
+
+class PriceListItemBase(BaseModel):
+    price_list_id: str
+    product_id: str
+    variant_id: Optional[str] = None
+    uom: Optional[str] = None
+    min_qty: float = 0
+    unit_price: float
+    discount_percent: float = 0
+
+
+class PriceListItemCreate(PriceListItemBase):
+    pass
+
+
+class PriceListItem(PriceListItemBase):
+    id: str
+    created_at: datetime
+
+
+class RetailerPriceListAssignmentCreate(BaseModel):
+    retailer_id: str
+    price_list_id: str
+
+
+class ReorderPolicyBase(BaseModel):
+    product_id: str
+    lead_time_days: int = 7
+    safety_stock_days: int = 3
+    min_qty: int = 0
+    max_qty: int = 0
+    moq: int = 1
+    preferred_supplier: Optional[str] = None
+    is_active: bool = True
+
+
+class ReorderPolicyCreate(ReorderPolicyBase):
+    pass
+
+
+class ReorderPolicy(ReorderPolicyBase):
+    id: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+
+class ReorderSuggestion(BaseModel):
+    id: str
+    product_id: str
+    product_name: Optional[str] = None
+    suggested_qty: int
+    trigger_reason: Optional[str] = None
+    stock_on_hand: int = 0
+    reorder_level: int = 0
+    avg_daily_sales: float = 0
+    coverage_days: float = 0
+    created_at: datetime
+
+
+class ReceivableAgingRow(BaseModel):
+    retailer_id: str
+    retailer_name: str
+    total_due: float
+    current: float = 0
+    bucket_8_15: float = 0
+    bucket_16_30: float = 0
+    bucket_31_60: float = 0
+    bucket_60_plus: float = 0
+
+
+class CreditCheckResponse(BaseModel):
+    retailer_id: str
+    retailer_name: Optional[str] = None
+    credit_limit: float
+    current_due: float
+    new_order_amount: float
+    projected_due: float
+    over_limit_amount: float
+    enforcement_mode: str = "warn"
+    can_submit: bool = True
+    reason: Optional[str] = None
+
+
+class MarginReportRow(BaseModel):
+    sale_id: str
+    invoice_number: Optional[str] = None
+    product_id: str
+    product_name: Optional[str] = None
+    quantity: int
+    net_sales: float
+    cogs_total: float
+    margin_amount: float
+    margin_percent: float
+    created_at: datetime
+
+
+class MarginReportSummary(BaseModel):
+    total_net_sales: float
+    total_cogs: float
+    total_margin: float
+    margin_percent: float
+    rows: List[MarginReportRow]
 
 # SMS Notification Models
 class SmsEventType(str, Enum):
