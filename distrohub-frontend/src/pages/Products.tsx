@@ -1,5 +1,7 @@
-import { lazy, Suspense, useState, useEffect, useMemo, useCallback } from 'react';
+import { lazy, Suspense, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { PageShell } from '@/components/layout/PageShell';
 import { StatCard } from '@/components/ui/stat-card';
 import { Card, CardContent } from '@/components/ui/card';
@@ -47,6 +49,7 @@ import { useLanguage } from '@/contexts/LanguageContext';
 import { useTableControls } from '@/hooks/useTableControls';
 import { PaginationControls } from '@/components/ui/pagination-controls';
 import type { Product } from '@/pages/products/productTypes';
+import { queryKeys } from '@/lib/queryKeys';
 import api, { deleteWithOfflineQueue, postWithOfflineQueue, putWithOfflineQueue } from '@/lib/api';
 import { logger } from '@/lib/logger';
 import {
@@ -101,7 +104,40 @@ interface Unit {
   description?: string;
 }
 
+interface ApiProduct {
+  id: string;
+  name: string;
+  sku: string;
+  barcode?: string | null;
+  category: string;
+  unit: string;
+  pack_size?: number | null;
+  pieces_per_carton?: number | null;
+  purchase_price: number;
+  selling_price: number;
+  stock_quantity?: number | null;
+  reorder_level?: number | null;
+  batch_number?: string | null;
+  expiry_date?: string | null;
+  supplier?: string | null;
+  vat_inclusive?: boolean | null;
+  vat_rate?: number | null;
+  image_url?: string | null;
+}
+
+interface ProductsQueryData {
+  products: Product[];
+  reorderSuggestions: Record<string, number>;
+}
+
+interface ProductsMetaQueryData {
+  categories: string[];
+  suppliers: string[];
+  units: string[];
+}
+
 const LOW_STOCK_THRESHOLD = 50;
+const PRODUCT_TABLE_VIRTUALIZATION_THRESHOLD = 120;
 
 type ProductColumnKey = 'sku' | 'category' | 'unit' | 'purchase' | 'selling' | 'stock' | 'pcsCtn' | 'batch' | 'expiry';
 
@@ -131,9 +167,7 @@ export function Products() {
     (n: number) => `৳\u00A0${(n ?? 0).toLocaleString(locale)}`,
     [locale]
   );
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+  const queryClient = useQueryClient();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [detailProduct, setDetailProduct] = useState<Product | null>(null);
@@ -144,10 +178,6 @@ export function Products() {
   const [expiryFilter, setExpiryFilter] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [suppliers, setSuppliers] = useState<string[]>([]);
-  const [units, setUnits] = useState<string[]>([]);
-  const [reorderSuggestions, setReorderSuggestions] = useState<Record<string, number>>({});
   const visibleColumns: Record<ProductColumnKey, boolean> = {
     sku: true,
     category: true,
@@ -193,117 +223,28 @@ export function Products() {
     image_url: '',
   });
 
-  // Fetch categories, suppliers, and units from API
-  const fetchCategoriesAndSuppliers = async () => {
-    // Check if token exists before making request
-    const token = localStorage.getItem('token');
-    if (!token) {
-      console.warn('[Products] No token found, skipping API fetch');
-      setCategories([]);
-      setSuppliers([]);
-      setUnits([]);
-      return;
-    }
-
-    try {
-      logger.log('[Products] Fetching categories, suppliers, and units...');
-      const [categoriesRes, suppliersRes, unitsRes] = await Promise.all([
-        api.get('/api/categories'),
-        api.get('/api/suppliers'),
-        api.get('/api/units')
-      ]);
-
-      // Always use API data, even if empty (removes reliance on defaults)
-      if (categoriesRes.data) {
-        const categoryNames = categoriesRes.data.map((c: Category) => c.name);
-        setCategories(categoryNames);
-        logger.log('[Products] Categories loaded:', categoryNames.length, categoryNames);
-      }
-
-      if (suppliersRes.data) {
-        const supplierNames = suppliersRes.data.map((s: Supplier) => s.name);
-        setSuppliers(supplierNames);
-        logger.log('[Products] Suppliers loaded:', supplierNames.length, supplierNames);
-      }
-
-      if (unitsRes.data) {
-        const unitNames = unitsRes.data.map((u: Unit) => u.name);
-        setUnits(unitNames);
-        logger.log('[Products] Units loaded:', unitNames.length, unitNames);
-      }
-    } catch (error: any) {
-      console.error('[Products] Error fetching categories/suppliers:', error);
-      console.error('[Products] Error details:', {
-        message: error?.message,
-        status: error?.response?.status,
-        data: error?.response?.data,
-        hasToken: !!localStorage.getItem('token')
-      });
-
-      // On 401, let interceptor handle redirect
-      if (error?.response?.status === 401) {
-        console.warn('[Products] 401 Unauthorized - token may be expired');
-        // Interceptor will redirect to login
-        return;
-      }
-
-      // On other errors, use empty arrays (no defaults) to force API retry
-      setCategories([]);
-      setSuppliers([]);
-      setUnits([]);
-    }
-  };
-
-  // Fetch products from API
-  const fetchProducts = async (silent = false) => {
+  const fetchProductsQuery = async (): Promise<ProductsQueryData> => {
     const token = localStorage.getItem('token');
     if (!token) {
       logger.warn('[Products] No token found, skipping products fetch');
-      setProducts([]);
-      setLoading(false);
-      setRefreshing(false);
-      return;
+      return { products: [], reorderSuggestions: {} };
     }
 
     try {
-      if (silent) setRefreshing(true);
-      else setLoading(true);
       logger.log('[Products] Fetching products from API...');
       const [response, suggestionsRes] = await Promise.all([
         api.get('/api/products'),
         api.get('/api/reorder-suggestions').catch(() => ({ data: [] })),
       ]);
       logger.log('[Products] Products fetched successfully:', response.data?.length || 0);
+      const reorderMap: Record<string, number> = {};
       if (Array.isArray(suggestionsRes.data)) {
-        const nextMap: Record<string, number> = {};
         suggestionsRes.data.forEach((row: any) => {
-          if (row?.product_id) nextMap[row.product_id] = Number(row.suggested_qty || 0);
+          if (row?.product_id) reorderMap[row.product_id] = Number(row.suggested_qty || 0);
         });
-        setReorderSuggestions(nextMap);
       }
 
       if (response.data) {
-        // Map backend Product to frontend Product interface
-        interface ApiProduct {
-          id: string;
-          name: string;
-          sku: string;
-          barcode?: string | null;
-          category: string;
-          unit: string;
-          pack_size?: number | null;
-          pieces_per_carton?: number | null;
-          purchase_price: number;
-          selling_price: number;
-          stock_quantity?: number | null;
-          reorder_level?: number | null;
-          batch_number?: string | null;
-          expiry_date?: string | null;
-          supplier?: string | null;
-          vat_inclusive?: boolean | null;
-          vat_rate?: number | null;
-          image_url?: string | null;
-        }
         const mappedProducts = response.data.map((p: ApiProduct) => ({
           id: p.id,
           name: p.name,
@@ -324,10 +265,11 @@ export function Products() {
           vat_rate: p.vat_rate || 0,
           image_url: p.image_url || '',
         }));
-        setProducts(mappedProducts);
         await bulkSaveProducts(response.data.map((p: ApiProduct) => mapApiProductToRecord(p, true)));
         logger.log('[Products] Products mapped and set:', mappedProducts.length);
+        return { products: mappedProducts, reorderSuggestions: reorderMap };
       }
+      return { products: [], reorderSuggestions: reorderMap };
     } catch (error: any) {
       console.error('[Products] Error fetching products:', error);
       console.error('[Products] Error details:', {
@@ -338,23 +280,78 @@ export function Products() {
 
       if (error?.response?.status === 401) {
         logger.warn('[Products] 401 Unauthorized - token may be expired');
-        return;
+        return { products: [], reorderSuggestions: {} };
       }
 
       const isOfflineError =
         !navigator.onLine || error?.isNetworkError || error?.code === 'ERR_NETWORK' || error?.message?.includes('Network');
       if (isOfflineError) {
         const offlineProducts = await getOfflineProducts();
-        setProducts(offlineProducts.map(mapRecordToProduct));
-      } else {
-        // On other errors, use empty array
-        setProducts([]);
+        return { products: offlineProducts.map(mapRecordToProduct), reorderSuggestions: {} };
       }
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+      return { products: [], reorderSuggestions: {} };
     }
   };
+
+  const fetchProductsMetaQuery = async (): Promise<ProductsMetaQueryData> => {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      logger.warn('[Products] No token found, skipping meta fetch');
+      return { categories: [], suppliers: [], units: [] };
+    }
+    try {
+      logger.log('[Products] Fetching categories, suppliers, and units...');
+      const [categoriesRes, suppliersRes, unitsRes] = await Promise.all([
+        api.get('/api/categories'),
+        api.get('/api/suppliers'),
+        api.get('/api/units'),
+      ]);
+      return {
+        categories: Array.isArray(categoriesRes.data) ? categoriesRes.data.map((c: Category) => c.name) : [],
+        suppliers: Array.isArray(suppliersRes.data) ? suppliersRes.data.map((s: Supplier) => s.name) : [],
+        units: Array.isArray(unitsRes.data) ? unitsRes.data.map((u: Unit) => u.name) : [],
+      };
+    } catch (error: any) {
+      console.error('[Products] Error fetching categories/suppliers:', error);
+      if (error?.response?.status === 401) return { categories: [], suppliers: [], units: [] };
+      return { categories: [], suppliers: [], units: [] };
+    }
+  };
+
+  const productsQuery = useQuery({
+    queryKey: queryKeys.products.list(),
+    queryFn: fetchProductsQuery,
+    staleTime: 30_000,
+  });
+
+  const productsMetaQuery = useQuery({
+    queryKey: queryKeys.products.meta(),
+    queryFn: fetchProductsMetaQuery,
+    staleTime: 5 * 60_000,
+  });
+
+  const products = productsQuery.data?.products ?? [];
+  const reorderSuggestions = productsQuery.data?.reorderSuggestions ?? {};
+  const categories = productsMetaQuery.data?.categories ?? [];
+  const suppliers = productsMetaQuery.data?.suppliers ?? [];
+  const units = productsMetaQuery.data?.units ?? [];
+  const loading = productsQuery.isLoading;
+  const refreshing = productsQuery.isFetching && !productsQuery.isLoading;
+  const refetchProducts = productsQuery.refetch;
+  const refetchProductsMeta = productsMetaQuery.refetch;
+  const refreshProducts = useCallback(async () => {
+    await refetchProducts();
+  }, [refetchProducts]);
+  const refreshProductMeta = useCallback(async () => {
+    await refetchProductsMeta();
+  }, [refetchProductsMeta]);
+  const prefetchProductMeta = useCallback(() => {
+    void queryClient.prefetchQuery({
+      queryKey: queryKeys.products.meta(),
+      queryFn: fetchProductsMetaQuery,
+      staleTime: 5 * 60_000,
+    });
+  }, [queryClient, fetchProductsMetaQuery]);
 
   const updateSearchQuery = useCallback(
     (q: string) => {
@@ -366,12 +363,6 @@ export function Products() {
     },
     [searchParams, setSearchParams]
   );
-
-  // Fetch on mount
-  useEffect(() => {
-    fetchCategoriesAndSuppliers();
-    fetchProducts();
-  }, []);
 
   useEffect(() => {
     const fetchDetailLedger = async () => {
@@ -431,6 +422,31 @@ export function Products() {
     });
   }, [products, searchTerm, categoryFilter, stockFilter, expiryFilter]);
   const productsTable = useTableControls(filteredProducts, { initialSortKey: 'name', pageSize: 10 });
+  const sortedProducts = productsTable.sortedRows;
+  const useVirtualizedRows = sortedProducts.length > PRODUCT_TABLE_VIRTUALIZATION_THRESHOLD;
+  const tableScrollRef = useRef<HTMLDivElement | null>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: useVirtualizedRows ? sortedProducts.length : 0,
+    getScrollElement: () => tableScrollRef.current,
+    estimateSize: () => 52,
+    overscan: 10,
+  });
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const topPaddingHeight = virtualRows.length > 0 ? virtualRows[0].start : 0;
+  const bottomPaddingHeight =
+    virtualRows.length > 0
+      ? Math.max(0, rowVirtualizer.getTotalSize() - virtualRows[virtualRows.length - 1].end)
+      : 0;
+  const visibleColumnCount =
+    4 +
+    Number(visibleColumns.sku) +
+    Number(visibleColumns.category) +
+    Number(visibleColumns.unit) +
+    Number(visibleColumns.purchase) +
+    Number(visibleColumns.selling) +
+    Number(visibleColumns.pcsCtn) +
+    Number(visibleColumns.batch) +
+    Number(visibleColumns.expiry);
 
   const activeFiltersCount =
     [categoryFilter, stockFilter, expiryFilter].filter((f) => f !== 'all').length + (searchTerm ? 1 : 0);
@@ -489,7 +505,10 @@ export function Products() {
       });
 
       if (jsonData.length > 0) {
-        setProducts([...products, ...jsonData]);
+        queryClient.setQueryData<ProductsQueryData>(queryKeys.products.list(), (prev) => ({
+          products: [...(prev?.products ?? []), ...jsonData],
+          reorderSuggestions: prev?.reorderSuggestions ?? {},
+        }));
         toast({
           title: t('products.import_done'),
           description: `${jsonData.length}`,
@@ -584,7 +603,7 @@ export function Products() {
         onOnlineDelete: async () => deleteRecord('products', id),
       });
       logger.log('[Products] Product deleted successfully');
-      await fetchProducts(true);
+      await queryClient.invalidateQueries({ queryKey: queryKeys.products.list() });
       toast({ title: t('products.delete_success') });
       setDeleteId(null);
     } catch (error: any) {
@@ -617,6 +636,104 @@ export function Products() {
     return 'Adjustment';
   };
 
+  const renderProductRow = (product: Product, rowNumber: number) => {
+    const stockLevel = product.stock_quantity === 0 ? 'out' : product.stock_quantity < LOW_STOCK_THRESHOLD ? 'low' : 'ok';
+    const expiryStatus = isExpiredDate(product.expiry_date) ? 'expired' : isExpiringSoonDate(product.expiry_date) ? 'soon' : 'ok';
+    const isAlert = stockLevel === 'out' || stockLevel === 'low' || expiryStatus === 'expired' || expiryStatus === 'soon';
+
+    return (
+      <tr
+        key={product.id}
+        className={cn(
+          'transition-colors duration-150 ease-out hover:bg-muted/45',
+          isAlert && 'bg-[hsl(var(--dh-amber))]/5',
+          stockLevel === 'out' && 'bg-[hsl(var(--dh-red))]/5',
+          '[&>td]:border-b [&>td]:border-border/70 [&>td]:border-r [&>td]:border-r-border/50 [&>td:last-child]:border-r-0'
+        )}>
+        <td className="p-2.5 text-center text-xs tabular-nums text-muted-foreground">{rowNumber}</td>
+        <td className="p-2.5">
+          <div className="flex max-w-[220px] items-center gap-2.5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--primary))]/10">
+              <Package className="h-4 w-4 text-[hsl(var(--primary))]" aria-hidden />
+            </div>
+            <button
+              type="button"
+              onClick={() => setDetailProduct(product)}
+              className="truncate text-left font-medium text-foreground hover:text-[hsl(var(--primary))]"
+              title={product.name}
+            >
+              {product.name}
+            </button>
+          </div>
+        </td>
+        {visibleColumns.sku && <td className="hidden p-2.5 font-mono text-xs text-muted-foreground md:table-cell">{product.sku}</td>}
+        {visibleColumns.category && (
+          <td className="hidden p-2.5 lg:table-cell">
+            <Badge variant="muted" className="max-w-[140px] truncate">{product.category}</Badge>
+          </td>
+        )}
+        {visibleColumns.unit && <td className="hidden p-2.5 text-right text-sm text-muted-foreground md:table-cell">{product.unit}</td>}
+        {visibleColumns.purchase && <td className="hidden p-2.5 text-right tabular-nums text-sm text-foreground lg:table-cell">{formatMoney(product.purchase_price)}</td>}
+        {visibleColumns.selling && <td className="hidden p-2.5 text-right font-semibold tabular-nums text-sm text-foreground lg:table-cell">{formatMoney(product.selling_price)}</td>}
+        {visibleColumns.stock && (
+          <td className="p-2.5 text-right">
+            <span className={cn('tabular-nums font-medium text-sm',
+              product.stock_quantity === 0 && 'font-semibold text-[hsl(var(--dh-red))]',
+              product.stock_quantity > 0 && product.stock_quantity < LOW_STOCK_THRESHOLD && 'text-[hsl(var(--dh-amber))]',
+              product.stock_quantity >= LOW_STOCK_THRESHOLD && 'text-[hsl(var(--dh-green))]'
+            )}>
+              {product.stock_quantity}
+            </span>
+            {reorderSuggestions[product.id] ? (
+              <div className="mt-1 text-[10px] text-[hsl(var(--dh-blue))]">
+                +{reorderSuggestions[product.id]} suggested
+              </div>
+            ) : null}
+          </td>
+        )}
+        {visibleColumns.pcsCtn && (
+          <td className="hidden p-2.5 text-right text-xs tabular-nums text-muted-foreground md:table-cell">{product.pieces_per_carton || product.pack_size || '—'}</td>
+        )}
+        {visibleColumns.batch && <td className="hidden p-2.5 font-mono text-xs text-muted-foreground lg:table-cell">{product.batch_number || '—'}</td>}
+        {visibleColumns.expiry && (
+          <td className="hidden p-2.5 md:table-cell">
+            <div className="flex items-center gap-1">
+              {isExpiredDate(product.expiry_date) ? (
+                <span className="text-xs font-medium text-[hsl(var(--dh-red))]">{product.expiry_date || '—'}</span>
+              ) : (
+                <>
+                  {isExpiringSoonDate(product.expiry_date) && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[hsl(var(--dh-amber))]" aria-hidden />}
+                  <span className={cn('text-xs', isExpiringSoonDate(product.expiry_date) ? 'font-medium text-[hsl(var(--dh-amber))]' : 'text-muted-foreground')}>
+                    {product.expiry_date || '—'}
+                  </span>
+                </>
+              )}
+            </div>
+          </td>
+        )}
+        <td className="p-2.5">
+          <div className="flex items-center justify-center gap-1">
+            <button type="button" onClick={() => setDetailProduct(product)}
+              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-[hsl(var(--primary))]/10 hover:text-[hsl(var(--primary))]"
+              title="Details">
+              <Eye className="h-4 w-4" />
+            </button>
+            <button type="button" onClick={() => setEditingProduct(product)}
+              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-[hsl(var(--primary))]/10 hover:text-[hsl(var(--primary))]"
+              title={t('products.edit')}>
+              <Edit className="h-4 w-4" />
+            </button>
+            <button type="button" onClick={() => setDeleteId(product.id)}
+              className="rounded p-2 text-muted-foreground transition-colors hover:bg-[hsl(var(--dh-red))]/10 hover:text-[hsl(var(--dh-red))]"
+              title={t('common.delete')}>
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        </td>
+      </tr>
+    );
+  };
+
   return (
     <PageShell
       title={t('common.products')}
@@ -625,7 +742,9 @@ export function Products() {
         <>
           <button
             type="button"
-            onClick={() => fetchProducts(true)}
+            onClick={() => {
+              void refreshProducts();
+            }}
             disabled={refreshing || loading}
             className="btn-secondary inline-flex h-9 items-center gap-2 px-3 disabled:opacity-50"
           >
@@ -648,7 +767,12 @@ export function Products() {
           </button>
           <button
             type="button"
-            onClick={() => { fetchCategoriesAndSuppliers(); setShowAddModal(true); }}
+            onMouseEnter={prefetchProductMeta}
+            onFocus={prefetchProductMeta}
+            onClick={() => {
+              void refreshProductMeta();
+              setShowAddModal(true);
+            }}
             className="btn-primary inline-flex h-9 items-center gap-2 px-4 font-medium"
           >
             <Plus className="h-4 w-4" aria-hidden />
@@ -670,11 +794,21 @@ export function Products() {
           <div className="border-b border-border p-4">
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-12 xl:items-end">
               <div className="min-w-0 md:col-span-2 xl:col-span-4">
-                <p className="mb-1 text-[11px] text-muted-foreground">
-              {t('products.toolbar_count')
-                    .replace('{{f}}', String(productsTable.totalRows))
-                    .replace('{{t}}', String(products.length))}
-                </p>
+                <div className="mb-1 flex items-center gap-2">
+                  <p className="text-[11px] text-muted-foreground">
+                    {t('products.toolbar_count')
+                      .replace('{{f}}', String(productsTable.totalRows))
+                      .replace('{{t}}', String(products.length))}
+                  </p>
+                  {useVirtualizedRows ? (
+                    <Badge
+                      variant="outline"
+                      className="h-5 border-[hsl(var(--dh-blue))]/35 bg-[hsl(var(--dh-blue))]/10 px-1.5 text-[10px] font-semibold uppercase tracking-wide text-[hsl(var(--dh-blue))]"
+                    >
+                      Virtualized
+                    </Badge>
+                  ) : null}
+                </div>
                 <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-muted-foreground" htmlFor="product-search">
                   {t('products.search_chip_label')}
                 </label>
@@ -765,7 +899,10 @@ export function Products() {
           </div>
 
           <CardContent className="p-0">
-          <div className="relative isolate max-h-[min(70vh,calc(100vh-14rem))] overflow-auto overscroll-contain">
+          <div
+            ref={tableScrollRef}
+            className="relative isolate max-h-[min(70vh,calc(100vh-14rem))] overflow-auto overscroll-contain"
+          >
           {loading ? (
             <div className="space-y-2 p-4">
               {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
@@ -810,103 +947,34 @@ export function Products() {
                     </tr>
                   </thead>
                   <tbody>
-                    {productsTable.paginatedRows.map((product, index) => {
-                      const stockLevel = product.stock_quantity === 0 ? 'out' : product.stock_quantity < LOW_STOCK_THRESHOLD ? 'low' : 'ok';
-                      const expiryStatus = isExpiredDate(product.expiry_date) ? 'expired' : isExpiringSoonDate(product.expiry_date) ? 'soon' : 'ok';
-                      const isAlert = stockLevel === 'out' || stockLevel === 'low' || expiryStatus === 'expired' || expiryStatus === 'soon';
-
-                      return (
-                        <tr
-                          key={product.id}
-                          className={cn(
-                            'transition-colors duration-150 ease-out hover:bg-muted/45',
-                            isAlert && 'bg-[hsl(var(--dh-amber))]/5',
-                            stockLevel === 'out' && 'bg-[hsl(var(--dh-red))]/5',
-                            '[&>td]:border-b [&>td]:border-border/70 [&>td]:border-r [&>td]:border-r-border/50 [&>td:last-child]:border-r-0'
-                          )}>
-                          <td className="p-2.5 text-center text-xs tabular-nums text-muted-foreground">{(productsTable.page - 1) * productsTable.pageSize + index + 1}</td>
-                          <td className="p-2.5">
-                            <div className="flex max-w-[220px] items-center gap-2.5">
-                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[hsl(var(--primary))]/10">
-                                <Package className="h-4 w-4 text-[hsl(var(--primary))]" aria-hidden />
-                              </div>
-                              <button
-                                type="button"
-                                onClick={() => setDetailProduct(product)}
-                                className="truncate text-left font-medium text-foreground hover:text-[hsl(var(--primary))]"
-                                title={product.name}
-                              >
-                                {product.name}
-                              </button>
-                            </div>
-                          </td>
-                          {visibleColumns.sku && <td className="hidden p-2.5 font-mono text-xs text-muted-foreground md:table-cell">{product.sku}</td>}
-                          {visibleColumns.category && (
-                            <td className="hidden p-2.5 lg:table-cell">
-                              <Badge variant="muted" className="max-w-[140px] truncate">{product.category}</Badge>
-                            </td>
-                          )}
-                          {visibleColumns.unit && <td className="hidden p-2.5 text-right text-sm text-muted-foreground md:table-cell">{product.unit}</td>}
-                          {visibleColumns.purchase && <td className="hidden p-2.5 text-right tabular-nums text-sm text-foreground lg:table-cell">{formatMoney(product.purchase_price)}</td>}
-                          {visibleColumns.selling && <td className="hidden p-2.5 text-right font-semibold tabular-nums text-sm text-foreground lg:table-cell">{formatMoney(product.selling_price)}</td>}
-                          {visibleColumns.stock && (
-                            <td className="p-2.5 text-right">
-                              <span className={cn('tabular-nums font-medium text-sm',
-                                product.stock_quantity === 0 && 'font-semibold text-[hsl(var(--dh-red))]',
-                                product.stock_quantity > 0 && product.stock_quantity < LOW_STOCK_THRESHOLD && 'text-[hsl(var(--dh-amber))]',
-                                product.stock_quantity >= LOW_STOCK_THRESHOLD && 'text-[hsl(var(--dh-green))]'
-                              )}>
-                                {product.stock_quantity}
-                              </span>
-                              {reorderSuggestions[product.id] ? (
-                                <div className="mt-1 text-[10px] text-[hsl(var(--dh-blue))]">
-                                  +{reorderSuggestions[product.id]} suggested
-                                </div>
-                              ) : null}
-                            </td>
-                          )}
-                          {visibleColumns.pcsCtn && (
-                            <td className="hidden p-2.5 text-right text-xs tabular-nums text-muted-foreground md:table-cell">{product.pieces_per_carton || product.pack_size || '—'}</td>
-                          )}
-                          {visibleColumns.batch && <td className="hidden p-2.5 font-mono text-xs text-muted-foreground lg:table-cell">{product.batch_number || '—'}</td>}
-                          {visibleColumns.expiry && (
-                            <td className="hidden p-2.5 md:table-cell">
-                              <div className="flex items-center gap-1">
-                                {isExpiredDate(product.expiry_date) ? (
-                                  <span className="text-xs font-medium text-[hsl(var(--dh-red))]">{product.expiry_date || '—'}</span>
-                                ) : (
-                                  <>
-                                    {isExpiringSoonDate(product.expiry_date) && <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-[hsl(var(--dh-amber))]" aria-hidden />}
-                                    <span className={cn('text-xs', isExpiringSoonDate(product.expiry_date) ? 'font-medium text-[hsl(var(--dh-amber))]' : 'text-muted-foreground')}>
-                                      {product.expiry_date || '—'}
-                                    </span>
-                                  </>
-                                )}
-                              </div>
-                            </td>
-                          )}
-                          <td className="p-2.5">
-                            <div className="flex items-center justify-center gap-1">
-                              <button type="button" onClick={() => setDetailProduct(product)}
-                                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-[hsl(var(--primary))]/10 hover:text-[hsl(var(--primary))]"
-                                title="Details">
-                                <Eye className="h-4 w-4" />
-                              </button>
-                              <button type="button" onClick={() => setEditingProduct(product)}
-                                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-[hsl(var(--primary))]/10 hover:text-[hsl(var(--primary))]"
-                                title={t('products.edit')}>
-                                <Edit className="h-4 w-4" />
-                              </button>
-                              <button type="button" onClick={() => setDeleteId(product.id)}
-                                className="rounded p-2 text-muted-foreground transition-colors hover:bg-[hsl(var(--dh-red))]/10 hover:text-[hsl(var(--dh-red))]"
-                                title={t('common.delete')}>
-                                <Trash2 className="w-4 h-4" />
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                    {useVirtualizedRows ? (
+                      <>
+                        {topPaddingHeight > 0 ? (
+                          <tr aria-hidden>
+                            <td colSpan={visibleColumnCount} style={{ height: `${topPaddingHeight}px` }} className="border-0 p-0" />
+                          </tr>
+                        ) : null}
+                        {virtualRows.map((virtualRow) => {
+                          const product = sortedProducts[virtualRow.index];
+                          if (!product) return null;
+                          return renderProductRow(product, virtualRow.index + 1);
+                        })}
+                        {bottomPaddingHeight > 0 ? (
+                          <tr aria-hidden>
+                            <td colSpan={visibleColumnCount} style={{ height: `${bottomPaddingHeight}px` }} className="border-0 p-0" />
+                          </tr>
+                        ) : null}
+                      </>
+                    ) : (
+                      <>
+                        {productsTable.paginatedRows.map((product, index) =>
+                          renderProductRow(
+                            product,
+                            (productsTable.page - 1) * productsTable.pageSize + index + 1
+                          )
+                        )}
+                      </>
+                    )}
                   </tbody>
                 </table>
 
@@ -919,13 +987,18 @@ export function Products() {
             </>
           )}
           </div>
-          {!loading && filteredProducts.length > 0 ? (
+          {!loading && filteredProducts.length > 0 && !useVirtualizedRows ? (
             <PaginationControls
               page={productsTable.page}
               totalPages={productsTable.totalPages}
               totalRows={productsTable.totalRows}
               onPageChange={productsTable.setPage}
             />
+          ) : null}
+          {!loading && useVirtualizedRows ? (
+            <div className="border-t border-border px-4 py-2 text-xs text-muted-foreground">
+              Showing virtualized rows for {productsTable.totalRows} products (threshold: {PRODUCT_TABLE_VIRTUALIZATION_THRESHOLD}+).
+            </div>
           ) : null}
           </CardContent>
         </Card>
@@ -1053,7 +1126,7 @@ export function Products() {
             categories={categories}
             suppliers={suppliers}
             units={units}
-            onRefreshCategories={fetchCategoriesAndSuppliers}
+            onRefreshCategories={refreshProductMeta}
             onClose={() => {
               setShowAddModal(false);
               setEditingProduct(null);
@@ -1139,7 +1212,7 @@ export function Products() {
 
                 // Refetch products from API to get latest data
                 logger.log('[Products] Refetching products list...');
-                await fetchProducts();
+                await queryClient.invalidateQueries({ queryKey: queryKeys.products.list() });
 
                 if (!addAnother) {
                   setShowAddModal(false);

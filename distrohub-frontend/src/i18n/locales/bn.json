@@ -364,6 +364,7 @@
     "name": "পণ্যের নাম",
     "barcode": "বারকোড",
     "scan_barcode": "স্ক্যান করুন বা বারকোড লিখুন",
+    "add_image": "ছবি যোগ করুন",
     "select_category": "ক্যাটাগরি সিলেক্ট করুন",
     "pack_size": "প্যাক সাইজ",
     "pieces_per_carton": "পিস/কার্টন",
@@ -423,6 +424,10 @@
     "expiry_required": "মেয়াদের তারিখ আবশ্যক",
     "validation": {
       "name_required": "পণ্যের নাম আবশ্যক",
+      "sku_required": "SKU আবশ্যক",
+      "category_required": "ক্যাটাগরি আবশ্যক",
+      "pack_size_min": "প্যাক সাইজ কমপক্ষে ১ হতে হবে",
+      "pieces_per_carton_min": "পিস/কার্টন কমপক্ষে ১ হতে হবে",
       "price_negative": "মূল্য নেতিবাচক হতে পারে না",
       "stock_negative": "স্টক নেতিবাচক হতে পারে না"
     }

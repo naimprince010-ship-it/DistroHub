@@ -364,6 +364,7 @@
     "name": "Product Name",
     "barcode": "Barcode",
     "scan_barcode": "Scan or enter barcode",
+    "add_image": "Add image",
     "select_category": "Select Category",
     "pack_size": "Pack Size",
     "pieces_per_carton": "Pieces/Carton",
@@ -423,6 +424,10 @@
     "expiry_required": "Expiry date is required",
     "validation": {
       "name_required": "Product name is required",
+      "sku_required": "SKU is required",
+      "category_required": "Category is required",
+      "pack_size_min": "Pack size must be at least 1",
+      "pieces_per_carton_min": "Pieces/carton must be at least 1",
       "price_negative": "Price cannot be negative",
       "stock_negative": "Stock cannot be negative"
     }

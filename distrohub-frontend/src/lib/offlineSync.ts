@@ -3,6 +3,7 @@ import {
   clearPendingSync,
   deleteRecord,
   getPendingSync,
+  markPendingSyncAttemptFailed,
   saveProduct,
   savePurchase,
   saveRetailer,
@@ -15,6 +16,8 @@ import {
 } from '@/lib/offlineDb';
 
 type SyncEntity = PendingSyncRecord['entity'];
+const MAX_SYNC_ATTEMPTS = 5;
+const BASE_RETRY_DELAY_MS = 5000;
 
 const entityApiBase: Record<SyncEntity, string> = {
   products: '/api/products',
@@ -25,6 +28,20 @@ const entityApiBase: Record<SyncEntity, string> = {
 
 function isOnline() {
   return navigator.onLine;
+}
+
+function isRetryableSyncError(error: unknown) {
+  const typed = error as any;
+  if (typed?.code === 'ERR_NETWORK' || typed?.isNetworkError) return true;
+  const status = typed?.response?.status;
+  if (!status) return true;
+  return status >= 500 || status === 429 || status === 408;
+}
+
+function retryDelayForAttempts(attempts: number) {
+  const safeAttempts = Math.max(1, attempts);
+  const exponential = BASE_RETRY_DELAY_MS * 2 ** (safeAttempts - 1);
+  return Math.min(exponential, 5 * 60_000);
 }
 
 async function mirrorToOfflineStore(entity: SyncEntity, data: any, synced: boolean) {
@@ -153,7 +170,10 @@ export async function runOfflineSync() {
     return { synced: 0, remaining: 0, skipped: false, error: null as string | null };
   }
 
-  const sorted = [...pending].sort((a, b) => a.timestamp - b.timestamp);
+  const now = Date.now();
+  const sorted = [...pending]
+    .filter((action) => (action.nextRetryAt ?? 0) <= now && (action.attempts ?? 0) < MAX_SYNC_ATTEMPTS)
+    .sort((a, b) => a.timestamp - b.timestamp);
   let syncedCount = 0;
   let lastError: string | null = null;
 
@@ -165,6 +185,16 @@ export async function runOfflineSync() {
     } catch (error) {
       console.warn('[offlineSync] Failed action, keeping in queue:', action, error);
       lastError = error instanceof Error ? error.message : 'Sync failed';
+      const nextAttempt = (action.attempts ?? 0) + 1;
+      const retryable = isRetryableSyncError(error);
+      const retryDelay = retryable ? retryDelayForAttempts(nextAttempt) : 24 * 60 * 60_000;
+      await markPendingSyncAttemptFailed(action.id, lastError, retryDelay);
+
+      if (!retryable) {
+        // Continue with other queued actions when the current one is invalid/conflicted.
+        continue;
+      }
+      // Stop on transient failures so we don't hammer backend/network.
       break;
     }
   }

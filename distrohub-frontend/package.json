@@ -12,6 +12,7 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
+    "@ericblade/quagga2": "^1.12.1",
     "@hookform/resolvers": "^5.2.2",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
@@ -42,6 +43,7 @@
     "@radix-ui/react-tooltip": "^1.2.8",
     "@sentry/react": "^10.34.0",
     "@tanstack/react-query": "^5.90.16",
+    "@tanstack/react-virtual": "^3.13.24",
     "@zxing/library": "^0.21.3",
     "axios": "^1.13.2",
     "class-variance-authority": "^0.7.1",

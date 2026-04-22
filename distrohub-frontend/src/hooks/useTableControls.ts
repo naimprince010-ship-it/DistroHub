@@ -58,6 +58,7 @@ export function useTableControls<T>(
     pageSize,
     totalPages,
     totalRows: sortedRows.length,
+    sortedRows,
     paginatedRows,
     toggleSort,
     resetPage,

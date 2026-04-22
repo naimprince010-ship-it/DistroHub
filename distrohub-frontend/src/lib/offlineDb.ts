@@ -70,10 +70,14 @@ export interface PendingSyncRecord {
   entity: 'products' | 'retailers' | 'sales' | 'purchases';
   data: unknown;
   timestamp: number;
+  attempts: number;
+  nextRetryAt: number;
+  lastError?: string | null;
+  lastAttemptAt?: number | null;
 }
 
 const DB_NAME = 'distrohub-offline';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 async function getDb() {
   return openDB(DB_NAME, DB_VERSION, {
@@ -150,13 +154,35 @@ export async function deleteRecord(storeName: 'products' | 'retailers' | 'sales'
   await db.delete(storeName, id);
 }
 
-export async function addPendingSync(action: Omit<PendingSyncRecord, 'id' | 'timestamp'>) {
+function getActionRecordId(data: unknown): string | null {
+  if (!data || typeof data !== 'object') return null;
+  const typed = data as Record<string, unknown>;
+  if (typeof typed.id === 'string' && typed.id.length > 0) return typed.id;
+  if (typeof typed._local_id === 'string' && typed._local_id.length > 0) return typed._local_id;
+  return null;
+}
+
+export async function addPendingSync(
+  action: Omit<PendingSyncRecord, 'id' | 'timestamp' | 'attempts' | 'nextRetryAt' | 'lastError' | 'lastAttemptAt'>
+) {
   const db = await getDb();
-  const id = `${action.entity}-${action.type}-${Date.now()}`;
+  const now = Date.now();
+  const actionRecordId = getActionRecordId(action.data);
+  const pending = await db.getAll('pendingSync');
+  const existing = pending.find((item) => {
+    if (item.entity !== action.entity || item.type !== action.type) return false;
+    return getActionRecordId(item.data) === actionRecordId && actionRecordId !== null;
+  });
+
+  const id = existing?.id ?? `${action.entity}-${action.type}-${now}`;
   await db.put('pendingSync', {
     ...action,
     id,
-    timestamp: Date.now(),
+    timestamp: now,
+    attempts: existing?.attempts ?? 0,
+    nextRetryAt: now,
+    lastError: null,
+    lastAttemptAt: existing?.lastAttemptAt ?? null,
   });
 }
 
@@ -168,6 +194,21 @@ export async function getPendingSync(): Promise<PendingSyncRecord[]> {
 export async function clearPendingSync(id: string) {
   const db = await getDb();
   await db.delete('pendingSync', id);
+}
+
+export async function markPendingSyncAttemptFailed(id: string, errorMessage: string, retryDelayMs = 5000) {
+  const db = await getDb();
+  const existing = await db.get('pendingSync', id);
+  if (!existing) return;
+  const now = Date.now();
+  const nextAttempts = (existing.attempts ?? 0) + 1;
+  await db.put('pendingSync', {
+    ...existing,
+    attempts: nextAttempts,
+    lastError: errorMessage,
+    lastAttemptAt: now,
+    nextRetryAt: now + Math.max(0, retryDelayMs),
+  });
 }
 
 export async function clearAllPendingSync() {
