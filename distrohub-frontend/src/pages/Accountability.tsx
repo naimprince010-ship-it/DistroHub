@@ -38,7 +38,7 @@ export function Accountability() {
         const response = await api.get('/api/users');
         if (response.data) {
           const reps = response.data
-            .filter((u: any) => u.role === 'sales_rep')
+            .filter((u: any) => u.role === 'dsr' || u.role === 'sales_rep')
             .map((u: any) => ({ id: u.id, name: u.name }));
           setSalesReps(reps);
         }

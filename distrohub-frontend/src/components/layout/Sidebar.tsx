@@ -1,5 +1,6 @@
 import { useState, useEffect, createContext, useContext, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import type { UserRole } from '@/types';
 import type { LucideIcon } from 'lucide-react';
 import {
   LayoutDashboard,
@@ -79,6 +80,51 @@ function isSettingsHomeActive(pathname: string, search: string): boolean {
   return tab === 'suppliers';
 }
 
+function readStoredUserRole(): UserRole | 'unknown' {
+  try {
+    const raw = localStorage.getItem('user');
+    if (!raw) return 'unknown';
+    const j = JSON.parse(raw) as { role?: string };
+    const r = (j?.role || '').toLowerCase();
+    if (r === 'admin' || r === 'sr' || r === 'dsr') return r;
+    if (r === 'sales_rep') return 'dsr';
+    return 'unknown';
+  } catch {
+    return 'unknown';
+  }
+}
+
+/** Path is item.path (may include ?query). */
+function navAllowedForRole(path: string, role: UserRole | 'unknown'): boolean {
+  const base = path.split('?')[0] || path;
+  if (role === 'unknown') return true;
+  if (role === 'admin') return true;
+  if (base.startsWith('/reports/stock-reconciliation')) return false;
+  const matchAllowed = (allowed: string[]) => {
+    if (base === '/') return allowed.includes('/');
+    return allowed.some((p) => p !== '/' && (base === p || base.startsWith(`${p}/`)));
+  };
+  if (role === 'sr') {
+    return matchAllowed(['/', '/dashboard', '/retailers', '/sales', '/payments', '/reports', '/settings']);
+  }
+  if (role === 'dsr') {
+    return matchAllowed([
+      '/',
+      '/dashboard',
+      '/retailers',
+      '/sales',
+      '/sales-returns',
+      '/routes',
+      '/accountability',
+      '/receivables',
+      '/payments',
+      '/reports',
+      '/settings',
+    ]);
+  }
+  return true;
+}
+
 interface SidebarProviderProps {
   children: React.ReactNode;
 }
@@ -155,8 +201,14 @@ export function Sidebar() {
   const { isCollapsed, setIsCollapsed, isMobileOpen, setIsMobileOpen } = useSidebar();
   const { t } = useLanguage();
 
+  const userRole = useMemo(
+    () => readStoredUserRole(),
+    [location.pathname, location.search]
+  );
+
   const menuGroups: MenuGroup[] = useMemo(
-    () => [
+    () => {
+      const all: MenuGroup[] = [
       {
         label: t('sidebar.main'),
         items: [
@@ -197,8 +249,13 @@ export function Sidebar() {
           { icon: Settings, label: t('common.settings'), path: '/settings?tab=suppliers' },
         ],
       },
-    ],
-    [t]
+    ];
+      if (userRole === 'admin' || userRole === 'unknown') return all;
+      return all
+        .map((g) => ({ ...g, items: g.items.filter((it) => navAllowedForRole(it.path, userRole)) }))
+        .filter((g) => g.items.length > 0);
+    },
+    [t, userRole]
   );
 
   const NavRow = ({ item }: { item: MenuItem }) => {

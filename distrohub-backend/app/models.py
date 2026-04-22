@@ -5,7 +5,39 @@ from enum import Enum
 
 class UserRole(str, Enum):
     ADMIN = "admin"
-    SALES_REP = "sales_rep"
+    SR = "sr"
+    DSR = "dsr"
+
+
+class CreditRiskBearer(str, Enum):
+    COMPANY = "company"
+    SR = "sr"
+
+
+class GuaranteeEnforcement(str, Enum):
+    OFF = "off"
+    WARN = "warn"
+    BLOCK = "block"
+
+
+class PaymentApprovalStatus(str, Enum):
+    PENDING = "pending_approval"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+
+
+def normalize_user_role(raw) -> UserRole:
+    """Map DB / JWT values to UserRole. Legacy `sales_rep` is treated as DSR."""
+    if raw is None:
+        return UserRole.DSR
+    s = str(raw).strip().lower()
+    if s == UserRole.ADMIN.value:
+        return UserRole.ADMIN
+    if s == UserRole.SR.value:
+        return UserRole.SR
+    if s in (UserRole.DSR.value, "sales_rep"):
+        return UserRole.DSR
+    return UserRole.DSR
 
 class PaymentStatus(str, Enum):
     PAID = "paid"
@@ -34,8 +66,10 @@ class ExpiryStatus(str, Enum):
 class UserBase(BaseModel):
     email: str
     name: str
-    role: UserRole = UserRole.SALES_REP
+    role: UserRole = UserRole.DSR
     phone: Optional[str] = None
+    sr_guarantee_limit: float = 0
+    sr_guarantee_enforcement: GuaranteeEnforcement = GuaranteeEnforcement.OFF
 
 class UserCreate(UserBase):
   password: str
@@ -45,6 +79,9 @@ class UserUpdate(BaseModel):
   email: Optional[str] = None
   phone: Optional[str] = None
   password: Optional[str] = None
+  role: Optional[UserRole] = None
+  sr_guarantee_limit: Optional[float] = None
+  sr_guarantee_enforcement: Optional[GuaranteeEnforcement] = None
 
 class User(UserBase):
   id: str
@@ -198,6 +235,10 @@ class SaleCreate(BaseModel):
     due_date: Optional[date] = None
     credit_override: bool = False
     credit_override_reason: Optional[str] = None
+    credit_risk_bearer: CreditRiskBearer = CreditRiskBearer.COMPANY
+    sr_liable_user_id: Optional[str] = None
+    sr_guarantee_override: bool = False
+    sr_guarantee_override_reason: Optional[str] = None
 
 class SaleItem(BaseModel):
     id: str
@@ -233,6 +274,10 @@ class Sale(BaseModel):
     notes: Optional[str] = None
     assigned_to: Optional[str] = None  # User ID of SR/delivery man assigned to collect payment
     assigned_to_name: Optional[str] = None  # Name of assigned SR/delivery man
+    created_by: Optional[str] = None
+    created_by_name: Optional[str] = None
+    credit_risk_bearer: str = "company"
+    sr_liable_user_id: Optional[str] = None
     terms_days: int = 0
     due_date: Optional[date] = None
     credit_status: Optional[str] = "open"
@@ -248,6 +293,12 @@ class SaleUpdate(BaseModel):
     notes: Optional[str] = None
     assigned_to: Optional[str] = None  # Update assigned SR/delivery man
 
+class SaleDsrUpdate(BaseModel):
+    """DSR: delivery fields only (no financial overrides)"""
+    delivery_status: Optional[str] = None
+    delivered_at: Optional[datetime] = None
+    notes: Optional[str] = None
+
 class PaymentCreate(BaseModel):
     retailer_id: str
     sale_id: str = Field(..., min_length=1, description="Sale ID is mandatory for payment traceability")
@@ -255,6 +306,7 @@ class PaymentCreate(BaseModel):
     amount: float = Field(gt=0, description="Payment amount must be positive")
     payment_method: PaymentMethod
     notes: Optional[str] = None
+    approval_status: Optional[PaymentApprovalStatus] = None
 
 class Payment(BaseModel):
     id: str
@@ -269,7 +321,45 @@ class Payment(BaseModel):
     route_id: Optional[str] = None  # Route ID if payment is for a sale in a route
     route_number: Optional[str] = None  # Route number (enriched from route)
     invoice_number: Optional[str] = None  # Invoice number (enriched from sale)
+    approval_status: str = "approved"
+    rejection_reason: Optional[str] = None
+    approved_by: Optional[str] = None
+    approved_at: Optional[datetime] = None
     created_at: datetime
+
+
+class PaymentRejectBody(BaseModel):
+    reason: Optional[str] = None
+
+
+class SrRiskAdjustmentCreate(BaseModel):
+    sr_user_id: str
+    amount: float = Field(..., description="Positive reduces net exposure (credit to SR); negative increases")
+    adjustment_type: str = Field(..., min_length=1, description="e.g. commission_offset, manual_writeoff")
+    reference_sale_id: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class SrRiskAdjustment(BaseModel):
+    id: str
+    sr_user_id: str
+    amount: float
+    adjustment_type: str
+    reference_sale_id: Optional[str] = None
+    notes: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: datetime
+
+
+class SrLiabilitySummary(BaseModel):
+    sr_user_id: str
+    sr_name: Optional[str] = None
+    open_sr_backed_due: float
+    adjustments_total: float
+    net_exposure: float
+    guarantee_limit: float
+    enforcement: str
+
 
 class RefundType(str, Enum):
     ADJUST_DUE = "adjust_due"

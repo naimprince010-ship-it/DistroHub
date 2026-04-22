@@ -25,6 +25,7 @@ const Receivables = lazy(async () => ({ default: (await import('@/pages/Receivab
 const Expiry = lazy(async () => ({ default: (await import('@/pages/Expiry')).Expiry }));
 const Reports = lazy(async () => ({ default: (await import('@/pages/Reports')).Reports }));
 const StockReconciliation = lazy(async () => ({ default: (await import('@/pages/StockReconciliation')).StockReconciliation }));
+const SrLiabilityReport = lazy(async () => ({ default: (await import('@/pages/SrLiabilityReport')).SrLiabilityReport }));
 const Settings = lazy(async () => ({ default: (await import('@/pages/Settings')).Settings }));
 const Categories = lazy(async () => ({ default: (await import('@/pages/Categories')).Categories }));
 
@@ -83,6 +84,7 @@ function App() {
                   <Route path="expiry" element={lazyPage(<Expiry />)} />
                   <Route path="reports" element={lazyPage(<Reports />)} />
                   <Route path="reports/stock-reconciliation" element={lazyPage(<StockReconciliation />)} />
+                  <Route path="reports/sr-liability" element={lazyPage(<SrLiabilityReport />)} />
                   <Route path="settings" element={lazyPage(<Settings />)} />
                   <Route path="categories" element={lazyPage(<Categories />)} />
                 </Route>

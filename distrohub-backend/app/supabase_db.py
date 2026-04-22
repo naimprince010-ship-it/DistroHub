@@ -7,19 +7,11 @@ from supabase import create_client, Client
 from app.models import (
     UserRole, PaymentStatus, OrderStatus, ExpiryStatus,
     ProductBatch, InventoryItem, ExpiryAlert, DashboardStats,
-    RefundType
+    RefundType, normalize_user_role
 )
 
 def _normalize_role(raw) -> UserRole:
-    """Case-insensitive role normalization. DB may store 'Admin' or 'admin'."""
-    if raw is None:
-        return UserRole.SALES_REP
-    s = str(raw).strip().lower()
-    if s == UserRole.ADMIN.value:
-        return UserRole.ADMIN
-    if s == UserRole.SALES_REP.value:
-        return UserRole.SALES_REP
-    return UserRole.SALES_REP
+    return normalize_user_role(raw)
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY")
@@ -126,7 +118,10 @@ class SupabaseDatabase:
             "password_hash": self.hash_password(password)
         }
         result = self.client.table("users").insert(user_data).execute()
-        return result.data[0] if result.data else user_data
+        u = result.data[0] if result.data else user_data
+        if u:
+            u["role"] = _normalize_role(u.get("role"))
+        return u
     
     def update_user(self, user_id: str, data: dict) -> Optional[dict]:
         """Update user information"""
@@ -144,12 +139,25 @@ class SupabaseDatabase:
             
             if "password" in data and data["password"]:
                 update_data["password_hash"] = self.hash_password(data["password"])
+
+            if "role" in data and data["role"] is not None:
+                r = data["role"]
+                update_data["role"] = r.value if isinstance(r, UserRole) else r
+
+            if "sr_guarantee_limit" in data and data["sr_guarantee_limit"] is not None:
+                update_data["sr_guarantee_limit"] = float(data["sr_guarantee_limit"])
+            if "sr_guarantee_enforcement" in data and data["sr_guarantee_enforcement"] is not None:
+                ge = data["sr_guarantee_enforcement"]
+                update_data["sr_guarantee_enforcement"] = ge.value if hasattr(ge, "value") else str(ge)
             
             if not update_data:
                 return None
             
             result = self.client.table("users").update(update_data).eq("id", user_id).execute()
-            return result.data[0] if result.data else None
+            u = result.data[0] if result.data else None
+            if u:
+                u["role"] = _normalize_role(u.get("role"))
+            return u
         except Exception as e:
             print(f"[DB] Error updating user {user_id}: {e}")
             raise
@@ -654,6 +662,13 @@ class SupabaseDatabase:
             assigned_user = self.get_user_by_id(data["assigned_to"])
             if assigned_user:
                 assigned_to_name = assigned_user.get("name")
+
+        created_by = data.get("created_by")
+        created_by_name = None
+        if created_by:
+            cb_user = self.get_user_by_id(created_by)
+            if cb_user:
+                created_by_name = cb_user.get("name")
         
         sale_data = {
             "id": sale_id,
@@ -670,9 +685,13 @@ class SupabaseDatabase:
             "notes": data.get("notes"),
             "assigned_to": data.get("assigned_to"),
             "assigned_to_name": assigned_to_name,
+            "created_by": created_by,
+            "created_by_name": created_by_name,
             "terms_days": int(data.get("terms_days", 0) or 0),
             "due_date": data.get("due_date"),
             "credit_status": "open" if due_amount > 0 else "settled",
+            "credit_risk_bearer": data.get("credit_risk_bearer") or "company",
+            "sr_liable_user_id": data.get("sr_liable_user_id"),
             "created_at": datetime.now().isoformat()
         }
         
@@ -1192,9 +1211,9 @@ class SupabaseDatabase:
         
         # Get all users with role 'sales_rep' if user_id not specified
         if user_id:
-            users_query = self.client.table("users").select("*").eq("id", user_id).eq("role", "sales_rep")
+            users_query = self.client.table("users").select("*").eq("id", user_id).in_("role", ["dsr", "sales_rep"])
         else:
-            users_query = self.client.table("users").select("*").eq("role", "sales_rep")
+            users_query = self.client.table("users").select("*").in_("role", ["dsr", "sales_rep"])
         
         users_result = users_query.execute()
         users = users_result.data or []
@@ -1555,7 +1574,16 @@ class SupabaseDatabase:
             traceback.print_exc()
             raise ValueError(f"Failed to create sale return: {error_type}: {error_msg}")
     
-    def get_payments(self, sale_id: Optional[str] = None, user_id: Optional[str] = None, route_id: Optional[str] = None, from_date: Optional[str] = None, to_date: Optional[str] = None, enrich_routes: bool = True) -> List[dict]:
+    def get_payments(
+        self,
+        sale_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        route_id: Optional[str] = None,
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+        enrich_routes: bool = True,
+        approval_status: Optional[str] = None,
+    ) -> List[dict]:
         """
         Get payments with optional filters.
         """
@@ -1567,6 +1595,8 @@ class SupabaseDatabase:
             query = query.eq("collected_by", user_id)
         if route_id:
             query = query.eq("route_id", route_id)
+        if approval_status:
+            query = query.eq("approval_status", approval_status)
         if from_date:
             query = query.gte("created_at", from_date)
         if to_date:
@@ -1600,7 +1630,44 @@ class SupabaseDatabase:
         retailer = self.get_retailer(data["retailer_id"])
         if not retailer:
             raise ValueError("Retailer not found")
-        
+
+        raw_ap = data.get("approval_status")
+        if raw_ap is None or raw_ap == "":
+            ap_status = "approved"
+        elif hasattr(raw_ap, "value"):
+            ap_status = raw_ap.value
+        else:
+            ap_status = str(raw_ap)
+        if ap_status not in ("pending_approval", "approved", "rejected"):
+            ap_status = "approved"
+
+        if ap_status == "pending_approval":
+            sale = self.get_sale(data["sale_id"])
+            if not sale:
+                raise ValueError("Sale not found")
+            route_id = sale.get("route_id")
+            collected_by_name = None
+            if data.get("collected_by"):
+                cu = self.get_user_by_id(data["collected_by"])
+                if cu:
+                    collected_by_name = cu.get("name")
+            pay_row = {
+                "retailer_id": data["retailer_id"],
+                "retailer_name": retailer["name"],
+                "sale_id": data.get("sale_id"),
+                "route_id": route_id,
+                "amount": data["amount"],
+                "payment_method": data["payment_method"] if isinstance(data["payment_method"], str) else str(data.get("payment_method", "")),
+                "notes": data.get("notes"),
+                "collected_by": data.get("collected_by"),
+                "collected_by_name": collected_by_name,
+                "approval_status": "pending_approval",
+            }
+            res = self.client.table("payments").insert(pay_row).execute()
+            if not res.data:
+                raise ValueError("Failed to insert pending payment")
+            return res.data[0]
+
         self.update_retailer_due(data["retailer_id"], -data["amount"])
         
         # DATA ATTACHMENT FIX: Get route_id from sale if sale is in a route
@@ -1714,10 +1781,11 @@ class SupabaseDatabase:
             "sale_id": data.get("sale_id"),
             "route_id": route_id,  # DATA ATTACHMENT FIX: Set route_id from sale.route_id
             "amount": data["amount"],
-            "payment_method": data["payment_method"],
+            "payment_method": data["payment_method"] if isinstance(data["payment_method"], str) else str(data.get("payment_method", "")),
             "notes": data.get("notes"),
             "collected_by": data.get("collected_by"),
-            "collected_by_name": collected_by_name
+            "collected_by_name": collected_by_name,
+            "approval_status": "approved",
         }
         result = self.client.table("payments").insert(payment_data).execute()
         
@@ -1756,6 +1824,109 @@ class SupabaseDatabase:
         # #endregion
         
         return inserted_payment
+
+    def get_sr_open_liability(self, sr_user_id: str) -> float:
+        r = self.client.table("sales").select("due_amount, sr_liable_user_id, created_by").eq("credit_risk_bearer", "sr").execute()
+        total = 0.0
+        for row in (r.data or []):
+            liable = row.get("sr_liable_user_id") or row.get("created_by")
+            if str(liable or "") == str(sr_user_id):
+                total += max(0.0, float(row.get("due_amount", 0) or 0))
+        return total
+
+    def get_sr_adjustments_total(self, sr_user_id: str) -> float:
+        res = self.client.table("sr_risk_adjustments").select("amount").eq("sr_user_id", sr_user_id).execute()
+        return sum(float(x.get("amount", 0) or 0) for x in (res.data or []))
+
+    def add_sr_risk_adjustment(
+        self,
+        sr_user_id: str,
+        amount: float,
+        adjustment_type: str,
+        reference_sale_id: Optional[str],
+        notes: Optional[str],
+        created_by: Optional[str],
+    ) -> dict:
+        from datetime import datetime as _dt
+        import uuid
+        row = {
+            "id": str(uuid.uuid4()),
+            "sr_user_id": sr_user_id,
+            "amount": float(amount),
+            "adjustment_type": adjustment_type,
+            "reference_sale_id": reference_sale_id,
+            "notes": notes,
+            "created_by": created_by,
+            "created_at": _dt.now().isoformat(),
+        }
+        res = self.client.table("sr_risk_adjustments").insert(row).execute()
+        return res.data[0] if res.data else row
+
+    def list_sr_risk_adjustments(self, sr_user_id: Optional[str] = None) -> List[dict]:
+        q = self.client.table("sr_risk_adjustments").select("*")
+        if sr_user_id:
+            q = q.eq("sr_user_id", sr_user_id)
+        res = q.order("created_at", desc=True).execute()
+        return res.data or []
+
+    def get_payment_by_id(self, payment_id: str) -> Optional[dict]:
+        r = self.client.table("payments").select("*").eq("id", payment_id).limit(1).execute()
+        return r.data[0] if r.data else None
+
+    def approve_pending_payment(self, payment_id: str, approver_id: str) -> Optional[dict]:
+        p = self.get_payment_by_id(payment_id)
+        if not p or p.get("approval_status") != "pending_approval":
+            return None
+        self.update_retailer_due(p["retailer_id"], -float(p.get("amount", 0) or 0))
+        if p.get("sale_id"):
+            sale = self.get_sale(p["sale_id"])
+            if sale:
+                current_paid = float(sale.get("paid_amount", 0))
+                current_due = float(sale.get("due_amount", 0))
+                amt = float(p.get("amount", 0) or 0)
+                new_paid = current_paid + amt
+                new_due = max(0, current_due - amt)
+                pay_status = "paid" if new_due <= 0.01 else "partial"
+                self.client.table("sales").update(
+                    {"paid_amount": new_paid, "due_amount": new_due, "payment_status": pay_status}
+                ).eq("id", p["sale_id"]).execute()
+        from datetime import datetime
+        ap_at = datetime.now().isoformat()
+        self.add_receivable_ledger_entry({
+            "retailer_id": p["retailer_id"],
+            "sale_id": p.get("sale_id"),
+            "payment_id": p["id"],
+            "entry_type": "payment",
+            "amount": -float(p.get("amount", 0) or 0),
+            "reference_type": "payment",
+            "reference_id": p["id"],
+            "remarks": "payment_collected_approved",
+            "created_at": ap_at,
+        })
+        upd = {
+            "approval_status": "approved",
+            "approved_by": approver_id,
+            "approved_at": ap_at,
+        }
+        res = self.client.table("payments").update(upd).eq("id", payment_id).execute()
+        if res.data:
+            return res.data[0]
+        return {**p, **upd}
+
+    def reject_pending_payment(self, payment_id: str, approver_id: str, reason: Optional[str] = None) -> Optional[dict]:
+        p = self.get_payment_by_id(payment_id)
+        if not p or p.get("approval_status") != "pending_approval":
+            return None
+        from datetime import datetime
+        ap_at = datetime.now().isoformat()
+        upd = {
+            "approval_status": "rejected",
+            "rejection_reason": reason,
+            "approved_by": approver_id,
+            "approved_at": ap_at,
+        }
+        res = self.client.table("payments").update(upd).eq("id", payment_id).execute()
+        return res.data[0] if res.data else None
 
     def add_stock_ledger_entry(self, data: dict) -> dict:
         created_at = data.get("created_at")

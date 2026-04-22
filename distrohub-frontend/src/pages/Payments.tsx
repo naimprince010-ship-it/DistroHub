@@ -21,6 +21,8 @@ interface Payment {
   payment_method: string;
   notes?: string;
   created_at: string;
+  approval_status?: 'pending_approval' | 'approved' | 'rejected';
+  collected_by_name?: string;
 }
 
 interface Receivable {
@@ -69,6 +71,8 @@ export function Payments() {
   const [selectedRetailer, setSelectedRetailer] = useState<Receivable | null>(null);
   const [showSupplierPaymentModal, setShowSupplierPaymentModal] = useState(false);
   const [selectedSupplier, setSelectedSupplier] = useState<Payable | null>(null);
+  const [pendingApprovals, setPendingApprovals] = useState<Payment[]>([]);
+  const [viewerCanApprove, setViewerCanApprove] = useState(false);
 
   // Calculate payables from purchases
   const calculatePayables = (purchasesData: Purchase[]): Payable[] => {
@@ -113,6 +117,17 @@ export function Payments() {
 
     try {
       setLoading(true);
+      let canApr = false;
+      try {
+        const raw = localStorage.getItem('user');
+        if (raw) {
+          const r = (JSON.parse(raw) as { role?: string }).role?.toLowerCase() || '';
+          canApr = r === 'admin' || r === 'dsr' || r === 'sales_rep';
+        }
+      } catch {
+        canApr = false;
+      }
+      setViewerCanApprove(canApr);
       console.log('[Payments] Fetching payments, receivables, purchases, and dashboard stats...');
 
       const [paymentsRes, receivablesRes, purchasesRes, dashboardRes] = await Promise.all([
@@ -125,6 +140,17 @@ export function Payments() {
       if (paymentsRes.data) {
         setPayments(paymentsRes.data);
         console.log('[Payments] Payments fetched:', paymentsRes.data.length);
+      }
+
+      if (canApr) {
+        try {
+          const pr = await api.get<Payment[]>('/api/payments/pending-approval');
+          setPendingApprovals(pr.data || []);
+        } catch {
+          setPendingApprovals([]);
+        }
+      } else {
+        setPendingApprovals([]);
       }
 
       if (receivablesRes.data) {
@@ -194,8 +220,11 @@ export function Payments() {
   // Calculate totals
   const totalReceivables = receivables.reduce((sum, r) => sum + r.total_due, 0);
   const totalPayables = payables.reduce((sum, p) => sum + p.total_due, 0);
-  const totalPayments = payments.reduce((sum, p) => sum + p.amount, 0);
-  const totalPaymentsThisMonth = payments
+  const approvedOnly = payments.filter(
+    (p) => !p.approval_status || p.approval_status === 'approved',
+  );
+  const totalPayments = approvedOnly.reduce((sum, p) => sum + p.amount, 0);
+  const totalPaymentsThisMonth = approvedOnly
     .filter((p) => {
       const paymentDate = new Date(p.created_at);
       const thisMonth = new Date();
@@ -204,6 +233,25 @@ export function Payments() {
       return paymentDate >= thisMonth;
     })
     .reduce((sum, p) => sum + p.amount, 0);
+
+  const handleApprovePending = async (paymentId: string) => {
+    try {
+      await api.post(`/api/payments/${paymentId}/approve`);
+      await fetchData();
+    } catch (e: any) {
+      alert(e?.response?.data?.detail || e?.message || 'Approve failed');
+    }
+  };
+
+  const handleRejectPending = async (paymentId: string) => {
+    const reason = window.prompt('Rejection reason (optional):') || '';
+    try {
+      await api.post(`/api/payments/${paymentId}/reject`, { reason: reason || null });
+      await fetchData();
+    } catch (e: any) {
+      alert(e?.response?.data?.detail || e?.message || 'Reject failed');
+    }
+  };
 
   const handleCreatePayment = async (paymentData: {
     retailer_id: string;
@@ -264,6 +312,44 @@ export function Payments() {
   return (
     <PageShell title="Payments & Receivables">
         {/* Stats Cards */}
+        {viewerCanApprove && pendingApprovals.length > 0 && (
+          <div className="rounded-xl border border-amber-200/80 bg-amber-50/50 dark:border-amber-900/50 dark:bg-amber-950/20 p-4 space-y-2">
+            <h3 className="text-sm font-semibold text-foreground">Pending field collections (SR)</h3>
+            <p className="text-xs text-muted-foreground">Approve to apply the payment and reduce retailer due.</p>
+            <ul className="space-y-2 text-sm">
+              {pendingApprovals.map((p) => (
+                <li
+                  key={p.id}
+                  className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-2 last:border-0"
+                >
+                  <span>
+                    ৳ {p.amount.toLocaleString()} — {p.retailer_name}
+                    {p.collected_by_name ? (
+                      <span className="text-muted-foreground"> ({p.collected_by_name})</span>
+                    ) : null}
+                  </span>
+                  <span className="flex gap-1">
+                    <button
+                      type="button"
+                      className="btn-primary text-xs h-7 px-2"
+                      onClick={() => void handleApprovePending(p.id)}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      className="text-xs h-7 px-2 rounded border border-border hover:bg-muted"
+                      onClick={() => void handleRejectPending(p.id)}
+                    >
+                      Reject
+                    </button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard label="Total Receivables" value={`৳ ${totalReceivables.toLocaleString()}`} icon={TrendingDown} color="red"
             hint={dashboardStats ? `Dashboard: ৳ ${dashboardStats.receivable_from_customers.toLocaleString()}` : undefined} />
@@ -392,6 +478,7 @@ export function Payments() {
                     <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Retailer</th>
                     <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Amount</th>
                     <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Method</th>
+                    <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Status</th>
                     <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Notes</th>
                   </tr>
                 </thead>
@@ -402,6 +489,17 @@ export function Payments() {
                       <td className="px-3 py-2.5 font-medium text-foreground">{payment.retailer_name}</td>
                       <td className="px-3 py-2.5 text-right font-mono font-semibold text-[hsl(var(--dh-green))]">৳ {payment.amount.toLocaleString()}</td>
                       <td className="px-3 py-2.5 text-muted-foreground">{formatPaymentMethodLabel(payment.payment_method)}</td>
+                      <td className="px-3 py-2.5 text-xs">
+                        {payment.approval_status === 'pending_approval' && (
+                          <span className="rounded bg-amber-100 text-amber-900 px-1.5 py-0.5">Pending</span>
+                        )}
+                        {payment.approval_status === 'rejected' && (
+                          <span className="rounded bg-red-100 text-red-800 px-1.5 py-0.5">Rejected</span>
+                        )}
+                        {(!payment.approval_status || payment.approval_status === 'approved') && (
+                          <span className="text-muted-foreground">Approved</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2.5 text-sm text-muted-foreground">{payment.notes || '–'}</td>
                     </tr>
                   ))}
@@ -490,7 +588,10 @@ function PaymentModal({ retailer, onClose, onSave }: PaymentModalProps) {
           : [];
         const reps = Array.isArray(usersRes.data)
           ? usersRes.data
-              .filter((user: any) => user.role === 'sales_rep' || user.role === 'admin')
+              .filter(
+              (user: any) =>
+                user.role === 'dsr' || user.role === 'sales_rep' || user.role === 'admin'
+            )
               .map((user: any) => ({ id: user.id, name: user.name }))
           : [];
         setRetailerSales(openSales);

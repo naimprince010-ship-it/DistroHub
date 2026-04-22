@@ -4,7 +4,7 @@ import uuid
 import hashlib
 import bcrypt as _bcrypt_lib
 from app.models import (
-    User, UserRole, Product, ProductBatch, Retailer, Purchase, PurchaseItem,
+    User, UserRole, normalize_user_role, Product, ProductBatch, Retailer, Purchase, PurchaseItem,
     Sale, SaleItem, Payment, PaymentStatus, OrderStatus, ExpiryStatus,
     InventoryItem, ExpiryAlert, DashboardStats, Category, Supplier, Unit,
     Warehouse
@@ -46,6 +46,7 @@ class InMemoryDatabase:
         self.sms_logs: List[dict] = []
         self.audit_logs: List[dict] = []
         self.stock_ledger: List[dict] = []
+        self.sr_risk_adjustments: Dict[str, dict] = {}
         self._seed_data()
     
     def _seed_data(self):
@@ -59,17 +60,33 @@ class InMemoryDatabase:
             "role": UserRole.ADMIN,
             "phone": "01700000000",
             "password_hash": _bcrypt_lib.hashpw(b"admin123", _bcrypt_lib.gensalt()).decode(),
+            "sr_guarantee_limit": 0.0,
+            "sr_guarantee_enforcement": "off",
             "created_at": datetime.now()
         }
 
-        sales_id = "sales-distrohub-0001"
-        self.users[sales_id] = {
-            "id": sales_id,
+        dsr_id = "sales-distrohub-0001"
+        self.users[dsr_id] = {
+            "id": dsr_id,
             "email": "sales@distrohub.com",
-            "name": "Sales Rep",
-            "role": UserRole.SALES_REP,
+            "name": "DSR User",
+            "role": UserRole.DSR,
             "phone": "01711111111",
             "password_hash": _bcrypt_lib.hashpw(b"sales123", _bcrypt_lib.gensalt()).decode(),
+            "sr_guarantee_limit": 0.0,
+            "sr_guarantee_enforcement": "off",
+            "created_at": datetime.now()
+        }
+        sr_id = "sr-distrohub-0001"
+        self.users[sr_id] = {
+            "id": sr_id,
+            "email": "sr@distrohub.com",
+            "name": "SR User",
+            "role": UserRole.SR,
+            "phone": "01722222222",
+            "password_hash": _bcrypt_lib.hashpw(b"sruser123", _bcrypt_lib.gensalt()).decode(),
+            "sr_guarantee_limit": 50000.0,
+            "sr_guarantee_enforcement": "block",
             "created_at": datetime.now()
         }
         
@@ -249,9 +266,33 @@ class InMemoryDatabase:
             "role": role,
             "phone": phone,
             "password_hash": self.hash_password(password),
+            "sr_guarantee_limit": 0.0,
+            "sr_guarantee_enforcement": "off",
             "created_at": datetime.now()
         }
         self.users[user_id] = user
+        return user
+
+    def update_user(self, user_id: str, data: dict) -> Optional[dict]:
+        user = self.users.get(user_id)
+        if not user:
+            return None
+        if "name" in data and data["name"] is not None:
+            user["name"] = data["name"]
+        if "email" in data and data["email"] is not None:
+            user["email"] = data["email"]
+        if "phone" in data:
+            user["phone"] = data["phone"] if data["phone"] else None
+        if "password" in data and data.get("password"):
+            user["password_hash"] = self.hash_password(data["password"])
+        if "role" in data and data["role"] is not None:
+            r = data["role"]
+            user["role"] = r if isinstance(r, UserRole) else normalize_user_role(r)
+        if "sr_guarantee_limit" in data and data["sr_guarantee_limit"] is not None:
+            user["sr_guarantee_limit"] = float(data["sr_guarantee_limit"])
+        if "sr_guarantee_enforcement" in data and data["sr_guarantee_enforcement"] is not None:
+            e = data["sr_guarantee_enforcement"]
+            user["sr_guarantee_enforcement"] = e.value if hasattr(e, "value") else str(e)
         return user
 
     def delete_user(self, user_id: str) -> bool:
@@ -515,6 +556,19 @@ class InMemoryDatabase:
         
         if due_amount > 0:
             self.update_retailer_due(data["retailer_id"], due_amount)
+
+        assigned_to = data.get("assigned_to")
+        assigned_to_name = None
+        if assigned_to:
+            au = self.get_user_by_id(assigned_to)
+            if au:
+                assigned_to_name = au.get("name")
+        created_by = data.get("created_by")
+        created_by_name = None
+        if created_by:
+            cu = self.get_user_by_id(created_by)
+            if cu:
+                created_by_name = cu.get("name")
         
         sale = {
             "id": sale_id,
@@ -530,9 +584,15 @@ class InMemoryDatabase:
             "payment_status": payment_status,
             "status": OrderStatus.CONFIRMED,
             "notes": data.get("notes"),
+            "assigned_to": assigned_to,
+            "assigned_to_name": assigned_to_name,
+            "created_by": created_by,
+            "created_by_name": created_by_name,
             "terms_days": int(data.get("terms_days", 0) or 0),
             "due_date": data.get("due_date"),
             "credit_status": "open" if due_amount > 0 else "settled",
+            "credit_risk_bearer": data.get("credit_risk_bearer") or "company",
+            "sr_liable_user_id": data.get("sr_liable_user_id"),
             "created_at": datetime.now()
         }
         self.sales[sale_id] = sale
@@ -568,8 +628,78 @@ class InMemoryDatabase:
                 "margin_percent": margin_percent,
             })
         return sale
+
+    def update_sale(self, sale_id: str, data: dict) -> Optional[dict]:
+        """Mirror supabase sale update for InMemory (admin + DSR delivery paths in API)."""
+        current_sale = self.get_sale(sale_id)
+        if not current_sale:
+            return None
+        total_amount = float(current_sale.get("total_amount", 0))
+        current_paid = float(current_sale.get("paid_amount", 0))
+        retailer_id = current_sale.get("retailer_id")
+        update_data: Dict = {}
+        paid_amount_changed = False
+        old_paid = current_paid
+        if "paid_amount" in data and data["paid_amount"] is not None:
+            new_paid = float(data["paid_amount"])
+            if new_paid != current_paid:
+                paid_amount_changed = True
+                update_data["paid_amount"] = new_paid
+                new_due = max(0, total_amount - new_paid)
+                update_data["due_amount"] = new_due
+                if new_due <= 0:
+                    update_data["payment_status"] = PaymentStatus.PAID
+                elif new_paid > 0:
+                    update_data["payment_status"] = PaymentStatus.PARTIAL
+                else:
+                    update_data["payment_status"] = PaymentStatus.DUE
+        if "due_amount" in data and data["due_amount"] is not None:
+            new_due = max(0, float(data["due_amount"]))
+            update_data["due_amount"] = new_due
+            current_paid_for_status = update_data.get("paid_amount", current_paid)
+            if new_due <= 0:
+                update_data["payment_status"] = PaymentStatus.PAID
+            elif current_paid_for_status > 0:
+                update_data["payment_status"] = PaymentStatus.PARTIAL
+            else:
+                update_data["payment_status"] = PaymentStatus.DUE
+        if "payment_status" in data and data["payment_status"] is not None:
+            ps = data["payment_status"]
+            update_data["payment_status"] = ps if isinstance(ps, PaymentStatus) else PaymentStatus(ps)
+        if "delivery_status" in data and data["delivery_status"] is not None:
+            update_data["delivery_status"] = data["delivery_status"]
+            if data["delivery_status"] == "delivered" and "delivered_at" not in data and not current_sale.get("delivered_at"):
+                update_data["delivered_at"] = datetime.now().isoformat()
+        if "delivered_at" in data and data["delivered_at"] is not None:
+            dv = data["delivered_at"]
+            update_data["delivered_at"] = dv.isoformat() if isinstance(dv, datetime) else dv
+        if "notes" in data:
+            update_data["notes"] = data["notes"]
+        if "assigned_to" in data:
+            at = data["assigned_to"]
+            update_data["assigned_to"] = at
+            an = None
+            if at:
+                u = self.get_user_by_id(at)
+                if u:
+                    an = u.get("name")
+            update_data["assigned_to_name"] = an
+        if paid_amount_changed and retailer_id:
+            paid_difference = float(update_data["paid_amount"]) - old_paid
+            self.update_retailer_due(retailer_id, -paid_difference)
+        if update_data:
+            self.sales[sale_id].update(update_data)
+        return self.get_sale(sale_id)
     
-    def get_payments(self, sale_id: Optional[str] = None, user_id: Optional[str] = None, route_id: Optional[str] = None, from_date: Optional[str] = None, to_date: Optional[str] = None) -> List[dict]:
+    def get_payments(
+        self,
+        sale_id: Optional[str] = None,
+        user_id: Optional[str] = None,
+        route_id: Optional[str] = None,
+        from_date: Optional[str] = None,
+        to_date: Optional[str] = None,
+        approval_status: Optional[str] = None,
+    ) -> List[dict]:
         """Get payments with optional filters (for InMemoryDatabase compatibility)"""
         payments = list(self.payments.values())
         
@@ -579,6 +709,8 @@ class InMemoryDatabase:
             payments = [p for p in payments if p.get("collected_by") == user_id]
         if route_id:
             payments = [p for p in payments if p.get("route_id") == route_id]
+        if approval_status:
+            payments = [p for p in payments if (p.get("approval_status") or "approved") == approval_status]
         if from_date:
             from_dt = datetime.fromisoformat(from_date.replace('Z', '+00:00'))
             payments = [p for p in payments if datetime.fromisoformat(p.get("created_at", "").replace('Z', '+00:00')) >= from_dt]
@@ -601,16 +733,47 @@ class InMemoryDatabase:
         collected_user = self.get_user_by_id(data.get("collected_by"))
         if not collected_user:
             raise ValueError("Collector user not found")
-        
+
+        raw_ap = data.get("approval_status")
+        if raw_ap is None or raw_ap == "":
+            approval = "approved"
+        elif hasattr(raw_ap, "value"):
+            approval = raw_ap.value
+        else:
+            approval = str(raw_ap)
+        if approval not in ("pending_approval", "approved", "rejected"):
+            approval = "approved"
+
+        if approval == "pending_approval":
+            payment = {
+                "id": payment_id,
+                "retailer_id": data["retailer_id"],
+                "retailer_name": retailer["name"],
+                "sale_id": data["sale_id"],
+                "amount": data["amount"],
+                "payment_method": data["payment_method"],
+                "route_id": sale.get("route_id"),
+                "collected_by": data["collected_by"],
+                "collected_by_name": collected_user.get("name"),
+                "notes": data.get("notes"),
+                "approval_status": "pending_approval",
+                "rejection_reason": None,
+                "approved_by": None,
+                "approved_at": None,
+                "created_at": datetime.now()
+            }
+            self.payments[payment_id] = payment
+            return payment
+
         self.update_retailer_due(data["retailer_id"], -data["amount"])
-        
-        sale["paid_amount"] += data["amount"]
-        sale["due_amount"] -= data["amount"]
+
+        sale["paid_amount"] = float(sale.get("paid_amount", 0)) + float(data["amount"])
+        sale["due_amount"] = float(sale.get("due_amount", 0)) - float(data["amount"])
         if sale["due_amount"] <= 0:
             sale["payment_status"] = PaymentStatus.PAID
         else:
             sale["payment_status"] = PaymentStatus.PARTIAL
-        
+
         payment = {
             "id": payment_id,
             "retailer_id": data["retailer_id"],
@@ -622,6 +785,10 @@ class InMemoryDatabase:
             "collected_by": data["collected_by"],
             "collected_by_name": collected_user.get("name"),
             "notes": data.get("notes"),
+            "approval_status": "approved",
+            "rejection_reason": None,
+            "approved_by": None,
+            "approved_at": None,
             "created_at": datetime.now()
         }
         self.payments[payment_id] = payment
@@ -1235,6 +1402,105 @@ class InMemoryDatabase:
             "can_submit": can_submit,
             "reason": None if can_submit else "Projected due exceeds credit limit",
         }
+
+    def get_sr_open_liability(self, sr_user_id: str) -> float:
+        total = 0.0
+        for sale in self.sales.values():
+            if (sale.get("credit_risk_bearer") or "company") != "sr":
+                continue
+            liable = sale.get("sr_liable_user_id") or sale.get("created_by")
+            if str(liable) != str(sr_user_id):
+                continue
+            total += max(0.0, float(sale.get("due_amount", 0) or 0))
+        return total
+
+    def get_sr_adjustments_total(self, sr_user_id: str) -> float:
+        s = 0.0
+        for r in self.sr_risk_adjustments.values():
+            if r.get("sr_user_id") == sr_user_id:
+                s += float(r.get("amount", 0) or 0)
+        return s
+
+    def add_sr_risk_adjustment(
+        self,
+        sr_user_id: str,
+        amount: float,
+        adjustment_type: str,
+        reference_sale_id: Optional[str],
+        notes: Optional[str],
+        created_by: Optional[str],
+    ) -> dict:
+        row_id = generate_id()
+        row = {
+            "id": row_id,
+            "sr_user_id": sr_user_id,
+            "amount": float(amount),
+            "adjustment_type": adjustment_type,
+            "reference_sale_id": reference_sale_id,
+            "notes": notes,
+            "created_by": created_by,
+            "created_at": datetime.now(),
+        }
+        self.sr_risk_adjustments[row_id] = row
+        return row
+
+    def list_sr_risk_adjustments(self, sr_user_id: Optional[str] = None) -> List[dict]:
+        rows = list(self.sr_risk_adjustments.values())
+        if not sr_user_id:
+            return rows
+        return [r for r in rows if r.get("sr_user_id") == sr_user_id]
+
+    def approve_or_reject_payment(
+        self,
+        payment_id: str,
+        action: str,
+        approver_id: str,
+        rejection_reason: Optional[str] = None,
+    ) -> Optional[dict]:
+        p = self.payments.get(payment_id)
+        if not p or p.get("approval_status", "approved") != "pending_approval":
+            return None
+        if action == "reject":
+            p["approval_status"] = "rejected"
+            p["rejection_reason"] = rejection_reason
+            p["approved_by"] = approver_id
+            p["approved_at"] = datetime.now()
+            return p
+        if action != "approve":
+            return None
+        # Apply financial effects
+        self.update_retailer_due(p["retailer_id"], -p["amount"])
+        sale = self.get_sale(p["sale_id"])
+        if sale:
+            sale["paid_amount"] = float(sale.get("paid_amount", 0)) + float(p["amount"])
+            sale["due_amount"] = max(0, float(sale.get("due_amount", 0)) - float(p["amount"]))
+            if sale["due_amount"] <= 0:
+                sale["payment_status"] = PaymentStatus.PAID
+            else:
+                sale["payment_status"] = PaymentStatus.PARTIAL
+        p["approval_status"] = "approved"
+        p["approved_by"] = approver_id
+        p["approved_at"] = datetime.now()
+        self.add_receivable_ledger_entry({
+            "retailer_id": p["retailer_id"],
+            "sale_id": p.get("sale_id"),
+            "payment_id": p["id"],
+            "entry_type": "payment",
+            "amount": -float(p.get("amount", 0) or 0),
+            "reference_type": "payment",
+            "reference_id": p["id"],
+            "remarks": "payment_collected_approved",
+        })
+        return p
+
+    def get_payment_by_id(self, payment_id: str) -> Optional[dict]:
+        return self.payments.get(payment_id)
+
+    def approve_pending_payment(self, payment_id: str, approver_id: str) -> Optional[dict]:
+        return self.approve_or_reject_payment(payment_id, "approve", approver_id)
+
+    def reject_pending_payment(self, payment_id: str, approver_id: str, reason: Optional[str] = None) -> Optional[dict]:
+        return self.approve_or_reject_payment(payment_id, "reject", approver_id, reason)
 
     # ERP upgrade: margin analytics
     def record_sale_item_cost_snapshot(self, data: dict) -> dict:

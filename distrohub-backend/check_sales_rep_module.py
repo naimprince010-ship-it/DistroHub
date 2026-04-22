@@ -108,7 +108,11 @@ def check_sales_reps():
     
     try:
         users = db.get_users()
-        sales_reps = [u for u in users if u.get('role') == 'sales_rep' or u.get('role') == UserRole.SALES_REP]
+        sales_reps = [
+            u
+            for u in users
+            if str(u.get("role", "")).lower() in ("sales_rep", "dsr", "sr", UserRole.DSR.value, UserRole.SR.value)
+        ]
         
         print(f"Found {len(sales_reps)} sales rep(s):")
         for rep in sales_reps[:5]:  # Show first 5

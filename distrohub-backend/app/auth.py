@@ -5,7 +5,7 @@ from jose import JWTError, jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.database import db
-from app.models import UserRole
+from app.models import UserRole, normalize_user_role
 
 _jwt_secret_from_env = os.environ.get("JWT_SECRET_KEY")
 if not _jwt_secret_from_env:
@@ -79,17 +79,6 @@ def verify_token(token: str) -> dict:
         )
 
 
-def _normalize_role(raw) -> UserRole:
-    """Avoid ValueError on DB values like 'Admin' / unexpected strings."""
-    if raw is None:
-        return UserRole.SALES_REP
-    s = str(raw).strip().lower()
-    if s == UserRole.ADMIN.value:
-        return UserRole.ADMIN
-    if s == UserRole.SALES_REP.value:
-        return UserRole.SALES_REP
-    return UserRole.SALES_REP
-
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)):
     token = credentials.credentials
     # verify_token now raises HTTPException internally on error
@@ -106,13 +95,15 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     if hasattr(db, 'users'):
         # InMemoryDatabase
         user = db.users.get(user_id)
+        if user:
+            user["role"] = normalize_user_role(user.get("role"))
     else:
         # SupabaseDatabase - get user by ID
         try:
             result = db.client.table("users").select("*").eq("id", user_id).execute()
             user = result.data[0] if result.data else None
             if user:
-                user["role"] = _normalize_role(user.get("role"))
+                user["role"] = normalize_user_role(user.get("role"))
         except Exception as e:
             # Transient DB/network errors must NOT return 401 (frontend clears session on 401)
             print(f"[AUTH] Error fetching user from Supabase: {e}")

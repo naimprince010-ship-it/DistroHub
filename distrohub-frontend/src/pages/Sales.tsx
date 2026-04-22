@@ -605,16 +605,28 @@ export function Sales() {
                 console.warn('[Sales] Credit check unavailable, proceeding without block', creditError);
               }
 
-              const salePayload: any = {
+              const ext = order as SalesOrder & {
+                credit_risk_bearer?: 'company' | 'sr';
+                sr_guarantee_override?: boolean;
+                sr_guarantee_override_reason?: string;
+              };
+              const salePayload: Record<string, unknown> = {
                 retailer_id: retailer.id,
                 items: saleItems,
                 payment_type: 'cash',
                 paid_amount: order.paid_amount || 0,
                 notes: `Delivery date: ${order.delivery_date}`,
                 terms_days: 0,
+                credit_risk_bearer: ext.credit_risk_bearer || 'company',
               };
               if ('assigned_to' in order && order.assigned_to) {
                 salePayload.assigned_to = order.assigned_to;
+              }
+              if (ext.sr_guarantee_override) {
+                salePayload.sr_guarantee_override = true;
+                if (ext.sr_guarantee_override_reason) {
+                  salePayload.sr_guarantee_override_reason = ext.sr_guarantee_override_reason;
+                }
               }
 
               const response = await api.post('/api/sales', salePayload);
@@ -911,7 +923,7 @@ function EditSaleModal({ order, onClose, onSave }: {
 
   useEffect(() => {
     api.get('/api/users').then((res) => {
-      if (res.data) setSalesReps(res.data.filter((u: any) => u.role === 'sales_rep').map((u: any) => ({ id: u.id, name: u.name })));
+      if (res.data) setSalesReps(res.data.filter((u: any) => u.role === 'dsr' || u.role === 'sales_rep').map((u: any) => ({ id: u.id, name: u.name })));
     }).catch(() => { /* ignore */ }).finally(() => setLoadingSalesReps(false));
   }, []);
 
@@ -1039,7 +1051,20 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
   const [formData, setFormData] = useState({
     retailer_name: '', retailer_id: '', delivery_date: '', assigned_to: '',
     items: [{ product: '', qty: 0, price: 0 }],
+    credit_risk_bearer: 'company' as 'company' | 'sr',
+    paid_now: 0,
+    sr_guarantee_override: false,
+    sr_guarantee_override_reason: '',
   });
+  const [viewerRole, setViewerRole] = useState<string | null>(null);
+  useEffect(() => {
+    try {
+      const u = JSON.parse(localStorage.getItem('user') || '{}') as { role?: string };
+      setViewerRole((u?.role || '').toLowerCase());
+    } catch {
+      setViewerRole(null);
+    }
+  }, []);
   const [retailers, setRetailers] = useState<Array<{ id: string; name: string; shop_name: string }>>([]);
   const [products, setProducts] = useState<Array<{ id: string; name: string; selling_price: number; barcode?: string }>>([]);
   const [salesReps, setSalesReps] = useState<Array<{ id: string; name: string }>>([]);
@@ -1091,7 +1116,7 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
         if (usersRes.status === 'fulfilled' && Array.isArray(usersRes.value.data)) {
           setSalesReps(
             usersRes.value.data
-              .filter((u: any) => u.role === 'sales_rep')
+              .filter((u: any) => u.role === 'dsr' || u.role === 'sales_rep')
               .map((u: any) => ({ id: u.id, name: u.name }))
           );
         } else {
@@ -1138,13 +1163,22 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
     setIsSubmitting(true);
     try {
       const total = formData.items.reduce((sum, item) => sum + item.qty * item.price, 0);
-      const orderData = {
+      const orderData: SalesOrder & {
+        credit_risk_bearer?: 'company' | 'sr';
+        sr_guarantee_override?: boolean;
+        sr_guarantee_override_reason?: string;
+      } = {
         id: '', order_number: `ORD-${Date.now()}`,
         retailer_name: formData.retailer_name, retailer_id: formData.retailer_id,
         order_date: new Date().toISOString().split('T')[0], delivery_date: formData.delivery_date,
         status: 'pending' as const, payment_status: 'unpaid' as const,
-        total_amount: total, paid_amount: 0, items: formData.items,
+        total_amount: total, paid_amount: formData.paid_now || 0, items: formData.items,
         assigned_to: formData.assigned_to || undefined,
+        credit_risk_bearer: formData.credit_risk_bearer,
+        sr_guarantee_override: formData.sr_guarantee_override,
+        sr_guarantee_override_reason: formData.sr_guarantee_override
+          ? formData.sr_guarantee_override_reason
+          : undefined,
       };
       await onSave(orderData);
     } catch (error) {
@@ -1255,6 +1289,52 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
             {salesReps.map((rep) => <option key={rep.id} value={rep.id}>{rep.name}</option>)}
           </select>
         </div>
+
+        {(viewerRole === 'admin' || viewerRole === 'sr') && (
+          <div className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
+            <p className="text-sm font-medium text-foreground">Credit &amp; personal guarantee</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div>
+                <label className="text-xs text-muted-foreground">Who carries credit risk</label>
+                <select
+                  className="input-field w-full"
+                  value={formData.credit_risk_bearer}
+                  onChange={(e) => setFormData({ ...formData, credit_risk_bearer: e.target.value as 'company' | 'sr' })}
+                >
+                  <option value="company">Company (default)</option>
+                  <option value="sr">SR personal guarantee</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">Paid now (৳)</label>
+                <input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  className="input-field w-full"
+                  value={formData.paid_now || ''}
+                  onChange={(e) => setFormData({ ...formData, paid_now: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                checked={formData.sr_guarantee_override}
+                onChange={(e) => setFormData({ ...formData, sr_guarantee_override: e.target.checked })}
+              />
+              Override SR guarantee check (reason required)
+            </label>
+            {formData.sr_guarantee_override && (
+              <input
+                className="input-field w-full"
+                placeholder="Override reason (required if checked)"
+                value={formData.sr_guarantee_override_reason}
+                onChange={(e) => setFormData({ ...formData, sr_guarantee_override_reason: e.target.value })}
+              />
+            )}
+          </div>
+        )}
 
         <div>
           <div className="flex items-center justify-between mb-2">
@@ -1373,17 +1453,40 @@ function CollectionModal({ order, onClose, onSuccess }: {
   const [salesReps, setSalesReps] = useState<Array<{ id: string; name: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [loadingReps, setLoadingReps] = useState(true);
+  const [meId, setMeId] = useState<string>('');
+  const [meRole, setMeRole] = useState<string>('');
 
   const dueAmount = order.total_amount - order.paid_amount;
 
   useEffect(() => {
+    try {
+      const u = JSON.parse(localStorage.getItem('user') || '{}') as { id?: string; role?: string };
+      setMeId(String(u.id || ''));
+      setMeRole(String(u.role || '').toLowerCase());
+    } catch {
+      setMeId('');
+      setMeRole('');
+    }
+  }, []);
+
+  useEffect(() => {
     api.get('/api/users').then((res) => {
-      if (res.data) setSalesReps(res.data.filter((u: any) => u.role === 'sales_rep').map((u: any) => ({ id: u.id, name: u.name })));
+      if (res.data) {
+        setSalesReps(
+          res.data
+            .filter((u: { role?: string }) => u.role === 'dsr' || u.role === 'sales_rep' || u.role === 'sr')
+            .map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })),
+        );
+      }
     }).catch(() => { /* ignore */ }).finally(() => setLoadingReps(false));
   }, []);
 
   useEffect(() => {
     const determineDefaultSR = async () => {
+      if (meRole === 'sr' && meId) {
+        setCollectedBy(meId);
+        return;
+      }
       let defaultSrId = '';
       if (order.route_id) {
         try {
@@ -1394,8 +1497,8 @@ function CollectionModal({ order, onClose, onSuccess }: {
       if (!defaultSrId && order.assigned_to) defaultSrId = order.assigned_to;
       if (defaultSrId) setCollectedBy(defaultSrId);
     };
-    determineDefaultSR();
-  }, [order.route_id, order.assigned_to]);
+    if (meRole) void determineDefaultSR();
+  }, [order.route_id, order.assigned_to, meRole, meId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -1409,8 +1512,8 @@ function CollectionModal({ order, onClose, onSuccess }: {
       return;
     }
 
-    let finalCollectedBy = collectedBy;
-    if (!finalCollectedBy) {
+    let finalCollectedBy = meRole === 'sr' && meId ? meId : collectedBy;
+    if (meRole !== 'sr' && !finalCollectedBy) {
       if (order.route_id) {
         try {
           const routeRes = await api.get(`/api/routes/${order.route_id}`);
@@ -1430,19 +1533,29 @@ function CollectionModal({ order, onClose, onSuccess }: {
 
     setLoading(true);
     try {
-      await api.post('/api/payments', {
+      const payRes = await api.post<{
+        approval_status?: string;
+      }>('/api/payments', {
         retailer_id: order.retailer_id, sale_id: order.id, amount: paymentAmount,
         payment_method: paymentMethod, collected_by: finalCollectedBy, notes: notes || undefined,
       });
-      await api.put(`/api/sales/${order.id}`, { paid_amount: order.paid_amount + paymentAmount });
-      const remaining = dueAmount - paymentAmount;
-      const collectorName = salesReps.find((r) => r.id === collectedBy)?.name || 'SR';
-      toast({
-        title: 'Payment recorded',
-        description: remaining > 0
-          ? `Payment of ৳${paymentAmount.toLocaleString()} recorded. বাকি ৳${remaining.toLocaleString()} ${collectorName} এর কাছে পেন্ডিং।`
-          : `Payment of ৳${paymentAmount.toLocaleString()} recorded. Invoice is fully paid.`,
-      });
+      const pending = payRes.data?.approval_status === 'pending_approval';
+      if (!pending) {
+        // Backend already updates sale and retailer due for approved payments; no duplicate PUT.
+        const remaining = dueAmount - paymentAmount;
+        const collectorName = salesReps.find((r) => r.id === finalCollectedBy)?.name || 'SR';
+        toast({
+          title: 'Payment recorded',
+          description: remaining > 0
+            ? `Payment of ৳${paymentAmount.toLocaleString()} recorded. বাকি ৳${remaining.toLocaleString()} ${collectorName} এর কাছে পেন্ডিং।`
+            : `Payment of ৳${paymentAmount.toLocaleString()} recorded. Invoice is fully paid.`,
+        });
+      } else {
+        toast({
+          title: 'Collection submitted',
+          description: 'DSR/Admin will approve this collection before the retailer due is reduced.',
+        });
+      }
       onSuccess();
     } catch (error: any) {
       const errorData = error?.response?.data;
@@ -1476,10 +1589,19 @@ function CollectionModal({ order, onClose, onSuccess }: {
 
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">Collected By <span className="text-[hsl(var(--dh-red))]">*</span></label>
-          <select value={collectedBy} onChange={(e) => setCollectedBy(e.target.value)} className="input-field" required disabled={loadingReps}>
+          <select
+            value={meRole === 'sr' ? meId : collectedBy}
+            onChange={(e) => setCollectedBy(e.target.value)}
+            className="input-field"
+            required
+            disabled={loadingReps || meRole === 'sr'}
+          >
             <option value="">{loadingReps ? 'Loading SRs…' : 'Select SR/Delivery Man'}</option>
             {salesReps.map((rep) => <option key={rep.id} value={rep.id}>{rep.name}</option>)}
           </select>
+          {meRole === 'sr' && (
+            <p className="text-xs text-muted-foreground">SR field collections are submitted for approval and do not reduce due until approved.</p>
+          )}
         </div>
 
         <div className="space-y-1.5">

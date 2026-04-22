@@ -717,13 +717,17 @@ function SupplierManagement() {
   );
 }
 
+type FieldUserRole = 'sr' | 'dsr' | 'sales_rep';
+
 interface SalesRep {
   id: string;
   name: string;
   email: string;
   phone?: string;
-  role: 'sales_rep';
+  role: FieldUserRole;
   created_at: string;
+  sr_guarantee_limit?: number;
+  sr_guarantee_enforcement?: 'off' | 'warn' | 'block';
 }
 
 function SalesRepManagement() {
@@ -734,11 +738,22 @@ function SalesRepManagement() {
   const [showModal, setShowModal] = useState(false);
   const [editingRep, setEditingRep] = useState<SalesRep | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  const [formData, setFormData] = useState<{ name: string; email: string; phone: string; password: string }>({
+  const [formData, setFormData] = useState<{
+    name: string;
+    email: string;
+    phone: string;
+    password: string;
+    role: 'sr' | 'dsr';
+    sr_guarantee_limit: number;
+    sr_guarantee_enforcement: 'off' | 'warn' | 'block';
+  }>({
     name: '',
     email: '',
     phone: '',
-    password: ''
+    password: '',
+    role: 'dsr',
+    sr_guarantee_limit: 0,
+    sr_guarantee_enforcement: 'off',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -761,8 +776,9 @@ function SalesRepManagement() {
       setError(null);
       const response = await api.get('/api/users');
       if (response.data && Array.isArray(response.data)) {
-        // Filter only sales_rep role
-        const reps = response.data.filter((u: any) => u.role === 'sales_rep');
+        const reps = response.data.filter((u: any) =>
+          u.role === 'sr' || u.role === 'dsr' || u.role === 'sales_rep'
+        );
         setSalesReps(reps);
       }
     } catch (error: any) {
@@ -807,17 +823,26 @@ function SalesRepManagement() {
         };
         if (formData.phone) payload.phone = formData.phone.trim();
         if (formData.password) payload.password = formData.password;
+        payload.role = formData.role;
+        if (formData.role === 'sr') {
+          payload.sr_guarantee_limit = formData.sr_guarantee_limit;
+          payload.sr_guarantee_enforcement = formData.sr_guarantee_enforcement;
+        }
 
         await api.put(`/api/users/${editingRep.id}`, payload);
       } else {
         // Create new
-        const payload = {
+        const payload: Record<string, unknown> = {
           name: formData.name.trim(),
           email: formData.email.trim(),
           phone: formData.phone?.trim() || null,
           password: formData.password,
-          role: 'sales_rep' as const,
+          role: formData.role,
         };
+        if (formData.role === 'sr') {
+          payload.sr_guarantee_limit = formData.sr_guarantee_limit;
+          payload.sr_guarantee_enforcement = formData.sr_guarantee_enforcement;
+        }
 
         await api.post('/api/users', payload);
       }
@@ -825,7 +850,7 @@ function SalesRepManagement() {
       await fetchSalesReps();
       setShowModal(false);
       setEditingRep(null);
-      setFormData({ name: '', email: '', phone: '', password: '' });
+      setFormData({ name: '', email: '', phone: '', password: '', role: 'dsr', sr_guarantee_limit: 0, sr_guarantee_enforcement: 'off' });
     } catch (error: any) {
       console.error('[SalesRepManagement] Failed to save sales rep:', error);
       const errorMessage = error?.response?.data?.detail || error?.message || t('settings.save_failed');
@@ -838,11 +863,15 @@ function SalesRepManagement() {
 
   const handleEdit = (rep: SalesRep) => {
     setEditingRep(rep);
+    const r = rep.role === 'sales_rep' ? 'dsr' : rep.role;
     setFormData({
       name: rep.name,
       email: rep.email,
       phone: rep.phone || '',
-      password: ''
+      password: '',
+      role: r === 'sr' ? 'sr' : 'dsr',
+      sr_guarantee_limit: Number(rep.sr_guarantee_limit ?? 0),
+      sr_guarantee_enforcement: rep.sr_guarantee_enforcement || 'off',
     });
     setShowModal(true);
   };
@@ -878,7 +907,7 @@ function SalesRepManagement() {
           onClick={() => {
             setShowModal(true);
             setEditingRep(null);
-            setFormData({ name: '', email: '', phone: '', password: '' });
+            setFormData({ name: '', email: '', phone: '', password: '', role: 'dsr', sr_guarantee_limit: 0, sr_guarantee_enforcement: 'off' });
             setError(null);
           }}
           className="btn-primary flex items-center gap-2"
@@ -911,7 +940,9 @@ function SalesRepManagement() {
             <tr>
               <th>{t('settings.table_name')}</th>
               <th>{t('settings.table_email')}</th>
+              <th>Role</th>
               <th>{t('settings.table_phone')}</th>
+              <th className="hidden md:table-cell">SR limit</th>
               <th>{t('settings.table_actions')}</th>
             </tr>
           </thead>
@@ -927,7 +958,17 @@ function SalesRepManagement() {
                   </div>
                 </td>
                 <td className="text-muted-foreground">{rep.email}</td>
+                <td>
+                  <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                    {rep.role === 'sales_rep' ? 'dsr' : rep.role}
+                  </span>
+                </td>
                 <td className="text-muted-foreground">{rep.phone || '-'}</td>
+                <td className="hidden md:table-cell text-muted-foreground text-sm">
+                  {rep.role === 'sr'
+                    ? `৳ ${Number(rep.sr_guarantee_limit ?? 0).toLocaleString()} (${rep.sr_guarantee_enforcement || 'off'})`
+                    : '—'}
+                </td>
                 <td>
                   <div className="flex items-center gap-1">
                     <button
@@ -964,7 +1005,7 @@ function SalesRepManagement() {
                 onClick={() => {
                   setShowModal(false);
                   setEditingRep(null);
-                  setFormData({ name: '', email: '', phone: '', password: '' });
+                  setFormData({ name: '', email: '', phone: '', password: '', role: 'dsr', sr_guarantee_limit: 0, sr_guarantee_enforcement: 'off' });
                   setError(null);
                 }}
                 className="p-1 hover:bg-slate-100 rounded"
@@ -1006,6 +1047,54 @@ function SalesRepManagement() {
                 />
               </div>
               <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Role *</label>
+                <select
+                  value={formData.role}
+                  onChange={(e) =>
+                    setFormData({ ...formData, role: e.target.value as 'sr' | 'dsr' })
+                  }
+                  className="input-field"
+                >
+                  <option value="dsr">DSR (delivery / collection)</option>
+                  <option value="sr">SR (pre-sales / booking)</option>
+                </select>
+              </div>
+              {formData.role === 'sr' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">SR guarantee limit (৳)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="1"
+                      className="input-field"
+                      value={formData.sr_guarantee_limit}
+                      onChange={(e) =>
+                        setFormData({ ...formData, sr_guarantee_limit: parseFloat(e.target.value) || 0 })
+                      }
+                    />
+                    <p className="text-xs text-slate-500 mt-1">0 = unlimited</p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Enforcement</label>
+                    <select
+                      className="input-field"
+                      value={formData.sr_guarantee_enforcement}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          sr_guarantee_enforcement: e.target.value as 'off' | 'warn' | 'block',
+                        })
+                      }
+                    >
+                      <option value="off">Off</option>
+                      <option value="warn">Warn</option>
+                      <option value="block">Block over limit</option>
+                    </select>
+                  </div>
+                </>
+              )}
+              <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">
                   {t('settings.field_password')} {editingRep ? t('settings.field_password_edit_hint') : '*'}
                 </label>
@@ -1023,7 +1112,7 @@ function SalesRepManagement() {
                   onClick={() => {
                     setShowModal(false);
                     setEditingRep(null);
-                    setFormData({ name: '', email: '', phone: '', password: '' });
+                    setFormData({ name: '', email: '', phone: '', password: '', role: 'dsr', sr_guarantee_limit: 0, sr_guarantee_enforcement: 'off' });
                     setError(null);
                   }}
                   className="btn-secondary flex-1"
@@ -2336,7 +2425,14 @@ function NotificationSettings() {
           : {
             id: `temp-${Date.now()}`,
             user_id: '',
-            role: 'sales_rep',
+            role: (() => {
+              try {
+                const u = JSON.parse(localStorage.getItem('user') || '{}') as { role?: string };
+                return (u.role || 'dsr') as string;
+              } catch {
+                return 'dsr';
+              }
+            })(),
             event_type: eventType,
             enabled,
             delivery_mode: 'immediate',

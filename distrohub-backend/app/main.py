@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, status, Request
+from fastapi import FastAPI, HTTPException, Depends, status, Request, Body
 from contextlib import asynccontextmanager
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional, Dict, Any
@@ -14,7 +14,9 @@ from datetime import datetime, date
 logger = logging.getLogger(__name__)
 
 from app.models import (
-    UserCreate, UserUpdate, User, UserLogin, Token, UserRole,
+    UserCreate, UserUpdate, User, UserLogin, Token, UserRole, normalize_user_role,
+    CreditRiskBearer, GuaranteeEnforcement, PaymentApprovalStatus, PaymentRejectBody,
+    SrLiabilitySummary, SrRiskAdjustment, SrRiskAdjustmentCreate,
     ProductCreate, Product, ProductBatchCreate, ProductBatch,
     RetailerCreate, Retailer,
     PurchaseCreate, Purchase,
@@ -151,25 +153,95 @@ def _attach_latest_batch(product: dict) -> dict:
 def _clear_login_failures(client_ip: str) -> None:
     _login_attempts.pop(client_ip, None)
 
+
+def _user_for_api(user: dict) -> User:
+    """Build User model with normalized role (legacy DB strings)."""
+    d = dict(user)
+    d["role"] = normalize_user_role(d.get("role"))
+    d.setdefault("sr_guarantee_limit", 0.0)
+    ge = d.get("sr_guarantee_enforcement")
+    if not ge or str(ge) == "None":
+        d["sr_guarantee_enforcement"] = GuaranteeEnforcement.OFF
+    else:
+        s = str(ge).strip().lower()
+        try:
+            d["sr_guarantee_enforcement"] = GuaranteeEnforcement(s)
+        except ValueError:
+            d["sr_guarantee_enforcement"] = GuaranteeEnforcement.OFF
+    return User(**d)
+
+
+def _net_sr_exposure_for_user(sr_user_id: str) -> float:
+    if not sr_user_id or not hasattr(db, "get_sr_open_liability"):
+        return 0.0
+    open_due = float(db.get_sr_open_liability(sr_user_id) or 0)
+    adj = float(db.get_sr_adjustments_total(sr_user_id) or 0) if hasattr(db, "get_sr_adjustments_total") else 0.0
+    return max(0.0, open_due - adj)
+
+
+def _recompute_sales_report_summary(sales: List[dict]) -> dict:
+    """Rebuild summary when sales_report rows are filtered by role."""
+    if not sales:
+        return {
+            "total_gross": 0.0,
+            "total_returns": 0.0,
+            "total_net": 0.0,
+            "return_rate": 0.0,
+            "total_sales": 0,
+            "sales_with_returns": 0,
+            "total_items": 0,
+            "total_returned_items": 0,
+            "total_net_items": 0,
+        }
+    total_gross = sum(float(s.get("gross_total", 0) or 0) for s in sales)
+    total_returns = sum(float(s.get("returned_total", 0) or 0) for s in sales)
+    total_net = sum(float(s.get("net_total", 0) or 0) for s in sales)
+    total_returned_items = sum(int(s.get("returned_qty", 0) or 0) for s in sales)
+    total_items = sum(int(s.get("total_items", 0) or 0) for s in sales)
+    sales_with_returns = sum(1 for s in sales if s.get("has_returns"))
+    return {
+        "total_gross": total_gross,
+        "total_returns": total_returns,
+        "total_net": total_net,
+        "return_rate": (total_returns / total_gross * 100) if total_gross > 0 else 0.0,
+        "total_sales": len(sales),
+        "sales_with_returns": sales_with_returns,
+        "total_items": total_items,
+        "total_returned_items": total_returned_items,
+        "total_net_items": max(0, total_items - total_returned_items),
+    }
+
 ADMIN_ROLE = UserRole.ADMIN.value
-SALES_REP_ROLE = UserRole.SALES_REP.value
+
+def _user_role_enum(current_user: dict) -> UserRole:
+    return normalize_user_role(current_user.get("role"))
 
 def _user_role(current_user: dict) -> str:
-    return str(current_user.get("role", SALES_REP_ROLE)).strip().lower()
+    return _user_role_enum(current_user).value
 
 def _is_admin(current_user: dict) -> bool:
-    return _user_role(current_user) == ADMIN_ROLE
+    return _user_role_enum(current_user) == UserRole.ADMIN
+
+def _is_sr(current_user: dict) -> bool:
+    return _user_role_enum(current_user) == UserRole.SR
+
+def _is_dsr(current_user: dict) -> bool:
+    return _user_role_enum(current_user) == UserRole.DSR
+
+
+def _can_approve_pending_collections(current_user: dict) -> bool:
+    return _is_admin(current_user) or _is_dsr(current_user)
 
 def _require_admin(current_user: dict, detail: str = "Admin access required") -> None:
     if not _is_admin(current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
 
-def _route_belongs_to_sales_rep(route: Optional[dict], current_user: dict) -> bool:
+def _route_belongs_to_dsr(route: Optional[dict], current_user: dict) -> bool:
     if not route:
         return False
     return route.get("assigned_to") == current_user.get("id")
 
-def _sale_belongs_to_sales_rep(sale: Optional[dict], current_user: dict) -> bool:
+def _sale_belongs_to_dsr(sale: Optional[dict], current_user: dict) -> bool:
     if not sale:
         return False
     if sale.get("assigned_to") == current_user.get("id"):
@@ -180,7 +252,19 @@ def _sale_belongs_to_sales_rep(sale: Optional[dict], current_user: dict) -> bool
     if not hasattr(db, "get_route"):
         return False
     route = db.get_route(route_id)
-    return _route_belongs_to_sales_rep(route, current_user)
+    return _route_belongs_to_dsr(route, current_user)
+
+def _sale_visible_to_user(sale: Optional[dict], current_user: dict) -> bool:
+    if not sale:
+        return False
+    role = _user_role_enum(current_user)
+    if role == UserRole.ADMIN:
+        return True
+    if role == UserRole.SR:
+        return sale.get("created_by") == current_user.get("id")
+    if role == UserRole.DSR:
+        return _sale_belongs_to_dsr(sale, current_user)
+    return False
 
 def _log_audit_event(
     action: str,
@@ -916,14 +1000,7 @@ async def login(credentials: UserLogin, request: Request):
         )
         return Token(
             access_token=access_token,
-            user=User(
-                id=user["id"],
-                email=user["email"],
-                name=user["name"],
-                role=user["role"],
-                phone=user.get("phone"),
-                created_at=user["created_at"]
-            )
+            user=_user_for_api(user)
         )
     except HTTPException:
         raise
@@ -964,14 +1041,7 @@ async def register(user_data: UserCreate, request: Request):
     )
     return Token(
         access_token=access_token,
-        user=User(
-            id=user["id"],
-            email=user["email"],
-            name=user["name"],
-            role=user["role"],
-            phone=user.get("phone"),
-            created_at=user["created_at"]
-        )
+        user=_user_for_api(user)
     )
 
 @app.get("/api/auth/google")
@@ -1089,7 +1159,7 @@ async def google_callback(code: str = None, error: str = None):
                     email=google_email,
                     name=google_name,
                     password=random_password,  # Random password, won't be used
-                    role=UserRole.SALES_REP,
+                    role=UserRole.DSR,
                     phone=None
                 )
                 print(f"[GOOGLE OAUTH] Created new user: {google_email}")
@@ -1123,9 +1193,9 @@ async def get_users(current_user: dict = Depends(get_current_user)):
     """Get all users (admin only or for SR selection)"""
     try:
         if not _is_admin(current_user):
-            return [User(**current_user)]
+            return [_user_for_api(current_user)]
         users = db.get_users()
-        return [User(**user) for user in users]
+        return [_user_for_api(user) for user in users]
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -1145,15 +1215,19 @@ async def create_user(user_data: UserCreate, current_user: dict = Depends(get_cu
                 detail="User with this email already exists"
             )
         
-        # Create user with sales_rep role
         user = db.create_user(
             email=user_data.email,
             name=user_data.name,
             password=user_data.password,
-            role=UserRole.SALES_REP,
+            role=user_data.role,
             phone=user_data.phone
         )
-        return User(**user)
+        gupd = {
+            "sr_guarantee_limit": user_data.sr_guarantee_limit,
+            "sr_guarantee_enforcement": user_data.sr_guarantee_enforcement,
+        }
+        user2 = db.update_user(user["id"], gupd)
+        return _user_for_api(user2 or user)
     except HTTPException:
         raise
     except Exception as e:
@@ -1198,13 +1272,20 @@ async def update_user(
             update_data["phone"] = user_data.phone
         if user_data.password is not None:
             update_data["password"] = user_data.password
+        if user_data.role is not None:
+            r = user_data.role
+            update_data["role"] = r.value if isinstance(r, UserRole) else r
+        if user_data.sr_guarantee_limit is not None:
+            update_data["sr_guarantee_limit"] = user_data.sr_guarantee_limit
+        if user_data.sr_guarantee_enforcement is not None:
+            update_data["sr_guarantee_enforcement"] = user_data.sr_guarantee_enforcement
         
         # Update user
         updated_user = db.update_user(user_id, update_data)
         if not updated_user:
             raise HTTPException(status_code=404, detail="User not found")
         
-        return User(**updated_user)
+        return _user_for_api(updated_user)
     except HTTPException:
         raise
     except Exception as e:
@@ -1798,7 +1879,7 @@ async def create_purchase(purchase_data: PurchaseCreate, request: Request, curre
 async def get_sales(current_user: dict = Depends(get_current_user)):
     sales = db.get_sales()
     if not _is_admin(current_user):
-        sales = [sale for sale in sales if _sale_belongs_to_sales_rep(sale, current_user)]
+        sales = [sale for sale in sales if _sale_visible_to_user(sale, current_user)]
     return [Sale(**s) for s in sales]
 
 @app.get("/api/sales/{sale_id}", response_model=Sale)
@@ -1806,8 +1887,8 @@ async def get_sale(sale_id: str, current_user: dict = Depends(get_current_user))
     sale = db.get_sale(sale_id)
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found")
-    if not _is_admin(current_user) and not _sale_belongs_to_sales_rep(sale, current_user):
-        raise HTTPException(status_code=403, detail="You can only view your assigned sales")
+    if not _is_admin(current_user) and not _sale_visible_to_user(sale, current_user):
+        raise HTTPException(status_code=403, detail="You can only view sales you are allowed to see")
     return Sale(**sale)
 
 @app.put("/api/sales/{sale_id}", response_model=Sale)
@@ -1841,20 +1922,43 @@ async def update_sale(
         500: Server error
     """
     try:
-        _require_admin(current_user, detail="Only admin can update sales")
-        # Verify sale exists
+        if _is_sr(current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="SR cannot update sales; ask admin or a DSR for delivery changes",
+            )
+        if not hasattr(db, "update_sale"):
+            raise HTTPException(
+                status_code=status.HTTP_501_NOT_IMPLEMENTED,
+                detail="Sale update is not supported for this database backend",
+            )
         existing_sale = db.get_sale(sale_id)
         if not existing_sale:
             raise HTTPException(status_code=404, detail="Sale not found")
-        
-        # Prepare update data (exclude None values)
-        update_data = sale_update.model_dump(exclude_unset=True, exclude_none=True)
-        
-        # Convert datetime if needed
+        if _is_dsr(current_user) and not _is_admin(current_user):
+            if not _sale_visible_to_user(existing_sale, current_user):
+                raise HTTPException(status_code=403, detail="You can only update sales you are allowed to see")
+            full = sale_update.model_dump(exclude_unset=True, exclude_none=True)
+            forbidden = {"paid_amount", "due_amount", "payment_status", "assigned_to"}
+            if any(k in full for k in forbidden):
+                raise HTTPException(
+                    status_code=400,
+                    detail="DSR can only update delivery_status, delivered_at, and notes",
+                )
+            update_data = {k: v for k, v in full.items() if k in ("delivery_status", "delivered_at", "notes")}
+        else:
+            _require_admin(current_user, detail="Only admin can make full sale updates")
+            update_data = sale_update.model_dump(exclude_unset=True, exclude_none=True)
+
         if "delivered_at" in update_data and isinstance(update_data["delivered_at"], datetime):
             update_data["delivered_at"] = update_data["delivered_at"].isoformat()
-        
-        # Update sale
+
+        if not update_data:
+            complete_sale = db.get_sale(sale_id)
+            if not complete_sale:
+                raise HTTPException(status_code=404, detail="Sale not found")
+            return Sale(**complete_sale)
+
         updated_sale = db.update_sale(sale_id, update_data)
         if not updated_sale:
             raise HTTPException(status_code=404, detail="Sale not found after update")
@@ -1869,14 +1973,13 @@ async def update_sale(
                     current_user.get("id"),
                     remark_prefix="sale_cancel_restore",
                 )
-        
-        # Fetch complete sale with items
+
         complete_sale = db.get_sale(sale_id)
         if not complete_sale:
             raise HTTPException(status_code=404, detail="Sale not found")
-        
+
         return Sale(**complete_sale)
-        
+
     except HTTPException:
         raise
     except ValueError as e:
@@ -1906,7 +2009,11 @@ async def create_sale(sale_data: SaleCreate, request: Request, current_user: dic
         500: Unexpected server error
     """
     try:
-        _require_admin(current_user, detail="Only admin can create sales")
+        if not (_is_admin(current_user) or _is_sr(current_user)):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only admin or SR can create sales",
+            )
         print(f"[API] create_sale start: retailer_id={sale_data.retailer_id}, items={len(sale_data.items)}")
         print(f"[API] User: {current_user.get('email', 'unknown')}")
         
@@ -1931,7 +2038,9 @@ async def create_sale(sale_data: SaleCreate, request: Request, current_user: dic
             item["resolved_price"] = resolved.get("resolved_price", item.get("unit_price"))
             if not item.get("unit_price"):
                 item["unit_price"] = item["resolved_price"]
-            estimated_total += float(item.get("quantity", 0) or 0) * float(item.get("unit_price", 0) or 0)
+            line_gross = float(item.get("quantity", 0) or 0) * float(item.get("unit_price", 0) or 0)
+            line_disc = float(item.get("discount", 0) or 0)
+            estimated_total += line_gross - line_disc
 
         if hasattr(db, "check_credit_limit"):
             credit_check = db.check_credit_limit(sale_data.retailer_id, estimated_total)
@@ -1940,6 +2049,72 @@ async def create_sale(sale_data: SaleCreate, request: Request, current_user: dic
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Credit limit exceeded: {credit_check.get('reason')}. Use credit override to proceed."
                 )
+
+        crb = sale_data.credit_risk_bearer
+        crb_val = crb.value if isinstance(crb, CreditRiskBearer) else str(crb).lower()
+        if crb_val not in (CreditRiskBearer.COMPANY.value, CreditRiskBearer.SR.value):
+            crb_val = CreditRiskBearer.COMPANY.value
+
+        new_due = max(0.0, float(estimated_total) - float(sale_data.paid_amount or 0))
+        sr_liable_user_id: Optional[str] = None
+        if crb_val == CreditRiskBearer.SR.value:
+            liable = sale_data.sr_liable_user_id or current_user.get("id")
+            if sale_data.sr_liable_user_id and sale_data.sr_liable_user_id != current_user.get("id") and not _is_admin(current_user):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Only admin can assign personal guarantee to another user",
+                )
+            if not liable:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="SR-backed credit risk requires a liable user",
+                )
+            if not db.get_user_by_id(liable):
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Liable user not found")
+            sr_liable_user_id = liable
+
+        if sale_data.sr_guarantee_override and not (sale_data.sr_guarantee_override_reason or "").strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="sr_guarantee_override_reason is required when overriding SR guarantee",
+            )
+        if sale_data.sr_guarantee_override and not _is_admin(current_user):
+            if crb_val != CreditRiskBearer.SR.value or str(sr_liable_user_id or "") != str(current_user.get("id") or ""):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Only an admin or the liable SR can use SR guarantee override",
+                )
+
+        if (
+            crb_val == CreditRiskBearer.SR.value
+            and new_due > 0
+            and not sale_data.sr_guarantee_override
+            and sr_liable_user_id
+        ):
+            lu = db.get_user_by_id(sr_liable_user_id) or {}
+            limit = float(lu.get("sr_guarantee_limit", 0) or 0)
+            if limit > 0 and hasattr(db, "get_sr_open_liability"):
+                try:
+                    enf = GuaranteeEnforcement(str(lu.get("sr_guarantee_enforcement") or "off").lower())
+                except ValueError:
+                    enf = GuaranteeEnforcement.OFF
+                net_before = _net_sr_exposure_for_user(sr_liable_user_id)
+                projected = net_before + new_due
+                if projected > limit and enf == GuaranteeEnforcement.BLOCK:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=(
+                            f"SR personal guarantee limit exceeded: projected exposure {projected:.2f} "
+                            f"exceeds limit {limit:.2f}. Reduce due amount or use an approved override."
+                        ),
+                    )
+                if projected > limit and enf == GuaranteeEnforcement.WARN:
+                    logger.warning(
+                        "SR guarantee warning: user %s projected %.2f > limit %.2f",
+                        sr_liable_user_id,
+                        projected,
+                        limit,
+                    )
 
         sale = db.create_sale(
             {
@@ -1952,6 +2127,9 @@ async def create_sale(sale_data: SaleCreate, request: Request, current_user: dic
                 "due_date": sale_data.due_date.isoformat() if sale_data.due_date else None,
                 "credit_override": sale_data.credit_override,
                 "credit_override_reason": sale_data.credit_override_reason,
+                "created_by": current_user.get("id"),
+                "credit_risk_bearer": crb_val,
+                "sr_liable_user_id": sr_liable_user_id,
             },
             items
         )
@@ -2045,6 +2223,11 @@ async def create_sale_return(
     try:
         print(f"[API] create_sale_return start: sale_id={sale_id}, items={len(return_data.items)}")
         print(f"[API] User: {current_user.get('email', 'unknown')}")
+        existing_sale = db.get_sale(sale_id)
+        if not existing_sale:
+            raise HTTPException(status_code=404, detail="Sale not found")
+        if not _is_admin(current_user) and not _sale_visible_to_user(existing_sale, current_user):
+            raise HTTPException(status_code=403, detail="You can only process returns for sales you are allowed to see")
         
         items = [item.model_dump() for item in return_data.items]
         return_record = db.create_sale_return(
@@ -2159,6 +2342,8 @@ async def get_sale_returns(sale_id: str, current_user: dict = Depends(get_curren
         sale = db.get_sale(sale_id)
         if not sale:
             raise HTTPException(status_code=404, detail="Sale not found")
+        if not _is_admin(current_user) and not _sale_visible_to_user(sale, current_user):
+            raise HTTPException(status_code=403, detail="You can only view returns for sales you are allowed to see")
         
         returns = db.get_sale_returns(sale_id)
         return [SaleReturn(**ret) for ret in returns]
@@ -2180,6 +2365,7 @@ async def get_payments(
     route_id: Optional[str] = None,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
+    approval_status: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     """Get payments with optional filters"""
@@ -2188,7 +2374,14 @@ async def get_payments(
         if user_id and user_id != current_user_id:
             raise HTTPException(status_code=403, detail="You can only view your own collections")
         user_id = current_user_id
-    payments = db.get_payments(sale_id=sale_id, user_id=user_id, route_id=route_id, from_date=from_date, to_date=to_date)
+    payments = db.get_payments(
+        sale_id=sale_id,
+        user_id=user_id,
+        route_id=route_id,
+        from_date=from_date,
+        to_date=to_date,
+        approval_status=approval_status,
+    )
     return [Payment(**p) for p in payments]
 
 @app.get("/api/sales/{sale_id}/payments", response_model=List[Payment])
@@ -2200,8 +2393,8 @@ async def get_sale_payments(
     sale = db.get_sale(sale_id)
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found")
-    if not _is_admin(current_user) and not _sale_belongs_to_sales_rep(sale, current_user):
-        raise HTTPException(status_code=403, detail="You can only view payments for your assigned sales")
+    if not _is_admin(current_user) and not _sale_visible_to_user(sale, current_user):
+        raise HTTPException(status_code=403, detail="You can only view payments for sales you are allowed to see")
     payments = db.get_payments(sale_id=sale_id)
     return [Payment(**p) for p in payments]
 
@@ -2226,12 +2419,37 @@ async def create_payment(payment_data: PaymentCreate, current_user: dict = Depen
             raise HTTPException(status_code=404, detail="Sale not found")
         if sale.get("retailer_id") != payment_data.retailer_id:
             raise HTTPException(status_code=400, detail="sale_id does not match retailer_id")
-        if not _is_admin(current_user):
-            if payment_data.collected_by != current_user.get("id"):
-                raise HTTPException(status_code=403, detail="DSR can only record payments collected by self")
-            if not _sale_belongs_to_sales_rep(sale, current_user):
-                raise HTTPException(status_code=403, detail="You can only collect for your assigned sales")
-        payment = db.create_payment(payment_data.model_dump(mode="json"))
+        if not _is_admin(current_user) and not _sale_visible_to_user(sale, current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only record payments for sales you are allowed to see",
+            )
+
+        payload = payment_data.model_dump(mode="json")
+
+        if _is_sr(current_user):
+            payload["approval_status"] = PaymentApprovalStatus.PENDING.value
+            if str(payload.get("collected_by") or "") != str(current_user.get("id") or ""):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="SR must record collections with collected_by set to the logged-in user",
+                )
+        else:
+            if not _is_admin(current_user):
+                if str(payment_data.collected_by or "") != str(current_user.get("id") or ""):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="DSR can only record payments collected by self",
+                    )
+                if not _sale_belongs_to_dsr(sale, current_user):
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="You can only collect for your assigned sales",
+                    )
+            if payload.get("approval_status") in (None, ""):
+                payload["approval_status"] = PaymentApprovalStatus.APPROVED.value
+
+        payment = db.create_payment(payload)
         return Payment(**payment)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -2245,6 +2463,171 @@ async def create_payment(payment_data: PaymentCreate, current_user: dict = Depen
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create payment: {error_type}: {error_msg}"
         )
+
+
+@app.get("/api/payments/pending-approval", response_model=List[Payment])
+async def get_pending_approval_payments(
+    current_user: dict = Depends(get_current_user),
+):
+    if not _can_approve_pending_collections(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin or DSR can view pending field collections",
+        )
+    if not hasattr(db, "get_payments"):
+        return []
+    rows = db.get_payments(approval_status=PaymentApprovalStatus.PENDING.value)
+    return [Payment(**p) for p in rows]
+
+
+@app.post("/api/payments/{payment_id}/approve", response_model=Payment)
+async def approve_pending_payment(
+    payment_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    if not _can_approve_pending_collections(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin or DSR can approve field collections",
+        )
+    p = None
+    if hasattr(db, "approve_pending_payment"):
+        p = db.approve_pending_payment(payment_id, str(current_user.get("id") or ""))
+    elif hasattr(db, "approve_or_reject_payment"):
+        p = db.approve_or_reject_payment(payment_id, "approve", str(current_user.get("id") or ""))
+    if not p:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Payment not found or not pending approval",
+        )
+    return Payment(**p)
+
+
+@app.post("/api/payments/{payment_id}/reject", response_model=Payment)
+async def reject_pending_payment(
+    payment_id: str,
+    body: Optional[PaymentRejectBody] = Body(None),
+    current_user: dict = Depends(get_current_user),
+):
+    if not _can_approve_pending_collections(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin or DSR can reject field collections",
+        )
+    p = None
+    reason = ((body.reason if body else None) or "").strip() or None
+    if hasattr(db, "reject_pending_payment"):
+        p = db.reject_pending_payment(
+            payment_id, str(current_user.get("id") or ""), reason=reason
+        )
+    elif hasattr(db, "approve_or_reject_payment"):
+        p = db.approve_or_reject_payment(
+            payment_id, "reject", str(current_user.get("id") or ""), reason
+        )
+    if not p:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Payment not found or not pending approval",
+        )
+    return Payment(**p)
+
+
+@app.get("/api/reports/sr-liability", response_model=SrLiabilitySummary)
+async def get_sr_liability_report(
+    sr_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    target_id: Optional[str] = None
+    if _is_sr(current_user):
+        target_id = str(current_user.get("id") or "")
+    elif not (_is_admin(current_user) or _is_dsr(current_user)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not allowed to view SR liability for this user",
+        )
+    else:
+        if not sr_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Query parameter sr_id is required (unless caller is the SR)",
+            )
+        target_id = sr_id
+
+    if not target_id or not hasattr(db, "get_sr_open_liability"):
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Liability not available")
+    u = db.get_user_by_id(target_id)
+    if not u:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    open_d = float(db.get_sr_open_liability(target_id) or 0)
+    adj = float(db.get_sr_adjustments_total(target_id) or 0) if hasattr(db, "get_sr_adjustments_total") else 0.0
+    limit = float(u.get("sr_guarantee_limit", 0) or 0)
+    enf = str(u.get("sr_guarantee_enforcement") or "off")
+    return SrLiabilitySummary(
+        sr_user_id=target_id,
+        sr_name=u.get("name"),
+        open_sr_backed_due=open_d,
+        adjustments_total=adj,
+        net_exposure=max(0.0, open_d - adj),
+        guarantee_limit=limit,
+        enforcement=enf,
+    )
+
+
+@app.post(
+    "/api/sr-risk-adjustments",
+    response_model=SrRiskAdjustment,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_sr_risk_adjustment(
+    data: SrRiskAdjustmentCreate,
+    current_user: dict = Depends(get_current_user),
+):
+    if not _is_admin(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin can post SR risk adjustments",
+        )
+    if not db.get_user_by_id(data.sr_user_id):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="SR user not found")
+    if not hasattr(db, "add_sr_risk_adjustment"):
+        raise HTTPException(status_code=500, detail="Adjustments not supported by database layer")
+    row = db.add_sr_risk_adjustment(
+        sr_user_id=data.sr_user_id,
+        amount=data.amount,
+        adjustment_type=data.adjustment_type,
+        reference_sale_id=data.reference_sale_id,
+        notes=data.notes,
+        created_by=current_user.get("id"),
+    )
+    return SrRiskAdjustment(**row)
+
+
+@app.get("/api/sr-risk-adjustments", response_model=List[SrRiskAdjustment])
+async def list_sr_risk_adjustments(
+    sr_user_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    target: Optional[str] = None
+    if _is_sr(current_user):
+        if sr_user_id and str(sr_user_id) != str(current_user.get("id") or ""):
+            raise HTTPException(status_code=403, detail="You can only view your own risk adjustments")
+        target = str(current_user.get("id") or "")
+    elif _is_admin(current_user):
+        target = sr_user_id
+    elif _is_dsr(current_user):
+        if not sr_user_id:
+            raise HTTPException(
+                status_code=400,
+                detail="sr_user_id is required to list risk adjustments as DSR",
+            )
+        target = sr_user_id
+    else:
+        raise HTTPException(status_code=403, detail="Not allowed to view risk adjustments")
+    if not hasattr(db, "list_sr_risk_adjustments"):
+        return []
+    rows = db.list_sr_risk_adjustments(target)
+    return [SrRiskAdjustment(**r) for r in rows]
+
 
 @app.get("/api/inventory", response_model=List[InventoryItem])
 async def get_inventory(current_user: dict = Depends(get_current_user)):
@@ -2442,6 +2825,15 @@ async def get_sales_report(
     """
     try:
         sales_report, summary = db.get_sales_report(from_date, to_date)
+        if not _is_admin(current_user):
+            uid = current_user.get("id")
+            if _is_sr(current_user):
+                sales_report = [s for s in sales_report if s.get("created_by") == uid]
+            elif _is_dsr(current_user):
+                sales_report = [s for s in sales_report if _sale_belongs_to_dsr(s, current_user)]
+            else:
+                sales_report = []
+            summary = _recompute_sales_report_summary(sales_report)
         return {
             "sales": [SaleReport(**sale) for sale in sales_report],
             "summary": SalesReportSummary(**summary)
@@ -2473,6 +2865,17 @@ async def get_sales_returns_report(
     """
     try:
         returns_report = db.get_sales_returns_report(from_date, to_date)
+        if not _is_admin(current_user):
+            uid = current_user.get("id")
+            filtered: List[dict] = []
+            for ret in returns_report:
+                sid = ret.get("sale_id")
+                if not sid:
+                    continue
+                sale = db.get_sale(str(sid))
+                if sale and _sale_visible_to_user(sale, current_user):
+                    filtered.append(ret)
+            returns_report = filtered
         return [SaleReturnReport(**ret) for ret in returns_report]
     except Exception as e:
         error_msg = str(e)
@@ -2509,6 +2912,11 @@ async def get_collection_report(
     - This ensures payments are shown even if collected_by is NULL
     """
     try:
+        if _is_sr(current_user):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Collection report is not available for SR",
+            )
         if not _is_admin(current_user):
             current_user_id = current_user.get("id")
             if user_id and user_id != current_user_id:
@@ -2520,10 +2928,12 @@ async def get_collection_report(
         # Enrich payments with sale and route information, and apply SR filter
         enriched_payments = []
         for payment in all_payments:
+            if (payment.get("approval_status") or "approved") != "approved":
+                continue
             enriched = payment.copy()
             sale = None
             route = None
-            
+
             # Get sale information
             if payment.get("sale_id"):
                 sale = db.get_sale(payment["sale_id"])
@@ -3144,7 +3554,7 @@ async def get_sms_settings(
 ):
     """Get SMS settings for current user or role"""
     try:
-        user_role = current_user.get("role", "sales_rep")
+        user_role = _user_role(current_user)
         user_id_param = current_user.get("id") if not user_id else user_id
         role_param = user_role if not role else role
         
@@ -3165,7 +3575,7 @@ async def update_sms_settings(
     """Create or update SMS settings"""
     try:
         user_id = current_user.get("id")
-        user_role = current_user.get("role", "sales_rep")
+        user_role = _user_role(current_user)
         
         # Pydantic converts string to Enum, so we can safely access .value
         event_type_str = settings_data.event_type.value
@@ -3365,6 +3775,8 @@ async def get_routes(
     current_user: dict = Depends(get_current_user)
 ):
     """Get all routes with optional filters"""
+    if _is_sr(current_user):
+        return []
     if not _is_admin(current_user):
         assigned_to = current_user.get("id")
     routes = db.get_routes(assigned_to=assigned_to, status=status, route_date=route_date)
@@ -3376,7 +3788,7 @@ async def get_route(route_id: str, current_user: dict = Depends(get_current_user
     route = db.get_route(route_id)
     if not route:
         raise HTTPException(status_code=404, detail="Route not found")
-    if not _is_admin(current_user) and not _route_belongs_to_sales_rep(route, current_user):
+    if not _is_admin(current_user) and not _route_belongs_to_dsr(route, current_user):
         raise HTTPException(status_code=403, detail="You can only access your assigned routes")
     return RouteWithSales(**route)
 
@@ -3466,7 +3878,7 @@ async def get_route_previous_due(
     route = db.get_route(route_id)
     if not route:
         raise HTTPException(status_code=404, detail="Route not found")
-    if not _is_admin(current_user) and not _route_belongs_to_sales_rep(route, current_user):
+    if not _is_admin(current_user) and not _route_belongs_to_dsr(route, current_user):
         raise HTTPException(status_code=403, detail="You can only access your assigned routes")
     
     # Return previous due snapshots from route_sales
@@ -3496,7 +3908,7 @@ async def create_route_reconciliation(
         route = db.get_route(route_id)
         if not route:
             raise HTTPException(status_code=404, detail="Route not found")
-        if not _is_admin(current_user) and not _route_belongs_to_sales_rep(route, current_user):
+        if not _is_admin(current_user) and not _route_belongs_to_dsr(route, current_user):
             raise HTTPException(status_code=403, detail="You can only reconcile your assigned routes")
         reconciliation = db.create_route_reconciliation(
             route_id,
@@ -3539,7 +3951,7 @@ async def get_reconciliation(
         raise HTTPException(status_code=404, detail="Reconciliation not found")
     if not _is_admin(current_user):
         route = db.get_route(reconciliation.get("route_id"))
-        if not _route_belongs_to_sales_rep(route, current_user):
+        if not _route_belongs_to_dsr(route, current_user):
             raise HTTPException(status_code=403, detail="You can only view your route reconciliations")
     return RouteReconciliation(**reconciliation)
 
@@ -3571,7 +3983,7 @@ async def get_sr_accountability(
         raise HTTPException(status_code=403, detail="You can only view your own accountability")
     accountability = db.get_sr_accountability(user_id)
     if not accountability:
-        raise HTTPException(status_code=404, detail="User not found or not an SR")
+        raise HTTPException(status_code=404, detail="User not found or has no accountability data")
     return SrAccountability(**accountability)
 
 @app.post("/api/admin/backfill-payment-route-id")

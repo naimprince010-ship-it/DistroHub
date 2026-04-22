@@ -173,7 +173,7 @@ export function Reports() {
 
         if (usersResponse.data) {
           const reps = usersResponse.data
-            .filter((u: any) => u.role === 'sales_rep')
+            .filter((u: any) => u.role === 'dsr' || u.role === 'sales_rep')
             .map((u: any) => ({ id: u.id, name: u.name }));
           setSalesReps(reps);
         }
@@ -547,9 +547,14 @@ export function Reports() {
     <PageShell
       title="Reports"
       actions={
-        <Link to="/reports/stock-reconciliation" className="btn-secondary inline-flex h-9 items-center gap-2 px-3">
-          Stock Reconciliation
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link to="/reports/sr-liability" className="btn-secondary inline-flex h-9 items-center gap-2 px-3">
+            SR personal guarantee
+          </Link>
+          <Link to="/reports/stock-reconciliation" className="btn-secondary inline-flex h-9 items-center gap-2 px-3">
+            Stock Reconciliation
+          </Link>
+        </div>
       }
     >
         {/* Report Type Tabs */}

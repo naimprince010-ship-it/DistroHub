@@ -214,7 +214,11 @@ function CreateRouteModal({ onClose, onSave }: { onClose: () => void; onSave: ()
         setLoadingSales(true);
         const [usersRes, salesRes] = await Promise.all([api.get('/api/users'), api.get('/api/sales')]);
         if (usersRes.data) {
-          setSalesReps(usersRes.data.filter((u: any) => u.role === 'sales_rep').map((u: any) => ({ id: u.id, name: u.name })));
+          setSalesReps(
+            usersRes.data
+              .filter((u: any) => u.role === 'dsr' || u.role === 'sales_rep')
+              .map((u: any) => ({ id: u.id, name: u.name }))
+          );
         }
         if (salesRes.data) {
           setAvailableSales(salesRes.data.filter((s: any) => !s.route_id && s.payment_status !== 'paid').map((s: any) => ({

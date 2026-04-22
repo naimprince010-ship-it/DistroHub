@@ -1,10 +1,14 @@
+export type UserRole = 'admin' | 'sr' | 'dsr';
+
 export interface User {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'sales_rep';
+  role: UserRole;
   phone?: string;
   created_at: string;
+  sr_guarantee_limit?: number;
+  sr_guarantee_enforcement?: 'off' | 'warn' | 'block';
 }
 
 export interface Product {
@@ -79,6 +83,8 @@ export interface SalesOrder {
   items: SalesOrderItem[];
   assigned_to?: string;  // User ID of SR/delivery man assigned to collect payment
   assigned_to_name?: string;  // Name of assigned SR/delivery man
+  created_by?: string;
+  created_by_name?: string;
   created_at: string;
 }
 
@@ -114,6 +120,31 @@ export interface Payment {
   route_number?: string;  // Route number (enriched from route)
   invoice_number?: string;  // Invoice number (enriched from sale)
   notes?: string;
+  created_at: string;
+  approval_status?: 'pending_approval' | 'approved' | 'rejected';
+  rejection_reason?: string;
+  approved_by?: string;
+  approved_at?: string;
+}
+
+export interface SrLiabilitySummary {
+  sr_user_id: string;
+  sr_name?: string | null;
+  open_sr_backed_due: number;
+  adjustments_total: number;
+  net_exposure: number;
+  guarantee_limit: number;
+  enforcement: string;
+}
+
+export interface SrRiskAdjustment {
+  id: string;
+  sr_user_id: string;
+  amount: number;
+  adjustment_type: string;
+  reference_sale_id?: string | null;
+  notes?: string | null;
+  created_by?: string | null;
   created_at: string;
 }
 
