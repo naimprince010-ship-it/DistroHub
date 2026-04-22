@@ -12,6 +12,7 @@ import {
   Eye,
 } from 'lucide-react';
 import api from '@/lib/api';
+import { formatPaymentMethodLabel } from '@/lib/paymentMethods';
 
 interface Sale {
   id: string;
@@ -397,6 +398,9 @@ export function Reports() {
   const purchasesTotal = filteredPurchases.reduce((sum, p) => sum + p.total_amount, 0);
   const purchasesPaid = filteredPurchases.reduce((sum, p) => sum + p.paid_amount, 0);
   const purchasesItems = filteredPurchases.reduce((sum, p) => sum + p.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0);
+  const collectionMappedCount = collectionPayments.filter((payment: any) => payment.sale_id && payment.collected_by).length;
+  const collectionUnroutedCount = collectionPayments.filter((payment: any) => !payment.route_id).length;
+  const collectionMappedRate = collectionPayments.length > 0 ? (collectionMappedCount / collectionPayments.length) * 100 : 100;
 
   const stockTotal = filteredInventory.reduce((sum, i) => sum + i.total_stock, 0);
   const stockProducts = filteredInventory.length;
@@ -703,15 +707,36 @@ export function Reports() {
         )}
 
         {activeReport === 'collection' && collectionSummary && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-3 border-b border-border">
-            <div className="rounded-lg bg-muted/50 border border-border p-3">
-              <p className="text-xs text-muted-foreground">Total Payments</p>
-              <p className="text-xl font-bold font-mono text-foreground">{collectionSummary.total_payments || 0}</p>
+          <div className="space-y-3 p-3 border-b border-border">
+            <div className="rounded-lg border border-[hsl(var(--dh-blue))]/25 bg-[hsl(var(--dh-blue))]/5 p-3 text-sm">
+              <p className="font-medium text-foreground">Daily KPI Cadence</p>
+              <p className="mt-1 text-muted-foreground">
+                6:00 PM collection cut-off -&gt; 6:30 PM SR accountability review -&gt; 7:00 PM route reconciliation closure.
+              </p>
             </div>
-            <div className="rounded-lg bg-[hsl(var(--dh-green))]/5 border border-[hsl(var(--dh-green))]/20 p-3">
-              <p className="text-xs text-muted-foreground">Total Amount</p>
-              <p className="text-xl font-bold font-mono text-[hsl(var(--dh-green))]">৳ {(collectionSummary.total_amount || 0).toLocaleString()}</p>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="rounded-lg bg-muted/50 border border-border p-3">
+                <p className="text-xs text-muted-foreground">Total Payments</p>
+                <p className="text-xl font-bold font-mono text-foreground">{collectionSummary.total_payments || 0}</p>
+              </div>
+              <div className="rounded-lg bg-[hsl(var(--dh-green))]/5 border border-[hsl(var(--dh-green))]/20 p-3">
+                <p className="text-xs text-muted-foreground">Total Amount</p>
+                <p className="text-xl font-bold font-mono text-[hsl(var(--dh-green))]">৳ {(collectionSummary.total_amount || 0).toLocaleString()}</p>
+              </div>
+              <div className="rounded-lg bg-[hsl(var(--dh-blue))]/5 border border-[hsl(var(--dh-blue))]/20 p-3">
+                <p className="text-xs text-muted-foreground">Mapped to Sale + Collector</p>
+                <p className="text-xl font-bold font-mono text-[hsl(var(--dh-blue))]">{collectionMappedRate.toFixed(1)}%</p>
+              </div>
+              <div className={`rounded-lg border p-3 ${collectionUnroutedCount > 0 ? 'bg-[hsl(var(--dh-amber))]/5 border-[hsl(var(--dh-amber))]/30' : 'bg-muted/50 border-border'}`}>
+                <p className="text-xs text-muted-foreground">Missing Route Link</p>
+                <p className="text-xl font-bold font-mono text-foreground">{collectionUnroutedCount}</p>
+              </div>
             </div>
+            {(collectionMappedRate < 100 || collectionUnroutedCount > 0) && (
+              <div className="rounded-lg border border-[hsl(var(--dh-amber))]/30 bg-[hsl(var(--dh-amber))]/10 p-3 text-sm text-[hsl(var(--dh-amber))]">
+                Data quality alert: Complete route mapping and missing collector/sale links before EOD reconciliation.
+              </div>
+            )}
           </div>
         )}
 
@@ -996,7 +1021,7 @@ export function Reports() {
                             </span>
                           </td>
                         <td className="px-3 py-2.5 text-center">
-                          <span className="px-2 py-0.5 bg-[hsl(var(--dh-blue))]/10 text-[hsl(var(--dh-blue))] text-xs font-medium rounded capitalize">{payment.payment_method}</span>
+                          <span className="px-2 py-0.5 bg-[hsl(var(--dh-blue))]/10 text-[hsl(var(--dh-blue))] text-xs font-medium rounded">{formatPaymentMethodLabel(payment.payment_method)}</span>
                         </td>
                         <td className="px-3 py-2.5 text-muted-foreground">{payment.collected_by_name || '–'}</td>
                         <td className="px-3 py-2.5 text-muted-foreground">{payment.route_number || '–'}</td>

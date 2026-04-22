@@ -10,6 +10,7 @@ import {
   Search,
 } from 'lucide-react';
 import api from '@/lib/api';
+import { PAYMENT_METHOD_OPTIONS, formatPaymentMethodLabel, type PaymentMethodValue } from '@/lib/paymentMethods';
 
 interface Payment {
   id: string;
@@ -206,7 +207,8 @@ export function Payments() {
 
   const handleCreatePayment = async (paymentData: {
     retailer_id: string;
-    sale_id?: string;
+    sale_id: string;
+    collected_by: string;
     amount: number;
     payment_method: string;
     notes?: string;
@@ -399,7 +401,7 @@ export function Payments() {
                       <td className="px-3 py-2.5 text-muted-foreground">{new Date(payment.created_at).toLocaleDateString()}</td>
                       <td className="px-3 py-2.5 font-medium text-foreground">{payment.retailer_name}</td>
                       <td className="px-3 py-2.5 text-right font-mono font-semibold text-[hsl(var(--dh-green))]">৳ {payment.amount.toLocaleString()}</td>
-                      <td className="px-3 py-2.5 text-muted-foreground">{payment.payment_method}</td>
+                      <td className="px-3 py-2.5 text-muted-foreground">{formatPaymentMethodLabel(payment.payment_method)}</td>
                       <td className="px-3 py-2.5 text-sm text-muted-foreground">{payment.notes || '–'}</td>
                     </tr>
                   ))}
@@ -449,7 +451,8 @@ interface PaymentModalProps {
   onClose: () => void;
   onSave: (paymentData: {
     retailer_id: string;
-    sale_id?: string;
+    sale_id: string;
+    collected_by: string;
     amount: number;
     payment_method: string;
     notes?: string;
@@ -457,26 +460,89 @@ interface PaymentModalProps {
 }
 
 function PaymentModal({ retailer, onClose, onSave }: PaymentModalProps) {
+  const [retailerSales, setRetailerSales] = useState<Array<{ id: string; invoice_number: string; due_amount: number; assigned_to?: string }>>([]);
+  const [salesReps, setSalesReps] = useState<Array<{ id: string; name: string }>>([]);
+  const [loadingMeta, setLoadingMeta] = useState(true);
   const [formData, setFormData] = useState({
-    amount: retailer.total_due.toString(),
-    payment_method: 'cash',
+    sale_id: '',
+    collected_by: '',
+    amount: '',
+    payment_method: 'cash' as PaymentMethodValue,
     notes: '',
   });
 
+  useEffect(() => {
+    let mounted = true;
+    const fetchMeta = async () => {
+      try {
+        setLoadingMeta(true);
+        const [salesRes, usersRes] = await Promise.all([api.get('/api/sales'), api.get('/api/users')]);
+        if (!mounted) return;
+        const openSales = Array.isArray(salesRes.data)
+          ? salesRes.data
+              .filter((sale: any) => sale.retailer_id === retailer.retailer_id && Number(sale.due_amount || 0) > 0)
+              .map((sale: any) => ({
+                id: sale.id,
+                invoice_number: sale.invoice_number || sale.order_number || sale.id,
+                due_amount: Number(sale.due_amount || 0),
+                assigned_to: sale.assigned_to || '',
+              }))
+          : [];
+        const reps = Array.isArray(usersRes.data)
+          ? usersRes.data
+              .filter((user: any) => user.role === 'sales_rep' || user.role === 'admin')
+              .map((user: any) => ({ id: user.id, name: user.name }))
+          : [];
+        setRetailerSales(openSales);
+        setSalesReps(reps);
+        if (openSales.length > 0) {
+          const defaultSale = openSales[0];
+          setFormData((prev) => ({
+            ...prev,
+            sale_id: defaultSale.id,
+            collected_by: defaultSale.assigned_to || prev.collected_by,
+            amount: defaultSale.due_amount.toString(),
+          }));
+        }
+      } catch (error) {
+        console.error('[Payments] Failed to load payment modal metadata', error);
+      } finally {
+        if (mounted) setLoadingMeta(false);
+      }
+    };
+    fetchMeta();
+    return () => {
+      mounted = false;
+    };
+  }, [retailer.retailer_id]);
+
+  const selectedSale = retailerSales.find((sale) => sale.id === formData.sale_id);
+  const selectedSaleDue = selectedSale?.due_amount ?? retailer.total_due;
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.sale_id) {
+      alert('Please select an invoice (sale_id)');
+      return;
+    }
+    if (!formData.collected_by) {
+      alert('Please select who collected this payment');
+      return;
+    }
     const amount = parseFloat(formData.amount);
     if (isNaN(amount) || amount <= 0) {
       alert('Please enter a valid amount');
       return;
     }
-    if (amount > retailer.total_due) {
-      alert(`Amount cannot exceed total due (৳${retailer.total_due.toLocaleString()})`);
+    if (amount > selectedSaleDue) {
+      alert(`Amount cannot exceed selected invoice due (৳${selectedSaleDue.toLocaleString()})`);
       return;
     }
 
     onSave({
       retailer_id: retailer.retailer_id,
+      sale_id: formData.sale_id,
+      collected_by: formData.collected_by,
       amount: amount,
       payment_method: formData.payment_method,
       notes: formData.notes || undefined,
@@ -493,18 +559,69 @@ function PaymentModal({ retailer, onClose, onSave }: PaymentModalProps) {
         </div>
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
           <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-foreground">Invoice (sale_id)</label>
+            <select
+              value={formData.sale_id}
+              onChange={(e) => {
+                const saleId = e.target.value;
+                const sale = retailerSales.find((item) => item.id === saleId);
+                setFormData((prev) => ({
+                  ...prev,
+                  sale_id: saleId,
+                  amount: sale ? sale.due_amount.toString() : prev.amount,
+                  collected_by: sale?.assigned_to || prev.collected_by,
+                }));
+              }}
+              className="input-field"
+              required
+              disabled={loadingMeta}
+            >
+              <option value="">{loadingMeta ? 'Loading invoices...' : 'Select invoice'}</option>
+              {retailerSales.map((sale) => (
+                <option key={sale.id} value={sale.id}>
+                  {sale.invoice_number} - Due ৳ {sale.due_amount.toLocaleString()}
+                </option>
+              ))}
+            </select>
+            {retailerSales.length === 0 && !loadingMeta && (
+              <p className="text-xs text-[hsl(var(--dh-red))]">No open invoice found for this retailer.</p>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-foreground">Collected By</label>
+            <select
+              value={formData.collected_by}
+              onChange={(e) => setFormData({ ...formData, collected_by: e.target.value })}
+              className="input-field"
+              required
+              disabled={loadingMeta}
+            >
+              <option value="">{loadingMeta ? 'Loading users...' : 'Select SR/Collector'}</option>
+              {salesReps.map((rep) => (
+                <option key={rep.id} value={rep.id}>
+                  {rep.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
             <label className="block text-sm font-medium text-foreground">Amount</label>
-            <input type="number" step="0.01" min="0" max={retailer.total_due} value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} className="input-field" required />
-            <p className="text-xs text-muted-foreground">Maximum: ৳ {retailer.total_due.toLocaleString()}</p>
+            <input type="number" step="0.01" min="0" max={selectedSaleDue} value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: e.target.value })} className="input-field" required />
+            <p className="text-xs text-muted-foreground">Maximum: ৳ {selectedSaleDue.toLocaleString()}</p>
           </div>
           <div className="space-y-1.5">
             <label className="block text-sm font-medium text-foreground">Payment Method</label>
-            <select value={formData.payment_method} onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })} className="input-field" required>
-              <option value="cash">Cash</option>
-              <option value="bank_transfer">Bank Transfer</option>
-              <option value="mobile_banking">Mobile Banking</option>
-              <option value="check">Check</option>
-              <option value="other">Other</option>
+            <select
+              value={formData.payment_method}
+              onChange={(e) => setFormData({ ...formData, payment_method: e.target.value as PaymentMethodValue })}
+              className="input-field"
+              required
+            >
+              {PAYMENT_METHOD_OPTIONS.map((method) => (
+                <option key={method.value} value={method.value}>
+                  {method.label}
+                </option>
+              ))}
             </select>
           </div>
           <div className="space-y-1.5">
@@ -535,7 +652,7 @@ interface SupplierPaymentModalProps {
 function SupplierPaymentModal({ supplier, onClose, onSave }: SupplierPaymentModalProps) {
   const [formData, setFormData] = useState({
     amount: supplier.total_due.toString(),
-    payment_method: 'cash',
+    payment_method: 'cash' as PaymentMethodValue,
     notes: '',
   });
 
@@ -575,12 +692,17 @@ function SupplierPaymentModal({ supplier, onClose, onSave }: SupplierPaymentModa
           </div>
           <div className="space-y-1.5">
             <label className="block text-sm font-medium text-foreground">Payment Method</label>
-            <select value={formData.payment_method} onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })} className="input-field" required>
-              <option value="cash">Cash</option>
-              <option value="bank_transfer">Bank Transfer</option>
-              <option value="mobile_banking">Mobile Banking</option>
-              <option value="check">Check</option>
-              <option value="other">Other</option>
+            <select
+              value={formData.payment_method}
+              onChange={(e) => setFormData({ ...formData, payment_method: e.target.value as PaymentMethodValue })}
+              className="input-field"
+              required
+            >
+              {PAYMENT_METHOD_OPTIONS.map((method) => (
+                <option key={method.value} value={method.value}>
+                  {method.label}
+                </option>
+              ))}
             </select>
           </div>
           <div className="space-y-1.5">

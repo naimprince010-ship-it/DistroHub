@@ -233,6 +233,12 @@ class InMemoryDatabase:
             if user["email"] == email:
                 return user
         return None
+
+    def get_user_by_id(self, user_id: str) -> Optional[dict]:
+        return self.users.get(user_id)
+
+    def get_users(self) -> List[dict]:
+        return sorted(self.users.values(), key=lambda user: user.get("created_at", datetime.min), reverse=True)
     
     def create_user(self, email: str, name: str, password: str, role: UserRole, phone: str = None) -> dict:
         user_id = generate_id()
@@ -247,6 +253,23 @@ class InMemoryDatabase:
         }
         self.users[user_id] = user
         return user
+
+    def delete_user(self, user_id: str) -> bool:
+        if user_id not in self.users:
+            return False
+        del self.users[user_id]
+
+        for sale in self.sales.values():
+            if sale.get("assigned_to") == user_id:
+                sale["assigned_to"] = None
+                sale["assigned_to_name"] = None
+
+        for payment in self.payments.values():
+            if payment.get("collected_by") == user_id:
+                payment["collected_by"] = None
+                payment["collected_by_name"] = None
+
+        return True
     
     def get_products(self) -> List[dict]:
         return list(self.products.values())
@@ -286,8 +309,11 @@ class InMemoryDatabase:
             return True
         return False
     
-    def get_batches_by_product(self, product_id: str) -> List[dict]:
-        return [b for b in self.batches.values() if b["product_id"] == product_id]
+    def get_batches_by_product(self, product_id: str, warehouse_id: Optional[str] = None) -> List[dict]:
+        batches = [b for b in self.batches.values() if b["product_id"] == product_id]
+        if warehouse_id:
+            batches = [b for b in batches if b.get("warehouse_id") == warehouse_id]
+        return batches
     
     def get_batch(self, batch_id: str) -> Optional[dict]:
         return self.batches.get(batch_id)
@@ -567,26 +593,34 @@ class InMemoryDatabase:
         retailer = self.get_retailer(data["retailer_id"])
         if not retailer:
             raise ValueError("Retailer not found")
+        sale = self.get_sale(data["sale_id"])
+        if not sale:
+            raise ValueError("Sale not found")
+        if sale.get("retailer_id") != data["retailer_id"]:
+            raise ValueError("Sale does not belong to retailer")
+        collected_user = self.get_user_by_id(data.get("collected_by"))
+        if not collected_user:
+            raise ValueError("Collector user not found")
         
         self.update_retailer_due(data["retailer_id"], -data["amount"])
         
-        if data.get("sale_id"):
-            sale = self.get_sale(data["sale_id"])
-            if sale:
-                sale["paid_amount"] += data["amount"]
-                sale["due_amount"] -= data["amount"]
-                if sale["due_amount"] <= 0:
-                    sale["payment_status"] = PaymentStatus.PAID
-                else:
-                    sale["payment_status"] = PaymentStatus.PARTIAL
+        sale["paid_amount"] += data["amount"]
+        sale["due_amount"] -= data["amount"]
+        if sale["due_amount"] <= 0:
+            sale["payment_status"] = PaymentStatus.PAID
+        else:
+            sale["payment_status"] = PaymentStatus.PARTIAL
         
         payment = {
             "id": payment_id,
             "retailer_id": data["retailer_id"],
             "retailer_name": retailer["name"],
-            "sale_id": data.get("sale_id"),
+            "sale_id": data["sale_id"],
             "amount": data["amount"],
             "payment_method": data["payment_method"],
+            "route_id": sale.get("route_id"),
+            "collected_by": data["collected_by"],
+            "collected_by_name": collected_user.get("name"),
             "notes": data.get("notes"),
             "created_at": datetime.now()
         }

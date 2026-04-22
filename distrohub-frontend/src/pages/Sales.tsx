@@ -19,6 +19,7 @@ import { BarcodeScanButton } from '@/components/BarcodeScanner';
 import { PaymentHistory } from '@/components/payments/PaymentHistory';
 import api, { deleteWithOfflineQueue, postWithOfflineQueue, putWithOfflineQueue } from '@/lib/api';
 import { formatDateBD } from '@/lib/utils';
+import { PAYMENT_METHOD_OPTIONS, formatPaymentMethodLabel, type PaymentMethodValue } from '@/lib/paymentMethods';
 import {
   bulkSaveSales,
   deleteRecord,
@@ -877,7 +878,7 @@ function OrderDetailsModal({ order, onClose, onEdit }: {
                     <p className="text-xs text-muted-foreground">{formatDateBD(payment.created_at)}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-xs text-muted-foreground capitalize">{payment.payment_method}</p>
+                    <p className="text-xs text-muted-foreground">{formatPaymentMethodLabel(payment.payment_method)}</p>
                     {payment.collected_by_name && (
                       <p className="text-xs text-muted-foreground">by {payment.collected_by_name}</p>
                     )}
@@ -1056,12 +1057,47 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
       const token = localStorage.getItem('token');
       if (!token) { setLoadingRetailers(false); setLoadingProducts(false); return; }
       try {
-        const [retailersRes, productsRes, usersRes] = await Promise.all([
-          api.get('/api/retailers'), api.get('/api/products'), api.get('/api/users'),
+        const [retailersRes, productsRes, usersRes] = await Promise.allSettled([
+          api.get('/api/retailers'),
+          api.get('/api/products'),
+          api.get('/api/users'),
         ]);
-        if (retailersRes.data) setRetailers(retailersRes.data.map((r: any) => ({ id: r.id, name: r.name, shop_name: r.shop_name })));
-        if (productsRes.data) setProducts(productsRes.data.map((p: any) => ({ id: p.id, name: p.name, selling_price: p.selling_price || 0, barcode: p.barcode })));
-        if (usersRes.data) setSalesReps(usersRes.data.filter((u: any) => u.role === 'sales_rep').map((u: any) => ({ id: u.id, name: u.name })));
+
+        if (retailersRes.status === 'fulfilled' && Array.isArray(retailersRes.value.data)) {
+          setRetailers(
+            retailersRes.value.data.map((r: any) => ({
+              id: r.id,
+              name: r.name,
+              shop_name: r.shop_name || r.name || '',
+            }))
+          );
+        } else {
+          setRetailers([]);
+        }
+
+        if (productsRes.status === 'fulfilled' && Array.isArray(productsRes.value.data)) {
+          setProducts(
+            productsRes.value.data.map((p: any) => ({
+              id: p.id,
+              name: p.name,
+              selling_price: p.selling_price || 0,
+              barcode: p.barcode,
+            }))
+          );
+        } else {
+          setProducts([]);
+        }
+
+        if (usersRes.status === 'fulfilled' && Array.isArray(usersRes.value.data)) {
+          setSalesReps(
+            usersRes.value.data
+              .filter((u: any) => u.role === 'sales_rep')
+              .map((u: any) => ({ id: u.id, name: u.name }))
+          );
+        } else {
+          // Keep order form usable even if SR list endpoint is unavailable.
+          setSalesReps([]);
+        }
       } catch (error: any) {
         const isOfflineError = !navigator.onLine || error?.isNetworkError || error?.code === 'ERR_NETWORK';
         if (isOfflineError) {
@@ -1159,17 +1195,21 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
         <div className="grid grid-cols-2 gap-3">
           <div className="relative retailer-dropdown-container">
             <label className="block text-sm font-medium text-foreground mb-1.5">Retailer</label>
-            <div
+            <button
+              type="button"
               onClick={() => !loadingRetailers && setShowRetailerDropdown(!showRetailerDropdown)}
-              className="input-field flex items-center justify-between cursor-pointer"
+              className="input-field flex w-full items-center justify-between cursor-pointer text-left"
+              aria-haspopup="listbox"
+              aria-expanded={showRetailerDropdown}
+              aria-label="Retailer selector"
             >
               <span className={formData.retailer_name ? 'text-foreground' : 'text-muted-foreground'}>
                 {formData.retailer_name || (loadingRetailers ? 'Loading…' : retailers.length === 0 ? 'No retailers found' : 'Select Retailer')}
               </span>
               <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${showRetailerDropdown ? 'rotate-180' : ''}`} />
-            </div>
+            </button>
             {showRetailerDropdown && !loadingRetailers && (
-              <div className={dropdownBase}>
+              <div className={dropdownBase} role="listbox" aria-label="Retailer options">
                 <div className="p-2 border-b border-border">
                   <div className="relative">
                     <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1183,14 +1223,14 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
                     const q = retailerSearchTerm.toLowerCase();
                     return r.name.toLowerCase().includes(q) || r.shop_name.toLowerCase().includes(q);
                   }).map((retailer) => (
-                    <div key={retailer.id} className={dropdownItem}
+                    <button key={retailer.id} type="button" className={`${dropdownItem} w-full text-left`}
                       onClick={() => {
                         setFormData({ ...formData, retailer_name: retailer.shop_name || retailer.name, retailer_id: retailer.id });
                         setShowRetailerDropdown(false);
                         setRetailerSearchTerm('');
                       }}>
-                      {retailer.shop_name} ({retailer.name})
-                    </div>
+                      {retailer.shop_name || retailer.name} ({retailer.name})
+                    </button>
                   ))}
                 </div>
               </div>
@@ -1229,17 +1269,21 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
           {formData.items.map((item, index) => (
             <div key={index} className="grid grid-cols-5 gap-2 mb-2 items-center">
               <div className="col-span-2 relative product-dropdown-container">
-                <div
+                <button
+                  type="button"
                   onClick={() => !loadingProducts && setOpenProductDropdownIndex(openProductDropdownIndex === index ? null : index)}
-                  className="input-field flex items-center justify-between cursor-pointer"
+                  className="input-field flex w-full items-center justify-between cursor-pointer text-left"
+                  aria-haspopup="listbox"
+                  aria-expanded={openProductDropdownIndex === index}
+                  aria-label={`Product selector ${index + 1}`}
                 >
                   <span className={item.product ? 'text-foreground' : 'text-muted-foreground'}>
                     {item.product || (loadingProducts ? 'Loading…' : 'Select Product')}
                   </span>
                   <ChevronDown className={`w-4 h-4 text-muted-foreground transition-transform ${openProductDropdownIndex === index ? 'rotate-180' : ''}`} />
-                </div>
+                </button>
                 {openProductDropdownIndex === index && !loadingProducts && (
-                  <div className={dropdownBase}>
+                  <div className={dropdownBase} role="listbox" aria-label={`Product options ${index + 1}`}>
                     <div className="p-2 border-b border-border">
                       <div className="relative">
                         <Search className="absolute left-2 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -1255,7 +1299,7 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
                     </div>
                     <div className="max-h-48 overflow-y-auto">
                       {products.filter((p) => p.name.toLowerCase().includes((productSearchTerms[index] || '').toLowerCase())).map((product) => (
-                        <div key={product.id} className={dropdownItem}
+                        <button key={product.id} type="button" className={`${dropdownItem} w-full text-left`}
                           onClick={() => {
                             const newItems = [...formData.items];
                             newItems[index].product = product.name;
@@ -1267,7 +1311,7 @@ function AddOrderModal({ onClose, onSave }: { onClose: () => void; onSave: (orde
                             setProductSearchTerms(next);
                           }}>
                           {product.name} — ৳{product.selling_price}
-                        </div>
+                        </button>
                       ))}
                     </div>
                   </div>
@@ -1323,7 +1367,7 @@ function CollectionModal({ order, onClose, onSuccess }: {
   onSuccess: () => void;
 }) {
   const [amount, setAmount] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodValue>('cash');
   const [collectedBy, setCollectedBy] = useState('');
   const [notes, setNotes] = useState('');
   const [salesReps, setSalesReps] = useState<Array<{ id: string; name: string }>>([]);
@@ -1440,10 +1484,16 @@ function CollectionModal({ order, onClose, onSuccess }: {
 
         <div className="space-y-1.5">
           <label className="text-sm font-medium text-foreground">Payment Method</label>
-          <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="input-field">
-            <option value="cash">Cash</option>
-            <option value="bank">Bank Transfer</option>
-            <option value="mobile">Mobile Banking (bKash/Nagad)</option>
+          <select
+            value={paymentMethod}
+            onChange={(e) => setPaymentMethod(e.target.value as PaymentMethodValue)}
+            className="input-field"
+          >
+            {PAYMENT_METHOD_OPTIONS.map((method) => (
+              <option key={method.value} value={method.value}>
+                {method.label}
+              </option>
+            ))}
           </select>
         </div>
 

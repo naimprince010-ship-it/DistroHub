@@ -151,6 +151,37 @@ def _attach_latest_batch(product: dict) -> dict:
 def _clear_login_failures(client_ip: str) -> None:
     _login_attempts.pop(client_ip, None)
 
+ADMIN_ROLE = UserRole.ADMIN.value
+SALES_REP_ROLE = UserRole.SALES_REP.value
+
+def _user_role(current_user: dict) -> str:
+    return str(current_user.get("role", SALES_REP_ROLE)).strip().lower()
+
+def _is_admin(current_user: dict) -> bool:
+    return _user_role(current_user) == ADMIN_ROLE
+
+def _require_admin(current_user: dict, detail: str = "Admin access required") -> None:
+    if not _is_admin(current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=detail)
+
+def _route_belongs_to_sales_rep(route: Optional[dict], current_user: dict) -> bool:
+    if not route:
+        return False
+    return route.get("assigned_to") == current_user.get("id")
+
+def _sale_belongs_to_sales_rep(sale: Optional[dict], current_user: dict) -> bool:
+    if not sale:
+        return False
+    if sale.get("assigned_to") == current_user.get("id"):
+        return True
+    route_id = sale.get("route_id")
+    if not route_id:
+        return False
+    if not hasattr(db, "get_route"):
+        return False
+    route = db.get_route(route_id)
+    return _route_belongs_to_sales_rep(route, current_user)
+
 def _log_audit_event(
     action: str,
     request: Request,
@@ -1091,6 +1122,8 @@ async def google_callback(code: str = None, error: str = None):
 async def get_users(current_user: dict = Depends(get_current_user)):
     """Get all users (admin only or for SR selection)"""
     try:
+        if not _is_admin(current_user):
+            return [User(**current_user)]
         users = db.get_users()
         return [User(**user) for user in users]
     except Exception as e:
@@ -1103,6 +1136,7 @@ async def get_users(current_user: dict = Depends(get_current_user)):
 async def create_user(user_data: UserCreate, current_user: dict = Depends(get_current_user)):
     """Create a new user (sales rep)"""
     try:
+        _require_admin(current_user)
         # Check if email already exists
         existing_users = db.get_users()
         if any(u.get("email") == user_data.email for u in existing_users):
@@ -1139,6 +1173,7 @@ async def update_user(
 ):
     """Update user information"""
     try:
+        _require_admin(current_user)
         # Verify user exists
         existing_user = db.get_user_by_id(user_id)
         if not existing_user:
@@ -1185,6 +1220,7 @@ async def update_user(
 async def delete_user(user_id: str, current_user: dict = Depends(get_current_user)):
     """Delete a user (sales rep)"""
     try:
+        _require_admin(current_user)
         # Verify user exists
         existing_user = db.get_user_by_id(user_id)
         if not existing_user:
@@ -1761,6 +1797,8 @@ async def create_purchase(purchase_data: PurchaseCreate, request: Request, curre
 @app.get("/api/sales", response_model=List[Sale])
 async def get_sales(current_user: dict = Depends(get_current_user)):
     sales = db.get_sales()
+    if not _is_admin(current_user):
+        sales = [sale for sale in sales if _sale_belongs_to_sales_rep(sale, current_user)]
     return [Sale(**s) for s in sales]
 
 @app.get("/api/sales/{sale_id}", response_model=Sale)
@@ -1768,6 +1806,8 @@ async def get_sale(sale_id: str, current_user: dict = Depends(get_current_user))
     sale = db.get_sale(sale_id)
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found")
+    if not _is_admin(current_user) and not _sale_belongs_to_sales_rep(sale, current_user):
+        raise HTTPException(status_code=403, detail="You can only view your assigned sales")
     return Sale(**sale)
 
 @app.put("/api/sales/{sale_id}", response_model=Sale)
@@ -1801,6 +1841,7 @@ async def update_sale(
         500: Server error
     """
     try:
+        _require_admin(current_user, detail="Only admin can update sales")
         # Verify sale exists
         existing_sale = db.get_sale(sale_id)
         if not existing_sale:
@@ -1865,6 +1906,7 @@ async def create_sale(sale_data: SaleCreate, request: Request, current_user: dic
         500: Unexpected server error
     """
     try:
+        _require_admin(current_user, detail="Only admin can create sales")
         print(f"[API] create_sale start: retailer_id={sale_data.retailer_id}, items={len(sale_data.items)}")
         print(f"[API] User: {current_user.get('email', 'unknown')}")
         
@@ -2070,6 +2112,7 @@ async def delete_sale(sale_id: str, current_user: dict = Depends(get_current_use
         500: Server error
     """
     try:
+        _require_admin(current_user, detail="Only admin can delete sales")
         # Verify sale exists
         sale = db.get_sale(sale_id)
         if not sale:
@@ -2140,6 +2183,11 @@ async def get_payments(
     current_user: dict = Depends(get_current_user)
 ):
     """Get payments with optional filters"""
+    if not _is_admin(current_user):
+        current_user_id = current_user.get("id")
+        if user_id and user_id != current_user_id:
+            raise HTTPException(status_code=403, detail="You can only view your own collections")
+        user_id = current_user_id
     payments = db.get_payments(sale_id=sale_id, user_id=user_id, route_id=route_id, from_date=from_date, to_date=to_date)
     return [Payment(**p) for p in payments]
 
@@ -2149,6 +2197,11 @@ async def get_sale_payments(
     current_user: dict = Depends(get_current_user)
 ):
     """Get all payment records for a specific sale"""
+    sale = db.get_sale(sale_id)
+    if not sale:
+        raise HTTPException(status_code=404, detail="Sale not found")
+    if not _is_admin(current_user) and not _sale_belongs_to_sales_rep(sale, current_user):
+        raise HTTPException(status_code=403, detail="You can only view payments for your assigned sales")
     payments = db.get_payments(sale_id=sale_id)
     return [Payment(**p) for p in payments]
 
@@ -2160,13 +2213,25 @@ async def get_user_payments(
     current_user: dict = Depends(get_current_user)
 ):
     """Get all payments collected by a specific SR/user"""
+    if not _is_admin(current_user) and user_id != current_user.get("id"):
+        raise HTTPException(status_code=403, detail="You can only view your own payments")
     payments = db.get_payments(user_id=user_id, from_date=from_date, to_date=to_date)
     return [Payment(**p) for p in payments]
 
 @app.post("/api/payments", response_model=Payment)
 async def create_payment(payment_data: PaymentCreate, current_user: dict = Depends(get_current_user)):
     try:
-        payment = db.create_payment(payment_data.model_dump())
+        sale = db.get_sale(payment_data.sale_id)
+        if not sale:
+            raise HTTPException(status_code=404, detail="Sale not found")
+        if sale.get("retailer_id") != payment_data.retailer_id:
+            raise HTTPException(status_code=400, detail="sale_id does not match retailer_id")
+        if not _is_admin(current_user):
+            if payment_data.collected_by != current_user.get("id"):
+                raise HTTPException(status_code=403, detail="DSR can only record payments collected by self")
+            if not _sale_belongs_to_sales_rep(sale, current_user):
+                raise HTTPException(status_code=403, detail="You can only collect for your assigned sales")
+        payment = db.create_payment(payment_data.model_dump(mode="json"))
         return Payment(**payment)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -2444,6 +2509,11 @@ async def get_collection_report(
     - This ensures payments are shown even if collected_by is NULL
     """
     try:
+        if not _is_admin(current_user):
+            current_user_id = current_user.get("id")
+            if user_id and user_id != current_user_id:
+                raise HTTPException(status_code=403, detail="You can only view your own collection report")
+            user_id = current_user_id
         # Get all payments (without user_id filter first, we'll filter manually)
         all_payments = db.get_payments(from_date=from_date, to_date=to_date)
         
@@ -3276,6 +3346,7 @@ async def send_sms(
 async def create_route(route_data: RouteCreate, current_user: dict = Depends(get_current_user)):
     """Create a new route/batch with sales orders"""
     try:
+        _require_admin(current_user, detail="Only admin can create routes")
         route = db.create_route(route_data.model_dump(), route_data.sale_ids)
         return RouteWithSales(**route)
     except ValueError as e:
@@ -3294,6 +3365,8 @@ async def get_routes(
     current_user: dict = Depends(get_current_user)
 ):
     """Get all routes with optional filters"""
+    if not _is_admin(current_user):
+        assigned_to = current_user.get("id")
     routes = db.get_routes(assigned_to=assigned_to, status=status, route_date=route_date)
     return [Route(**r) for r in routes]
 
@@ -3303,6 +3376,8 @@ async def get_route(route_id: str, current_user: dict = Depends(get_current_user
     route = db.get_route(route_id)
     if not route:
         raise HTTPException(status_code=404, detail="Route not found")
+    if not _is_admin(current_user) and not _route_belongs_to_sales_rep(route, current_user):
+        raise HTTPException(status_code=403, detail="You can only access your assigned routes")
     return RouteWithSales(**route)
 
 @app.put("/api/routes/{route_id}", response_model=Route)
@@ -3313,6 +3388,7 @@ async def update_route(
 ):
     """Update route (status, notes, etc.)"""
     try:
+        _require_admin(current_user, detail="Only admin can update routes")
         
         route = db.update_route(route_id, route_update.model_dump(exclude_unset=True))
         
@@ -3335,6 +3411,7 @@ async def add_sales_to_route(
 ):
     """Add sales orders to an existing route"""
     try:
+        _require_admin(current_user, detail="Only admin can update route sales")
         route = db.add_sales_to_route(route_id, sale_ids)
         return RouteWithSales(**route)
     except ValueError as e:
@@ -3350,6 +3427,7 @@ async def remove_sale_from_route(
 ):
     """Remove a sale from route"""
     try:
+        _require_admin(current_user, detail="Only admin can update route sales")
         route = db.remove_sale_from_route(route_id, sale_id)
         if not route:
             raise HTTPException(status_code=404, detail="Route not found")
@@ -3361,6 +3439,7 @@ async def remove_sale_from_route(
 async def delete_route(route_id: str, current_user: dict = Depends(get_current_user)):
     """Delete a route"""
     try:
+        _require_admin(current_user, detail="Only admin can delete routes")
         success = db.delete_route(route_id)
         if not success:
             raise HTTPException(status_code=404, detail="Route not found")
@@ -3387,6 +3466,8 @@ async def get_route_previous_due(
     route = db.get_route(route_id)
     if not route:
         raise HTTPException(status_code=404, detail="Route not found")
+    if not _is_admin(current_user) and not _route_belongs_to_sales_rep(route, current_user):
+        raise HTTPException(status_code=403, detail="You can only access your assigned routes")
     
     # Return previous due snapshots from route_sales
     previous_due_map = {}
@@ -3412,6 +3493,11 @@ async def create_route_reconciliation(
 ):
     """Create reconciliation record for a route"""
     try:
+        route = db.get_route(route_id)
+        if not route:
+            raise HTTPException(status_code=404, detail="Route not found")
+        if not _is_admin(current_user) and not _route_belongs_to_sales_rep(route, current_user):
+            raise HTTPException(status_code=403, detail="You can only reconcile your assigned routes")
         reconciliation = db.create_route_reconciliation(
             route_id,
             reconciliation_data.model_dump(),
@@ -3433,6 +3519,13 @@ async def get_reconciliations(
 ):
     """Get all reconciliations"""
     reconciliations = db.get_route_reconciliations(route_id=route_id)
+    if not _is_admin(current_user):
+        current_user_id = current_user.get("id")
+        visible_route_ids = {
+            route.get("id")
+            for route in db.get_routes(assigned_to=current_user_id)
+        }
+        reconciliations = [r for r in reconciliations if r.get("route_id") in visible_route_ids]
     return [RouteReconciliation(**r) for r in reconciliations]
 
 @app.get("/api/reconciliations/{reconciliation_id}", response_model=RouteReconciliation)
@@ -3444,6 +3537,10 @@ async def get_reconciliation(
     reconciliation = db.get_route_reconciliation(reconciliation_id)
     if not reconciliation:
         raise HTTPException(status_code=404, detail="Reconciliation not found")
+    if not _is_admin(current_user):
+        route = db.get_route(reconciliation.get("route_id"))
+        if not _route_belongs_to_sales_rep(route, current_user):
+            raise HTTPException(status_code=403, detail="You can only view your route reconciliations")
     return RouteReconciliation(**reconciliation)
 
 @app.get("/api/users/{user_id}/cash-holding")
@@ -3452,6 +3549,8 @@ async def get_sr_cash_holding(
     current_user: dict = Depends(get_current_user)
 ):
     """Get current cash holding for an SR"""
+    if not _is_admin(current_user) and user_id != current_user.get("id"):
+        raise HTTPException(status_code=403, detail="You can only view your own cash holding")
     user = db.get_user_by_id(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -3468,6 +3567,8 @@ async def get_sr_accountability(
     current_user: dict = Depends(get_current_user)
 ):
     """Get full accountability report for an SR"""
+    if not _is_admin(current_user) and user_id != current_user.get("id"):
+        raise HTTPException(status_code=403, detail="You can only view your own accountability")
     accountability = db.get_sr_accountability(user_id)
     if not accountability:
         raise HTTPException(status_code=404, detail="User not found or not an SR")

@@ -12,6 +12,13 @@ class PaymentStatus(str, Enum):
     PARTIAL = "partial"
     DUE = "due"
 
+class PaymentMethod(str, Enum):
+    CASH = "cash"
+    BANK_TRANSFER = "bank_transfer"
+    MOBILE_BANKING = "mobile_banking"
+    CHECK = "check"
+    OTHER = "other"
+
 class OrderStatus(str, Enum):
     PENDING = "pending"
     CONFIRMED = "confirmed"
@@ -243,9 +250,10 @@ class SaleUpdate(BaseModel):
 
 class PaymentCreate(BaseModel):
     retailer_id: str
-    sale_id: Optional[str] = None
-    amount: float
-    payment_method: str
+    sale_id: str = Field(..., min_length=1, description="Sale ID is mandatory for payment traceability")
+    collected_by: str = Field(..., min_length=1, description="Collector user ID is mandatory")
+    amount: float = Field(gt=0, description="Payment amount must be positive")
+    payment_method: PaymentMethod
     notes: Optional[str] = None
 
 class Payment(BaseModel):

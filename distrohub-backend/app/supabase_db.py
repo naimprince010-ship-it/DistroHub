@@ -3482,8 +3482,12 @@ class SupabaseDatabase:
         # Remove from route_sales
         self.client.table("route_sales").delete().eq("route_id", route_id).eq("sale_id", sale_id).execute()
         
-        # Clear sale.route_id
-        self.client.table("sales").update({"route_id": None}).eq("id", sale_id).execute()
+        # Clear route attachment and SR assignment override
+        self.client.table("sales").update({
+            "route_id": None,
+            "assigned_to": None,
+            "assigned_to_name": None
+        }).eq("id", sale_id).execute()
         
         # Update route totals
         route = self.get_route(route_id)
@@ -3506,8 +3510,12 @@ class SupabaseDatabase:
             if route:
                 self._check_route_not_reconciled(route)
             
-            # Clear sales.route_id for all sales in this route
-            self.client.table("sales").update({"route_id": None}).eq("route_id", route_id).execute()
+            # Clear route attachment and SR assignment override for all sales in this route
+            self.client.table("sales").update({
+                "route_id": None,
+                "assigned_to": None,
+                "assigned_to_name": None
+            }).eq("route_id", route_id).execute()
             
             # Delete route (cascades to route_sales)
             result = self.client.table("routes").delete().eq("id", route_id).execute()
